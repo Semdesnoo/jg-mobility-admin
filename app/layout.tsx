@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   title: "JG Mobility — Beheer",
   description: "Intern beheerpaneel voor JG Mobility",
   robots: { index: false, follow: false },
+  icons: {
+    icon: "/Favicon.png",
+    shortcut: "/Favicon.png",
+    apple: "/Favicon.png",
+  },
 };
 
 export default function RootLayout({
