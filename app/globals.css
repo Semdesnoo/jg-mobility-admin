@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --navy: #001337;
+  --navy-light: #002060;
+  --gold: #ffffff;
+  --gold-light: #ffffff;
+  --white: #ffffff;
+  --gray-light: #f8f8f8;
+  --gray: #9ca3af;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: var(--white);
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
