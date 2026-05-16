@@ -1462,20 +1462,25 @@ function FacturenContent() {
     } catch { /* logo niet beschikbaar */ }
 
     const html = genereerFactuurHTML(f, logoSrc);
+    const blobUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    const win = window.open(blobUrl, "_blank");
+    if (win) {
+      win.addEventListener("load", () => setTimeout(() => win.print(), 400));
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      return;
+    }
+    // Fallback als popup geblokkeerd is
+    URL.revokeObjectURL(blobUrl);
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;";
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
     if (!doc) return;
-    doc.open();
-    doc.write(html);
-    doc.close();
+    doc.open(); doc.write(html); doc.close();
     iframe.contentWindow?.focus();
     setTimeout(() => {
       iframe.contentWindow?.print();
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 2000);
+      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 2000);
     }, 500);
   };
 
