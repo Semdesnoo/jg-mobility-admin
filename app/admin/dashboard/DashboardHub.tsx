@@ -2069,6 +2069,7 @@ function CosignatieContent() {
   const [editPlatformWaarde, setEditPlatformWaarde] = useState("");
   const [zoekendId, setZoekendId] = useState<string | null>(null);
   const [zoekFout, setZoekFout] = useState<string | null>(null);
+  const [editField, setEditField] = useState<{ id: string; field: string; waarde: string } | null>(null);
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -2136,6 +2137,12 @@ function CosignatieContent() {
     } finally {
       setZoekendId(null);
     }
+  };
+
+  const updateField = async (id: string, field: string, waarde: string) => {
+    await patch(id, { [field]: waarde });
+    setAanvragen((prev) => prev.map((a) => (a.id === id ? { ...a, [field]: waarde } : a)));
+    setEditField(null);
   };
 
   const actief = aanvragen.filter((a) => a.status === "geaccepteerd");
@@ -2365,15 +2372,80 @@ function CosignatieContent() {
                         {/* ── Header ── */}
                         <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)" }}>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xl font-bold mb-1" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                              {a.merk} {a.model}
-                              <span className="ml-2 font-normal text-base" style={{ color: "rgba(0,19,55,0.4)" }}>{a.bouwjaar}</span>
-                            </p>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
-                              <span className="font-semibold" style={{ color: "#001337" }}>{a.naam}</span>
-                              {a.email && <a href={`mailto:${a.email}`} className="hover:underline">{a.email}</a>}
-                              {a.telefoon && <a href={`tel:${a.telefoon}`} className="hover:underline">{a.telefoon}</a>}
-                              {a.km && <span>{parseInt(a.km).toLocaleString("nl-NL")} km</span>}
+                            {/* Merk / model / bouwjaar — klik om te bewerken */}
+                            <div className="flex items-baseline gap-1.5 flex-wrap mb-1 text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+                              {editField?.id === a.id && editField?.field === "merk" ? (
+                                <input autoFocus value={editField.waarde}
+                                  onChange={(e) => setEditField({ id: a.id, field: "merk", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "merk", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "merk", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="font-bold outline-none w-24 border-b" style={{ borderBottomColor: "#001337", background: "transparent", fontFamily: "var(--font-playfair)", color: "#001337", fontSize: "1.25rem" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "merk", waarde: a.merk })} className="font-bold cursor-pointer hover:opacity-60 transition-opacity">{a.merk}</button>
+                              )}
+                              {editField?.id === a.id && editField?.field === "model" ? (
+                                <input autoFocus value={editField.waarde}
+                                  onChange={(e) => setEditField({ id: a.id, field: "model", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "model", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "model", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="font-bold outline-none w-32 border-b" style={{ borderBottomColor: "#001337", background: "transparent", fontFamily: "var(--font-playfair)", color: "#001337", fontSize: "1.25rem" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "model", waarde: a.model })} className="font-bold cursor-pointer hover:opacity-60 transition-opacity">{a.model}</button>
+                              )}
+                              {editField?.id === a.id && editField?.field === "bouwjaar" ? (
+                                <input autoFocus value={editField.waarde}
+                                  onChange={(e) => setEditField({ id: a.id, field: "bouwjaar", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "bouwjaar", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "bouwjaar", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="font-normal outline-none w-16 border-b" style={{ borderBottomColor: "rgba(0,19,55,0.4)", background: "transparent", fontFamily: "var(--font-playfair)", color: "rgba(0,19,55,0.4)", fontSize: "1rem" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "bouwjaar", waarde: a.bouwjaar })} className="ml-1 font-normal text-base cursor-pointer hover:opacity-60 transition-opacity" style={{ color: "rgba(0,19,55,0.4)" }}>{a.bouwjaar}</button>
+                              )}
+                            </div>
+                            {/* Naam / email / telefoon / km — klik om te bewerken */}
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+                              {editField?.id === a.id && editField?.field === "naam" ? (
+                                <input autoFocus value={editField.waarde}
+                                  onChange={(e) => setEditField({ id: a.id, field: "naam", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "naam", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "naam", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="font-semibold outline-none w-40 border-b text-xs" style={{ borderBottomColor: "#001337", background: "transparent", color: "#001337", fontFamily: "var(--font-inter)" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "naam", waarde: a.naam })} className="font-semibold cursor-pointer hover:opacity-60 transition-opacity" style={{ color: "#001337" }}>{a.naam}</button>
+                              )}
+                              {editField?.id === a.id && editField?.field === "email" ? (
+                                <input autoFocus value={editField.waarde} type="email"
+                                  onChange={(e) => setEditField({ id: a.id, field: "email", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "email", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "email", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="outline-none w-52 border-b text-xs" style={{ borderBottomColor: "#001337", background: "transparent", color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "email", waarde: a.email })} className="cursor-pointer hover:opacity-60 hover:underline transition-opacity">
+                                  {a.email || <span style={{ color: "rgba(0,19,55,0.25)" }}>e-mail toevoegen</span>}
+                                </button>
+                              )}
+                              {editField?.id === a.id && editField?.field === "telefoon" ? (
+                                <input autoFocus value={editField.waarde} type="tel"
+                                  onChange={(e) => setEditField({ id: a.id, field: "telefoon", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "telefoon", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "telefoon", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="outline-none w-32 border-b text-xs" style={{ borderBottomColor: "#001337", background: "transparent", color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "telefoon", waarde: a.telefoon })} className="cursor-pointer hover:opacity-60 hover:underline transition-opacity">
+                                  {a.telefoon || <span style={{ color: "rgba(0,19,55,0.25)" }}>telefoon toevoegen</span>}
+                                </button>
+                              )}
+                              {editField?.id === a.id && editField?.field === "km" ? (
+                                <input autoFocus value={editField.waarde} type="number"
+                                  onChange={(e) => setEditField({ id: a.id, field: "km", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "km", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "km", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="outline-none w-24 border-b text-xs" style={{ borderBottomColor: "#001337", background: "transparent", color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }} />
+                              ) : (
+                                <button onClick={() => setEditField({ id: a.id, field: "km", waarde: a.km })} className="cursor-pointer hover:opacity-60 transition-opacity">
+                                  {a.km ? `${parseInt(a.km).toLocaleString("nl-NL")} km` : <span style={{ color: "rgba(0,19,55,0.25)" }}>km toevoegen</span>}
+                                </button>
+                              )}
                               {a.aantal_fotos > 0 && <span>{a.aantal_fotos} foto&apos;s ontvangen</span>}
                             </div>
                           </div>
@@ -2388,7 +2460,20 @@ function CosignatieContent() {
                         <div className="grid grid-cols-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)" }}>
                           <div className="px-6 py-4" style={{ borderRight: "1px solid rgba(0,19,55,0.06)" }}>
                             <p className="text-[10px] uppercase tracking-widest mb-2 font-semibold" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>Vraagprijs eigenaar</p>
-                            <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>{formatEur(a.vraagprijs)}</p>
+                            {editField?.id === a.id && editField?.field === "vraagprijs" ? (
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-lg font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>€</span>
+                                <input autoFocus value={editField.waarde} type="number"
+                                  onChange={(e) => setEditField({ id: a.id, field: "vraagprijs", waarde: e.target.value })}
+                                  onBlur={() => updateField(a.id, "vraagprijs", editField.waarde)}
+                                  onKeyDown={(e) => { if (e.key === "Enter") updateField(a.id, "vraagprijs", editField.waarde); if (e.key === "Escape") setEditField(null); }}
+                                  className="text-2xl font-bold outline-none w-28 border-b" style={{ borderBottomColor: "#001337", background: "transparent", fontFamily: "var(--font-playfair)", color: "#001337" }} />
+                              </div>
+                            ) : (
+                              <button onClick={() => setEditField({ id: a.id, field: "vraagprijs", waarde: a.vraagprijs })} className="text-2xl font-bold cursor-pointer hover:opacity-60 transition-opacity text-left" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+                                {formatEur(a.vraagprijs)}
+                              </button>
+                            )}
                           </div>
                           <div className="px-6 py-4" style={{ borderRight: "1px solid rgba(0,19,55,0.06)" }}>
                             <p className="text-[10px] uppercase tracking-widest mb-2 font-semibold" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>Marktgemiddelde</p>
@@ -2528,13 +2613,17 @@ function CosignatieContent() {
                         </div>
 
                         {/* ── Klant opmerking ── */}
-                        {a.opmerking && (
-                          <div className="px-6 pb-4">
-                            <p className="text-xs p-3" style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.07)", color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-inter)", lineHeight: 1.7 }}>
-                              <span className="font-semibold" style={{ color: "rgba(0,19,55,0.4)" }}>Opmerking klant: </span>{a.opmerking}
-                            </p>
-                          </div>
-                        )}
+                        <div className="px-6 pb-4">
+                          <p className="text-[10px] uppercase tracking-widest mb-1.5 font-semibold" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>Opmerking klant</p>
+                          <textarea
+                            defaultValue={a.opmerking}
+                            rows={2}
+                            onBlur={(e) => { if (e.target.value !== a.opmerking) updateField(a.id, "opmerking", e.target.value); }}
+                            placeholder="Opmerking van de klant..."
+                            className="w-full px-3 py-2 text-xs outline-none resize-none"
+                            style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.1)", color: "#001337", fontFamily: "var(--font-inter)", lineHeight: 1.7 }}
+                          />
+                        </div>
                       </div>
                     );
                   })}
