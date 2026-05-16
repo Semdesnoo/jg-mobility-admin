@@ -1190,7 +1190,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
 <body>
 
 <!-- HEADER: logo met ingebakken achtergrond -->
-<div style="width:100%;background-color:#001337;text-align:center;line-height:0;padding:10px 0">
+<div style="width:100%;background-color:#001337;text-align:center;line-height:0;padding:2px 0">
   <img src="${logoSrc}" alt="JG Mobility"
        style="height:110px;object-fit:contain;display:inline-block">
 </div>
@@ -1218,7 +1218,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
   </table>
 
   <!-- KVK/BTW/IBAN + datum links | Klant rechts -->
-  <table style="width:100%;margin-bottom:32px;padding-bottom:56px;border-bottom:1.5px solid #001337">
+  <table style="width:100%;margin-bottom:32px;padding-bottom:56px">
     <tr>
       <td style="vertical-align:top;width:50%">
         <table style="font-size:9pt">
@@ -1267,19 +1267,20 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
   </table>
 
   <!-- Totalen rechts uitgelijnd -->
-  <table style="width:270px;margin-left:auto;margin-bottom:30px;margin-top:10px">
+  <table style="width:280px;margin-left:auto;margin-bottom:30px;margin-top:10px;table-layout:fixed">
+    <colgroup><col style="width:155px"><col style="width:125px"></colgroup>
     <tr>
-      <td style="font-size:9.5pt;color:#64748b;padding:4px 0">Subtotaal</td>
+      <td style="font-size:9.5pt;color:#64748b;padding:4px 0;text-align:left">Subtotaal</td>
       <td style="font-size:9.5pt;color:#64748b;text-align:right;padding:4px 0">€&nbsp;${subtotaal.toLocaleString("nl-NL")}</td>
     </tr>
     ${f.btw_type === "21"
       ? `<tr>
-          <td style="font-size:9.5pt;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #e2e8f0">BTW (21%)</td>
+          <td style="font-size:9.5pt;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #e2e8f0;text-align:left">BTW (21%)</td>
           <td style="font-size:9.5pt;color:#1d4ed8;text-align:right;padding:4px 0;border-bottom:1px solid #e2e8f0">€&nbsp;${btwBedrag.toLocaleString("nl-NL")}</td>
         </tr>`
       : `<tr><td colspan="2" style="border-bottom:1px solid #e2e8f0;padding:3px 0"></td></tr>`}
     <tr>
-      <td style="font-size:12pt;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#001337;padding:9px 0 0">Eindtotaal</td>
+      <td style="font-size:12pt;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#001337;padding:9px 0 0;text-align:left">Eindtotaal</td>
       <td style="font-size:12pt;font-weight:700;color:#001337;text-align:right;padding:9px 0 0">€&nbsp;${eindtotaal.toLocaleString("nl-NL")}</td>
     </tr>
   </table>
