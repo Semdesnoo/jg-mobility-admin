@@ -1183,7 +1183,8 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1e293b; background:#fff; width:794px; margin:0 auto; }
-  @media print { @page { size:A4; margin:0; } body { width:100%; } }
+  @page { size:A4; margin:0; }
+  @media print { body { width:100%; } }
   table { border-collapse:collapse; }
 </style>
 </head>
