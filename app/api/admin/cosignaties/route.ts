@@ -19,3 +19,22 @@ export async function GET() {
     return Response.json([], { status: 200 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    await migrate();
+    const { merk, model, bouwjaar, km, vraagprijs, naam, email, telefoon, opmerking } = await req.json();
+    const now = new Date();
+    const id = `cos_${Date.now()}`;
+    const datum = now.toLocaleDateString("nl-NL");
+    const tijd = now.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+    const geaccepteerd_op = now.toISOString().slice(0, 10);
+    await sql`
+      INSERT INTO cosignaties (id, datum, tijd, naam, email, telefoon, merk, model, bouwjaar, km, vraagprijs, opmerking, aantal_fotos, status, notitie, geaccepteerd_op)
+      VALUES (${id}, ${datum}, ${tijd}, ${naam ?? ""}, ${email ?? ""}, ${telefoon ?? ""}, ${merk ?? ""}, ${model ?? ""}, ${bouwjaar ?? ""}, ${km ?? ""}, ${vraagprijs ?? ""}, ${opmerking ?? ""}, 0, 'geaccepteerd', '', ${geaccepteerd_op}::date)
+    `;
+    return Response.json({ ok: true, id });
+  } catch (e) {
+    return Response.json({ error: String(e) }, { status: 500 });
+  }
+}

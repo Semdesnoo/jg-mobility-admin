@@ -2070,6 +2070,13 @@ function CosignatieContent() {
   const [zoekendId, setZoekendId] = useState<string | null>(null);
   const [zoekFout, setZoekFout] = useState<string | null>(null);
   const [editField, setEditField] = useState<{ id: string; field: string; waarde: string } | null>(null);
+  const [voorraadModal, setVoorraadModal] = useState(false);
+  const [voorraadAutos, setVoorraadAutos] = useState<Auto[]>([]);
+  const [selectedVoorraadId, setSelectedVoorraadId] = useState<number | null>(null);
+  const [klantNaam, setKlantNaam] = useState("");
+  const [klantEmail, setKlantEmail] = useState("");
+  const [klantTel, setKlantTel] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -2145,6 +2152,42 @@ function CosignatieContent() {
     setEditField(null);
   };
 
+  const openVoorraadModal = async () => {
+    const res = await fetch("/api/admin/autos");
+    if (res.ok) {
+      const data: Auto[] = await res.json();
+      setVoorraadAutos(data.filter((a) => !a.verkocht));
+    }
+    setSelectedVoorraadId(null);
+    setKlantNaam("");
+    setKlantEmail("");
+    setKlantTel("");
+    setVoorraadModal(true);
+  };
+
+  const voegToeUitVoorraad = async () => {
+    const auto = voorraadAutos.find((a) => a.id === selectedVoorraadId);
+    if (!auto) return;
+    setSubmitting(true);
+    await fetch("/api/admin/cosignaties", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merk: auto.merk,
+        model: auto.model,
+        bouwjaar: String(auto.bouwjaar),
+        km: String(auto.km),
+        vraagprijs: String(auto.prijs),
+        naam: klantNaam,
+        email: klantEmail,
+        telefoon: klantTel,
+      }),
+    });
+    setSubmitting(false);
+    setVoorraadModal(false);
+    laad();
+  };
+
   const actief = aanvragen.filter((a) => a.status === "geaccepteerd");
   const aanvragenLijst = aanvragen.filter((a) => a.status !== "geaccepteerd");
   const nieuweAanvragen = aanvragenLijst.filter((a) => a.status === "nieuw").length;
@@ -2160,7 +2203,116 @@ function CosignatieContent() {
 
   return (
     <div>
-      <PageHeader title="Cosignatie" subtitle={`${aanvragen.length} aanvragen · ${actief.length} actief`} />
+      <PageHeader
+        title="Cosignatie"
+        subtitle={`${aanvragen.length} aanvragen · ${actief.length} actief`}
+        action={
+          <button
+            onClick={openVoorraadModal}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 cursor-pointer"
+            style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+          >
+            <Plus size={12} /> Auto uit voorraad
+          </button>
+        }
+      />
+
+      {/* Voorraad modal */}
+      {voorraadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => setVoorraadModal(false)}>
+          <div className="w-full max-w-2xl max-h-[85vh] flex flex-col" style={{ backgroundColor: "#fff" }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-4 flex items-center justify-between flex-shrink-0" style={{ backgroundColor: "#001337" }}>
+              <div>
+                <p className="text-sm font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>Auto uit voorraad toevoegen</p>
+                <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.55)", fontFamily: "var(--font-inter)" }}>Selecteer een auto en vul klantgegevens in</p>
+              </div>
+              <button onClick={() => setVoorraadModal(false)} style={{ color: "rgba(255,255,255,0.5)" }}>✕</button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+              {/* Auto selectie */}
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Selecteer auto</p>
+                <div className="flex flex-col gap-1.5">
+                  {voorraadAutos.length === 0 ? (
+                    <p className="text-xs py-6 text-center" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Geen beschikbare auto&apos;s in voorraad.</p>
+                  ) : (
+                    voorraadAutos.map((auto) => {
+                      const selected = selectedVoorraadId === auto.id;
+                      return (
+                        <button
+                          key={auto.id}
+                          onClick={() => setSelectedVoorraadId(auto.id)}
+                          className="flex items-center gap-3 px-4 py-3 text-left transition-all cursor-pointer"
+                          style={{ border: `1px solid ${selected ? "#001337" : "rgba(0,19,55,0.1)"}`, backgroundColor: selected ? "rgba(0,19,55,0.04)" : "#fff" }}
+                        >
+                          <div className="w-3 h-3 rounded-full border-2 flex-shrink-0" style={{ borderColor: "#001337", backgroundColor: selected ? "#001337" : "transparent" }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                              {auto.merk} {auto.model} <span style={{ fontWeight: 400, color: "rgba(0,19,55,0.45)" }}>{auto.bouwjaar}</span>
+                            </p>
+                            <p className="text-xs" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                              {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
+                            </p>
+                          </div>
+                          <p className="text-sm font-bold flex-shrink-0" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+                            €{auto.prijs.toLocaleString("nl-NL")}
+                          </p>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Klantgegevens */}
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Klantgegevens (eigenaar)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { label: "Naam", value: klantNaam, set: setKlantNaam, type: "text", placeholder: "Volledige naam" },
+                    { label: "E-mail", value: klantEmail, set: setKlantEmail, type: "email", placeholder: "e-mailadres" },
+                    { label: "Telefoon", value: klantTel, set: setKlantTel, type: "tel", placeholder: "06-..." },
+                  ].map(({ label, value, set, type, placeholder }) => (
+                    <div key={label}>
+                      <label className="text-[10px] uppercase tracking-widest mb-1 block" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{label}</label>
+                      <input
+                        type={type}
+                        value={value}
+                        onChange={(e) => set(e.target.value)}
+                        placeholder={placeholder}
+                        className="w-full px-3 py-2 text-xs outline-none"
+                        style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 flex gap-3 flex-shrink-0" style={{ borderTop: "1px solid rgba(0,19,55,0.08)" }}>
+              <button
+                onClick={voegToeUitVoorraad}
+                disabled={!selectedVoorraadId || submitting}
+                className="flex-1 py-2.5 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40 cursor-pointer"
+                style={{ backgroundColor: "#001337", color: "#fff", fontFamily: "var(--font-inter)" }}
+              >
+                {submitting ? "Bezig..." : "Toevoegen aan cosignatie"}
+              </button>
+              <button
+                onClick={() => setVoorraadModal(false)}
+                className="px-6 py-2.5 text-xs font-semibold transition-all hover:opacity-70 cursor-pointer"
+                style={{ border: "1px solid rgba(0,19,55,0.2)", color: "#001337", fontFamily: "var(--font-inter)" }}
+              >
+                Annuleer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mail modal */}
       {mailModalAuto && (
