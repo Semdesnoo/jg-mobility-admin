@@ -1485,47 +1485,39 @@ function FacturenContent() {
     }, 500);
   };
 
-  const verstuurMail = async (f: Factuur) => {
+  const verstuurMail = (f: Factuur) => {
     if (!f.klant_email) {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
-    setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
-    let logoSrc = "";
+    let totaal = Number(f.verkoopprijs) || 0;
     try {
-      const res = await fetch(encodeURI("/JG Mobility.png"));
-      if (res.ok) {
-        const blob = await res.blob();
-        logoSrc = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => resolve("");
-          reader.readAsDataURL(blob);
-        });
-      }
-    } catch { /* logo niet beschikbaar */ }
-    const html = genereerFactuurHTML(f, logoSrc);
-    try {
-      const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html }),
-      });
-      if (res.ok) {
-        setMailStatus((prev) => ({ ...prev, [f.id]: "ok" }));
-        await updateStatus(f.id, "verzonden");
-        setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
-        alert(`Versturen mislukt: ${data.error ?? "Onbekende fout"}`);
-        setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
-      }
-    } catch (err) {
-      setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
-      alert(`Netwerkfout: ${String(err)}`);
-      setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
-    }
+      const regels = JSON.parse(f.regels || "[]");
+      totaal += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
+      if (f.btw_type === "21") totaal = Math.round(totaal * 1.21);
+    } catch { /* gebruik verkoopprijs */ }
+
+    const subject = `Factuur ${f.factuur_nr} - JG Mobility`;
+    const body = [
+      `Geachte ${f.klant_naam || "klant"},`,
+      ``,
+      `Hierbij ontvangt u factuur ${f.factuur_nr} van JG Mobility.`,
+      ``,
+      `Factuurbedrag: €${totaal.toLocaleString("nl-NL")}`,
+      f.vervaldatum ? `Vervaldatum: ${f.vervaldatum}` : `Betaaltermijn: 30 dagen na ontvangst`,
+      ``,
+      f.betaalwijze === "bank"
+        ? `Gelieve het bedrag over te maken op IBAN NL94 ABNA 0154171638 onder vermelding van factuurnummer ${f.factuur_nr}.`
+        : `Betaling geschiedt contant.`,
+      ``,
+      `Met vriendelijke groet,`,
+      `JG Mobility`,
+      `info@jgmobility.nl`,
+      `www.jgmobility.nl`,
+    ].join("\n");
+
+    const url = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(f.klant_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(url, "_blank");
   };
 
   const inp = (field: keyof FactuurForm) => ({
@@ -1783,11 +1775,10 @@ function FacturenContent() {
               </button>
               <button
                 onClick={() => verstuurMail(nieuwsteFactuur)}
-                disabled={mailStatus[nieuwsteFactuur.id] === "laden"}
-                className="px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                className="px-4 py-2 text-xs font-semibold"
                 style={{ backgroundColor: "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
               >
-                {mailStatus[nieuwsteFactuur.id] === "laden" ? "Versturen..." : mailStatus[nieuwsteFactuur.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
+                Verstuur per mail
               </button>
               <button
                 onClick={() => setNieuwsteFactuur(null)}
@@ -1949,15 +1940,10 @@ function FacturenContent() {
                             </button>
                             <button
                               onClick={() => verstuurMail(f)}
-                              disabled={mailStatus[f.id] === "laden"}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-50"
-                              style={{
-                                backgroundColor: mailStatus[f.id] === "ok" ? "#15803d" : "#1d4ed8",
-                                color: "#ffffff",
-                                fontFamily: "var(--font-inter)",
-                              }}
+                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
+                              style={{ backgroundColor: "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
-                              {mailStatus[f.id] === "laden" ? "Versturen..." : mailStatus[f.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
+                              Verstuur per mail
                             </button>
                             <button
                               onClick={() => startBewerken(f)}
