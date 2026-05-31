@@ -1233,7 +1233,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
           </tr>
           <tr>
             <td style="color:#475569;font-weight:600;padding:2px 14px 2px 0">IBAN</td>
-            <td style="color:#1e293b">(volgt)</td>
+            <td style="color:#1e293b">NL94 ABNA 0154171638</td>
           </tr>
         </table>
         <div style="font-size:9pt;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#001337;margin-top:13px">
@@ -1289,7 +1289,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
   <!-- Betaaltekst -->
   <div style="font-size:9pt;color:#475569;line-height:1.85;border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:12px">
     Wij vragen u vriendelijk het bedrag van €${eindtotaal.toLocaleString("nl-NL")} ${f.vervaldatum ? `voor ${f.vervaldatum}` : "binnen 30 dagen na ontvangst"} over te maken
-    ${f.betaalwijze === "bank" ? "op rekening (IBAN volgt) onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "te voldoen per contant"}.
+    ${f.betaalwijze === "bank" ? "op rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "te voldoen per contant"}.
     <br>Factuur uitgereikt door JG MOBILITY.
     ${f.btw_type === "marge" ? `<br><span style="font-size:8pt;color:#94a3b8">Op dit voertuig is de margeregeling van toepassing. BTW is niet afzonderlijk vermeld (art. 28b t/m 28h Wet OB 1968).</span>` : ""}
   </div>
@@ -1320,6 +1320,7 @@ function FacturenContent() {
   const [rdwLaden, setRdwLaden] = useState(false);
   const [rdwStatus, setRdwStatus] = useState<"idle" | "gevonden" | "niet_gevonden">("idle");
   const [periode, setPeriode] = useState<"alles" | "week" | "maand" | "kwartaal" | "jaar">("alles");
+  const [mailStatus, setMailStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -1482,6 +1483,49 @@ function FacturenContent() {
       iframe.contentWindow?.print();
       setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 2000);
     }, 500);
+  };
+
+  const verstuurMail = async (f: Factuur) => {
+    if (!f.klant_email) {
+      alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
+      return;
+    }
+    setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
+    let logoSrc = "";
+    try {
+      const res = await fetch(encodeURI("/JG Mobility.png"));
+      if (res.ok) {
+        const blob = await res.blob();
+        logoSrc = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve("");
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch { /* logo niet beschikbaar */ }
+    const html = genereerFactuurHTML(f, logoSrc);
+    try {
+      const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html }),
+      });
+      if (res.ok) {
+        setMailStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+        await updateStatus(f.id, "verzonden");
+        setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
+        alert(`Versturen mislukt: ${data.error ?? "Onbekende fout"}`);
+        setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+      }
+    } catch (err) {
+      setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
+      alert(`Netwerkfout: ${String(err)}`);
+      setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+    }
   };
 
   const inp = (field: keyof FactuurForm) => ({
@@ -1738,6 +1782,14 @@ function FacturenContent() {
                 Afdrukken / PDF
               </button>
               <button
+                onClick={() => verstuurMail(nieuwsteFactuur)}
+                disabled={mailStatus[nieuwsteFactuur.id] === "laden"}
+                className="px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ backgroundColor: "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+              >
+                {mailStatus[nieuwsteFactuur.id] === "laden" ? "Versturen..." : mailStatus[nieuwsteFactuur.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
+              </button>
+              <button
                 onClick={() => setNieuwsteFactuur(null)}
                 className="px-3 py-2 text-xs"
                 style={{ color: "#15803d", border: "1px solid #86efac", fontFamily: "var(--font-inter)" }}
@@ -1894,6 +1946,18 @@ function FacturenContent() {
                               style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
                               Afdrukken / PDF
+                            </button>
+                            <button
+                              onClick={() => verstuurMail(f)}
+                              disabled={mailStatus[f.id] === "laden"}
+                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-50"
+                              style={{
+                                backgroundColor: mailStatus[f.id] === "ok" ? "#15803d" : "#1d4ed8",
+                                color: "#ffffff",
+                                fontFamily: "var(--font-inter)",
+                              }}
+                            >
+                              {mailStatus[f.id] === "laden" ? "Versturen..." : mailStatus[f.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
                             </button>
                             <button
                               onClick={() => startBewerken(f)}
