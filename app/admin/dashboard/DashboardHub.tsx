@@ -1490,74 +1490,75 @@ function FacturenContent() {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
-
-    // Factuur downloaden als HTML-bestand
-    let logoSrc = "";
+    setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
-      const res = await fetch(encodeURI("/JG Mobility.png"));
+      // Logo ophalen
+      let logoSrc = "";
+      try {
+        const r = await fetch(encodeURI("/JG Mobility.png"));
+        if (r.ok) {
+          const blob = await r.blob();
+          logoSrc = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch { /* logo niet beschikbaar */ }
+
+      // Factuur HTML genereren
+      const html = genereerFactuurHTML(f, logoSrc);
+
+      // PDF genereren via html2pdf.js (client-side)
+      const html2pdf = (await import("html2pdf.js")).default;
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;visibility:hidden;";
+      document.body.appendChild(iframe);
+
+      const pdfBase64 = await new Promise<string>((resolve, reject) => {
+        iframe.onload = async () => {
+          try {
+            const body = iframe.contentDocument?.body;
+            if (!body) { reject(new Error("Render mislukt")); return; }
+            const dataUri = await html2pdf().set({
+              margin: 0,
+              filename: `Factuur-${f.factuur_nr}.pdf`,
+              image: { type: "jpeg", quality: 0.98 },
+              html2canvas: { scale: 2, useCORS: true, logging: false },
+              jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+            }).from(body).output("datauristring");
+            document.body.removeChild(iframe);
+            resolve((dataUri as string).split(",")[1]);
+          } catch (err) {
+            if (document.body.contains(iframe)) document.body.removeChild(iframe);
+            reject(err);
+          }
+        };
+        const doc = iframe.contentDocument;
+        if (doc) { doc.open(); doc.write(html); doc.close(); }
+      });
+
+      // Versturen via server (Resend)
+      const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfBase64 }),
+      });
+
       if (res.ok) {
-        const blob = await res.blob();
-        logoSrc = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => resolve("");
-          reader.readAsDataURL(blob);
-        });
+        setMailStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+        await updateStatus(f.id, "verzonden");
+        setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Onbekende fout");
       }
-    } catch { /* logo niet beschikbaar */ }
-
-    const html = genereerFactuurHTML(f, logoSrc);
-    const bestand = new Blob([html], { type: "text/html;charset=utf-8" });
-    const downloadUrl = URL.createObjectURL(bestand);
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `Factuur-${f.factuur_nr}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
-
-    // Totaal berekenen
-    let totaal = Number(f.verkoopprijs) || 0;
-    try {
-      const regels = JSON.parse(f.regels || "[]");
-      totaal += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
-      if (f.btw_type === "21") totaal = Math.round(totaal * 1.21);
-    } catch { /* gebruik verkoopprijs */ }
-
-    const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar ? `(${f.auto_bouwjaar})` : ""].filter(Boolean).join(" ");
-    const subject = `Factuur ${f.factuur_nr} - JG Mobility`;
-    const body = [
-      `Geachte ${f.klant_naam || "klant"},`,
-      ``,
-      `Hartelijk dank voor uw aankoop bij JG Mobility! Wij hopen dat u veel plezier zult beleven aan uw voertuig.`,
-      ``,
-      `In de bijlage vindt u de factuur voor uw aankoop. Wij verzoeken u vriendelijk het openstaande bedrag te voldoen voor de vervaldatum.`,
-      ``,
-      `── Factuuroverzicht ──────────────────────`,
-      `Factuurnummer : ${f.factuur_nr}`,
-      voertuig ? `Voertuig      : ${voertuig}` : "",
-      `Totaalbedrag  : €${totaal.toLocaleString("nl-NL")}`,
-      f.vervaldatum ? `Uiterlijk betalen voor : ${f.vervaldatum}` : `Betaaltermijn : 30 dagen na ontvangst`,
-      ``,
-      f.betaalwijze === "bank" ? [
-        `── Betaalgegevens ────────────────────────`,
-        `IBAN          : NL94 ABNA 0154171638`,
-        `T.n.v.        : JG Mobility`,
-        `Omschrijving  : ${f.factuur_nr}`,
-      ].join("\n") : `Betaling geschiedt contant bij afhaling.`,
-      ``,
-      `Heeft u vragen over uw factuur? Neem dan gerust contact met ons op via info@jgmobility.nl.`,
-      ``,
-      `Met vriendelijke groet,`,
-      ``,
-      `JG Mobility`,
-      `info@jgmobility.nl`,
-      `www.jgmobility.nl`,
-    ].filter((r) => r !== undefined).join("\n");
-
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(f.klant_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setTimeout(() => window.open(gmailUrl, "_blank"), 400);
+    } catch (err) {
+      setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
+      alert(`Versturen mislukt: ${String(err)}`);
+      setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+    }
   };
 
   const inp = (field: keyof FactuurForm) => ({
@@ -1815,10 +1816,11 @@ function FacturenContent() {
               </button>
               <button
                 onClick={() => verstuurMail(nieuwsteFactuur)}
-                className="px-4 py-2 text-xs font-semibold"
-                style={{ backgroundColor: "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                disabled={mailStatus[nieuwsteFactuur.id] === "laden"}
+                className="px-4 py-2 text-xs font-semibold disabled:opacity-60"
+                style={{ backgroundColor: mailStatus[nieuwsteFactuur.id] === "ok" ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
               >
-                Verstuur per mail
+                {mailStatus[nieuwsteFactuur.id] === "laden" ? "PDF maken..." : mailStatus[nieuwsteFactuur.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
               </button>
               <button
                 onClick={() => setNieuwsteFactuur(null)}
@@ -1980,10 +1982,11 @@ function FacturenContent() {
                             </button>
                             <button
                               onClick={() => verstuurMail(f)}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
-                              style={{ backgroundColor: "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              disabled={mailStatus[f.id] === "laden"}
+                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
+                              style={{ backgroundColor: mailStatus[f.id] === "ok" ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
-                              Verstuur per mail
+                              {mailStatus[f.id] === "laden" ? "PDF maken..." : mailStatus[f.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
                             </button>
                             <button
                               onClick={() => startBewerken(f)}
