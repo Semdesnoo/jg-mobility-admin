@@ -9,10 +9,12 @@ export function middleware(request: NextRequest) {
   }
 
   // Voeg pathname toe als header zodat layout.tsx hem kan lezen
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+
   const response = NextResponse.next({
-    request: { headers: new Headers(request.headers) },
+    request: { headers: requestHeaders },
   });
-  response.headers.set("x-pathname", pathname);
 
   // Admin auth — sla login pagina en login API over
   if (
