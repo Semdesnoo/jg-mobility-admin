@@ -1309,7 +1309,8 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
 function FacturenContent() {
   const [facturen, setFacturen] = useState<Factuur[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"lijst" | "nieuw">("lijst");
+  const [view, setView] = useState<"lijst" | "nieuw" | "archief">("lijst");
+  const [selectedJaar, setSelectedJaar] = useState<string>("");
   const [form, setForm] = useState<FactuurForm>(maakLeegForm);
   const [regels, setRegels] = useState<FactuurRegel[]>(LEEG_REGELS);
   const [saving, setSaving] = useState(false);
@@ -1561,6 +1562,86 @@ function FacturenContent() {
     }
   };
 
+  const berekenTotalen = (f: Factuur) => {
+    let subtotaal = Number(f.verkoopprijs) || 0;
+    try {
+      const regels = JSON.parse(f.regels || "[]");
+      subtotaal += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
+    } catch { /* */ }
+    const btw = f.btw_type === "21" ? Math.round(subtotaal * 21) / 100 : 0;
+    return { subtotaal, btw, eindtotaal: subtotaal + btw };
+  };
+
+  const printJaaroverzicht = (jaar: string, lijst: Factuur[]) => {
+    const totalen = lijst.reduce((acc, f) => {
+      const t = berekenTotalen(f);
+      return { omzet: acc.omzet + t.subtotaal, btw: acc.btw + t.btw, totaal: acc.totaal + t.eindtotaal };
+    }, { omzet: 0, btw: 0, totaal: 0 });
+
+    const rijen = lijst.map((f, i) => {
+      const t = berekenTotalen(f);
+      const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar].filter(Boolean).join(" ");
+      const bg = i % 2 === 0 ? "#ffffff" : "#f8fafc";
+      return `<tr style="background:${bg}">
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9">${f.factuur_nr}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9">${f.datum}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9">${f.klant_naam || "—"}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9">${voertuig || "—"}${f.auto_kenteken ? ` · ${f.auto_kenteken.toUpperCase()}` : ""}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9;text-align:center">${f.betaalwijze === "bank" ? "Bank" : "Contant"}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9;text-align:center">${f.btw_type === "21" ? "21%" : "Marge"}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9;text-align:right">€ ${t.subtotaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+        <td style="padding:8px 10px;font-size:9pt;border-bottom:1px solid #f1f5f9;text-align:right">${t.btw > 0 ? `€ ${t.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` : "—"}</td>
+        <td style="padding:8px 10px;font-size:9pt;font-weight:600;border-bottom:1px solid #f1f5f9;text-align:right;color:#001337">€ ${t.eindtotaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+      </tr>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Jaaroverzicht ${jaar} – JG Mobility</title>
+<style>body{font-family:Arial,sans-serif;color:#1e293b;margin:0;padding:32px}@page{margin:20mm}@media print{body{padding:0}}</style>
+</head><body>
+<table style="width:100%;margin-bottom:28px"><tr>
+  <td><div style="font-size:22pt;font-weight:700;color:#001337;letter-spacing:3px">JG MOBILITY</div>
+      <div style="font-size:9pt;color:#94a3b8;margin-top:4px">info@jgmobility.nl · www.jgmobility.nl</div></td>
+  <td style="text-align:right;vertical-align:top">
+    <div style="font-size:18pt;font-weight:300;color:#001337">Jaaroverzicht ${jaar}</div>
+    <div style="font-size:9pt;color:#94a3b8;margin-top:4px">Gegenereerd op ${new Date().toLocaleDateString("nl-NL")}</div>
+  </td>
+</tr></table>
+<table style="width:100%;margin-bottom:28px;border-collapse:collapse"><tr style="background:#001337">
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700">Aantal facturen</td>
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700;text-align:right">${lijst.length}</td>
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700">Omzet excl. BTW</td>
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700;text-align:right">€ ${totalen.omzet.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700">BTW</td>
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700;text-align:right">€ ${totalen.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+  <td style="padding:10px;color:#fff;font-size:9pt;font-weight:700">Totaal incl. BTW</td>
+  <td style="padding:10px;color:#fff;font-size:14pt;font-weight:700;text-align:right">€ ${totalen.totaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+</tr></table>
+<table style="width:100%;border-collapse:collapse">
+  <thead><tr style="border-bottom:2px solid #001337">
+    <th style="padding:9px 10px;font-size:8pt;text-align:left;color:#001337;text-transform:uppercase;letter-spacing:1px">Factuur nr.</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:left;color:#001337;text-transform:uppercase;letter-spacing:1px">Datum</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:left;color:#001337;text-transform:uppercase;letter-spacing:1px">Klant</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:left;color:#001337;text-transform:uppercase;letter-spacing:1px">Voertuig</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:center;color:#001337;text-transform:uppercase;letter-spacing:1px">Betaling</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:center;color:#001337;text-transform:uppercase;letter-spacing:1px">BTW</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:right;color:#001337;text-transform:uppercase;letter-spacing:1px">Excl. BTW</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:right;color:#001337;text-transform:uppercase;letter-spacing:1px">BTW</th>
+    <th style="padding:9px 10px;font-size:8pt;text-align:right;color:#001337;text-transform:uppercase;letter-spacing:1px">Totaal</th>
+  </tr></thead>
+  <tbody>${rijen}</tbody>
+  <tfoot><tr style="border-top:2px solid #001337;background:#f8fafc">
+    <td colspan="6" style="padding:10px;font-size:9pt;font-weight:700;color:#001337">Totaal ${lijst.length} facturen</td>
+    <td style="padding:10px;font-size:9pt;font-weight:700;text-align:right;color:#001337">€ ${totalen.omzet.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+    <td style="padding:10px;font-size:9pt;font-weight:700;text-align:right;color:#001337">€ ${totalen.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+    <td style="padding:10px;font-size:14pt;font-weight:700;text-align:right;color:#001337">€ ${totalen.totaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+  </tr></tfoot>
+</table></body></html>`;
+
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 400); }
+  };
+
   const inp = (field: keyof FactuurForm) => ({
     value: form[field],
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -1781,6 +1862,132 @@ function FacturenContent() {
     return true;
   });
 
+  // ── Archief ─────────────────────────────────────────────────
+  if (view === "archief") {
+    const betaald = facturen.filter(f => f.status === "betaald");
+    const jaren = [...new Set(betaald.map(f => f.datum.split("-").at(-1) ?? ""))].filter(Boolean).sort((a, b) => b.localeCompare(a));
+    const actuelJaar = selectedJaar || jaren[0] || String(new Date().getFullYear());
+    const jaarLijst = betaald
+      .filter(f => f.datum.split("-").at(-1) === actuelJaar)
+      .sort((a, b) => {
+        const parse = (d: string) => { const p = d.split("-").map(Number); return new Date(p[2], p[1] - 1, p[0]).getTime(); };
+        return parse(a.datum) - parse(b.datum);
+      });
+    const totalen = jaarLijst.reduce((acc, f) => {
+      const t = berekenTotalen(f);
+      return { omzet: acc.omzet + t.subtotaal, btw: acc.btw + t.btw, totaal: acc.totaal + t.eindtotaal };
+    }, { omzet: 0, btw: 0, totaal: 0 });
+
+    return (
+      <div>
+        <PageHeader
+          title="Archief betaalde facturen"
+          subtitle={`${betaald.length} betaalde facturen`}
+          action={
+            <div className="flex gap-2">
+              <button
+                onClick={() => printJaaroverzicht(actuelJaar, jaarLijst)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all hover:opacity-80"
+                style={{ border: "1px solid #001337", color: "#001337", fontFamily: "var(--font-inter)" }}
+              >
+                Afdrukken / PDF
+              </button>
+              <button
+                onClick={() => setView("lijst")}
+                className="px-4 py-2.5 text-sm font-semibold transition-all hover:opacity-70"
+                style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+              >
+                ← Terug
+              </button>
+            </div>
+          }
+        />
+        <div className="p-4 md:p-8">
+          {betaald.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-28" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+              <p className="text-lg font-bold mt-5 mb-2" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Nog geen betaalde facturen</p>
+              <p className="text-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Zet een factuur op "Betaald" om hem hier te zien.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-1.5 mb-6 flex-wrap">
+                {jaren.map(j => (
+                  <button key={j} onClick={() => setSelectedJaar(j)}
+                    className="px-4 py-2 text-sm font-semibold transition-all"
+                    style={{ backgroundColor: actuelJaar === j ? "#001337" : "transparent", color: actuelJaar === j ? "#ffffff" : "rgba(0,19,55,0.5)", border: `1px solid ${actuelJaar === j ? "#001337" : "rgba(0,19,55,0.12)"}`, fontFamily: "var(--font-inter)" }}
+                  >
+                    {j} <span style={{ opacity: 0.6, fontSize: "11px" }}>({betaald.filter(f => f.datum.split("-").at(-1) === j).length})</span>
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                {[
+                  { label: "Facturen", value: String(jaarLijst.length) },
+                  { label: "Omzet excl. BTW", value: `€ ${totalen.omzet.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` },
+                  { label: "BTW totaal", value: `€ ${totalen.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` },
+                  { label: "Totaal incl. BTW", value: `€ ${totalen.totaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` },
+                ].map(({ label, value }) => (
+                  <div key={label} className="px-4 py-3" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{label}</p>
+                    <p className="text-base font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>{value}</p>
+                  </div>
+                ))}
+              </div>
+              {jaarLijst.length === 0 ? (
+                <div className="flex items-center justify-center py-16" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <p className="text-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Geen betaalde facturen in {actuelJaar}.</p>
+                </div>
+              ) : (
+                <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", overflowX: "auto" }}>
+                  <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1.5px solid #001337" }}>
+                        {["Factuur nr.", "Datum", "Klant", "Voertuig", "Betaling", "BTW", "Excl. BTW", "BTW", "Totaal"].map(h => (
+                          <th key={h} className="px-3 py-3 text-left" style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "#001337", whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {jaarLijst.map((f, i) => {
+                        const t = berekenTotalen(f);
+                        const voertuig = [f.auto_merk, f.auto_model].filter(Boolean).join(" ");
+                        return (
+                          <tr key={f.id} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                            <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: "#001337", whiteSpace: "nowrap" }}>{f.factuur_nr}</td>
+                            <td className="px-3 py-2.5 text-xs" style={{ color: "#475569", whiteSpace: "nowrap" }}>{f.datum}</td>
+                            <td className="px-3 py-2.5 text-xs" style={{ color: "#1e293b" }}>{f.klant_naam || "—"}</td>
+                            <td className="px-3 py-2.5 text-xs" style={{ color: "#475569" }}>{voertuig || "—"}{f.auto_kenteken ? ` · ${f.auto_kenteken.toUpperCase()}` : ""}</td>
+                            <td className="px-3 py-2.5 text-xs text-center" style={{ color: "#475569" }}>{f.betaalwijze === "bank" ? "Bank" : "Contant"}</td>
+                            <td className="px-3 py-2.5 text-xs text-center">
+                              <span className="px-2 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: f.btw_type === "21" ? "#dbeafe" : "#f1f5f9", color: f.btw_type === "21" ? "#1d4ed8" : "#64748b" }}>
+                                {f.btw_type === "21" ? "21%" : "Marge"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-right" style={{ color: "#475569", whiteSpace: "nowrap" }}>€ {t.subtotaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-3 py-2.5 text-xs text-right" style={{ color: "#475569", whiteSpace: "nowrap" }}>{t.btw > 0 ? `€ ${t.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` : "—"}</td>
+                            <td className="px-3 py-2.5 text-xs text-right font-bold" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {t.eindtotaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: "2px solid #001337", backgroundColor: "#f8fafc" }}>
+                        <td colSpan={6} className="px-3 py-3 text-xs font-bold" style={{ color: "#001337" }}>Totaal {jaarLijst.length} facturen</td>
+                        <td className="px-3 py-3 text-xs font-bold text-right" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {totalen.omzet.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-3 text-xs font-bold text-right" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {totalen.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-3 text-sm font-bold text-right" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {totalen.totaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── Lijstweergave ───────────────────────────────────────────
   return (
     <div>
@@ -1788,13 +1995,27 @@ function FacturenContent() {
         title="Facturen"
         subtitle={`${gefilterdeFacturen.length} facturen`}
         action={
-          <button
-            onClick={() => setView("nieuw")}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
-            style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
-          >
-            <Plus size={14} /> Nieuwe factuur
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setView("archief")}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all hover:opacity-80"
+              style={{ border: "1px solid rgba(0,19,55,0.2)", color: "#001337", fontFamily: "var(--font-inter)" }}
+            >
+              Archief
+              {facturen.filter(f => f.status === "betaald").length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 font-bold" style={{ backgroundColor: "#dcfce7", color: "#15803d" }}>
+                  {facturen.filter(f => f.status === "betaald").length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setView("nieuw")}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
+              style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+            >
+              <Plus size={14} /> Nieuwe factuur
+            </button>
+          </div>
         }
       />
       <div className="p-4 md:p-8">
