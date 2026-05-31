@@ -1485,11 +1485,39 @@ function FacturenContent() {
     }, 500);
   };
 
-  const verstuurMail = (f: Factuur) => {
+  const verstuurMail = async (f: Factuur) => {
     if (!f.klant_email) {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
+
+    // Factuur downloaden als HTML-bestand
+    let logoSrc = "";
+    try {
+      const res = await fetch(encodeURI("/JG Mobility.png"));
+      if (res.ok) {
+        const blob = await res.blob();
+        logoSrc = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve("");
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch { /* logo niet beschikbaar */ }
+
+    const html = genereerFactuurHTML(f, logoSrc);
+    const bestand = new Blob([html], { type: "text/html;charset=utf-8" });
+    const downloadUrl = URL.createObjectURL(bestand);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `Factuur-${f.factuur_nr}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+
+    // Totaal berekenen
     let totaal = Number(f.verkoopprijs) || 0;
     try {
       const regels = JSON.parse(f.regels || "[]");
@@ -1497,27 +1525,39 @@ function FacturenContent() {
       if (f.btw_type === "21") totaal = Math.round(totaal * 1.21);
     } catch { /* gebruik verkoopprijs */ }
 
+    const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar ? `(${f.auto_bouwjaar})` : ""].filter(Boolean).join(" ");
     const subject = `Factuur ${f.factuur_nr} - JG Mobility`;
     const body = [
       `Geachte ${f.klant_naam || "klant"},`,
       ``,
-      `Hierbij ontvangt u factuur ${f.factuur_nr} van JG Mobility.`,
+      `Hartelijk dank voor uw aankoop bij JG Mobility! Wij hopen dat u veel plezier zult beleven aan uw voertuig.`,
       ``,
-      `Factuurbedrag: €${totaal.toLocaleString("nl-NL")}`,
-      f.vervaldatum ? `Vervaldatum: ${f.vervaldatum}` : `Betaaltermijn: 30 dagen na ontvangst`,
+      `In de bijlage vindt u de factuur voor uw aankoop. Wij verzoeken u vriendelijk het openstaande bedrag te voldoen voor de vervaldatum.`,
       ``,
-      f.betaalwijze === "bank"
-        ? `Gelieve het bedrag over te maken op IBAN NL94 ABNA 0154171638 onder vermelding van factuurnummer ${f.factuur_nr}.`
-        : `Betaling geschiedt contant.`,
+      `── Factuuroverzicht ──────────────────────`,
+      `Factuurnummer : ${f.factuur_nr}`,
+      voertuig ? `Voertuig      : ${voertuig}` : "",
+      `Totaalbedrag  : €${totaal.toLocaleString("nl-NL")}`,
+      f.vervaldatum ? `Uiterlijk betalen voor : ${f.vervaldatum}` : `Betaaltermijn : 30 dagen na ontvangst`,
+      ``,
+      f.betaalwijze === "bank" ? [
+        `── Betaalgegevens ────────────────────────`,
+        `IBAN          : NL94 ABNA 0154171638`,
+        `T.n.v.        : JG Mobility`,
+        `Omschrijving  : ${f.factuur_nr}`,
+      ].join("\n") : `Betaling geschiedt contant bij afhaling.`,
+      ``,
+      `Heeft u vragen over uw factuur? Neem dan gerust contact met ons op via info@jgmobility.nl.`,
       ``,
       `Met vriendelijke groet,`,
+      ``,
       `JG Mobility`,
       `info@jgmobility.nl`,
       `www.jgmobility.nl`,
-    ].join("\n");
+    ].filter((r) => r !== undefined).join("\n");
 
-    const url = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(f.klant_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(url, "_blank");
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(f.klant_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setTimeout(() => window.open(gmailUrl, "_blank"), 400);
   };
 
   const inp = (field: keyof FactuurForm) => ({
