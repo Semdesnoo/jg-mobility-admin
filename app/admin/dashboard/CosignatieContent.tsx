@@ -374,27 +374,81 @@ export default function CosignatieContent() {
                   {isOpen && (
                     <div className="px-5 pb-5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)" }}>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
-                        {/* Links: auto + marktprijzen */}
+                        {/* Links: bewerkbare velden + marktprijzen */}
                         <div>
-                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Auto & klant</p>
-                          <table className="w-full text-xs mb-4" style={{ fontFamily: "var(--font-inter)" }}>
-                            <tbody>
-                              {[
-                                ["Auto", `${a.merk} ${a.model} ${a.bouwjaar}`.trim()],
-                                ["Km-stand", a.km ? `${parseInt(a.km).toLocaleString("nl-NL")} km` : ""],
-                                ["Vraagprijs", a.vraagprijs ? `€ ${parseInt(a.vraagprijs).toLocaleString("nl-NL")}` : ""],
-                                ["Klant", a.naam],
-                                ["E-mail", a.email],
-                                ["Telefoon", a.telefoon],
-                                ["In consignatie", dagen !== null ? `${dagen} dag${dagen !== 1 ? "en" : ""}` : ""],
-                              ].filter(([, v]) => v).map(([l, v]) => (
-                                <tr key={l}>
-                                  <td className="py-0.5 pr-3" style={{ color: "rgba(0,19,55,0.45)", width: 100 }}>{l}</td>
-                                  <td className="py-0.5 font-semibold" style={{ color: "#001337" }}>{v}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          {/* Klantgegevens */}
+                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Klantgegevens</p>
+                          <div className="grid grid-cols-1 gap-2 mb-4">
+                            {([
+                              { label: "Naam", field: "naam" as const },
+                              { label: "E-mail", field: "email" as const },
+                              { label: "Telefoon", field: "telefoon" as const },
+                              { label: "Vraagprijs (€)", field: "vraagprijs" as const },
+                            ]).map(({ label, field }) => (
+                              <div key={field} className="flex items-center gap-2">
+                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>{label}</span>
+                                <input
+                                  type="text"
+                                  title={label}
+                                  placeholder={label}
+                                  defaultValue={a[field] ?? ""}
+                                  onBlur={(e) => {
+                                    if (e.target.value !== a[field]) {
+                                      fetch(`/api/admin/cosignaties/${a.id}`, {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ [field]: e.target.value }),
+                                      });
+                                      setAanvragen((p) => p.map((x) => x.id === a.id ? { ...x, [field]: e.target.value } : x));
+                                    }
+                                  }}
+                                  className="flex-1 px-2 py-1 text-xs outline-none"
+                                  style={S.veld}
+                                />
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Autogegevens */}
+                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Voertuig</p>
+                          <div className="grid grid-cols-1 gap-2 mb-4">
+                            {([
+                              { label: "Merk", field: "merk" as const },
+                              { label: "Model", field: "model" as const },
+                              { label: "Bouwjaar", field: "bouwjaar" as const },
+                              { label: "Km-stand", field: "km" as const },
+                              { label: "Kleur", field: "kleur" as const },
+                              { label: "Brandstof", field: "brandstof" as const },
+                            ]).map(({ label, field }) => (
+                              <div key={field} className="flex items-center gap-2">
+                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>{label}</span>
+                                <input
+                                  type="text"
+                                  title={label}
+                                  placeholder={label}
+                                  defaultValue={(a as unknown as Record<string, string>)[field] ?? ""}
+                                  onBlur={(e) => {
+                                    if (e.target.value !== (a as unknown as Record<string, string>)[field]) {
+                                      fetch(`/api/admin/cosignaties/${a.id}`, {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ [field]: e.target.value }),
+                                      });
+                                      setAanvragen((p) => p.map((x) => x.id === a.id ? { ...x, [field]: e.target.value } : x));
+                                    }
+                                  }}
+                                  className="flex-1 px-2 py-1 text-xs outline-none"
+                                  style={S.veld}
+                                />
+                              </div>
+                            ))}
+                            {dagen !== null && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>In consignatie</span>
+                                <span className="text-xs font-semibold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>{dagen} dag{dagen !== 1 ? "en" : ""}</span>
+                              </div>
+                            )}
+                          </div>
 
                           {/* Marktprijzen */}
                           <div className="flex items-center justify-between mb-2">
