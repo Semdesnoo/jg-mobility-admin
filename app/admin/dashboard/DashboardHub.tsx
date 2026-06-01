@@ -357,17 +357,17 @@ export default function DashboardHub() {
       {/* ── Mobiele hub (full-screen overlay) ── */}
       {mobileHub && (
         <div
-          className="md:hidden fixed inset-0 z-50 overflow-y-auto flex flex-col"
+          className="md:hidden fixed inset-0 z-50 flex flex-col overflow-hidden"
           style={{ backgroundColor: "#f0f2f5" }}
         >
-          {/* Header */}
-          <div style={{ backgroundColor: "#001337" }} className="px-6 pt-10 pb-8">
-            <div className="flex items-start justify-between mb-6">
+          {/* Header — compact */}
+          <div style={{ backgroundColor: "#001337" }} className="px-5 pt-8 pb-4 flex-shrink-0">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-[10px] tracking-widest uppercase mb-1" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-inter)" }}>
+                <p className="text-[9px] tracking-widest uppercase mb-0.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-inter)" }}>
                   Beheer
                 </p>
-                <h1 className="text-2xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
+                <h1 className="text-xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
                   JG Mobility
                 </h1>
               </div>
@@ -382,50 +382,38 @@ export default function DashboardHub() {
                 </button>
               </form>
             </div>
-            <div>
-              <p className="text-base font-semibold text-white mb-0.5" style={{ fontFamily: "var(--font-inter)" }}>
-                Welkom terug
-              </p>
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>
-                {new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-              </p>
+            {/* Snelle stats */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Beschikbaar", value: beschikbaar.length },
+                { label: "Verkocht", value: verkocht.length },
+                { label: "Totaal", value: autos.length },
+              ].map((s) => (
+                <div key={s.label} className="flex flex-col items-center justify-center py-2" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
+                  <p className="text-lg font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>{s.value}</p>
+                  <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>{s.label}</p>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Snelle stats */}
-          <div className="px-4 pt-5 pb-2 grid grid-cols-3 gap-2">
-            {[
-              { label: "Beschikbaar", value: beschikbaar.length },
-              { label: "Verkocht", value: verkocht.length },
-              { label: "Totaal", value: autos.length },
-            ].map((s) => (
-              <div key={s.label} className="flex flex-col items-center justify-center py-3" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
-                <p className="text-xl font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>{s.value}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Nav kaarten */}
-          <div className="px-4 pt-3 pb-8 grid grid-cols-2 gap-3">
+          {/* Nav kaarten — 3 kolommen, past altijd op scherm */}
+          <div className="flex-1 px-3 pt-3 pb-3 grid grid-cols-3 gap-2 content-start overflow-hidden">
             {NAV.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => { setTab(id); setMobileHub(false); }}
-                className="flex flex-col items-start p-4 text-left transition-all active:scale-95"
+                className="flex flex-col items-center justify-center py-3 px-1 text-center transition-all active:scale-95"
                 style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
               >
                 <div
-                  className="flex items-center justify-center mb-3"
-                  style={{ width: "40px", height: "40px", backgroundColor: "rgba(0,19,55,0.05)" }}
+                  className="flex items-center justify-center mb-1.5"
+                  style={{ width: "32px", height: "32px", backgroundColor: "rgba(0,19,55,0.05)" }}
                 >
-                  <Icon size={18} style={{ color: "#001337" }} />
+                  <Icon size={15} style={{ color: "#001337" }} />
                 </div>
-                <p className="text-sm font-bold mb-1" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                <p className="text-[11px] font-bold leading-tight" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                   {label}
-                </p>
-                <p className="text-[11px] leading-snug" style={{ color: "rgba(0,19,55,0.42)", fontFamily: "var(--font-inter)" }}>
-                  {NAV_META[id]}
                 </p>
               </button>
             ))}
