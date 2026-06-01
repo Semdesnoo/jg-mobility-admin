@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Target, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Plus, Target, ChevronDown, ChevronUp, Trash2, UserCheck } from "lucide-react";
 
 type Lead = {
   id: string;
@@ -19,10 +19,15 @@ type Lead = {
 const BRONNEN: Record<string, string> = {
   website: "Website",
   telefoon: "Telefoon",
+  whatsapp: "WhatsApp",
+  email: "E-mail",
+  cosignatie: "Cosignatie",
   doorverwijzing: "Doorverwijzing",
   walk_in: "Walk-in",
   social: "Social media",
   marktplaats: "Marktplaats",
+  autoscout: "AutoScout24",
+  gaspedaal: "Gaspedaal.nl",
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -81,6 +86,16 @@ export default function LeadsContent() {
   const updateNotitie = async (id: string, notitie: string) => {
     await fetch(`/api/admin/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notitie }) });
     setLeads((p) => p.map((l) => (l.id === id ? { ...l, notitie } : l)));
+  };
+
+  const maakKlant = async (l: Lead) => {
+    if (!confirm(`Klant aanmaken voor ${l.naam || l.telefoon}?`)) return;
+    await fetch("/api/admin/klanten", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ naam: l.naam, email: l.email, telefoon: l.telefoon, notitie: l.notitie }),
+    });
+    await updateStatus(l.id, "deal");
   };
 
   const verwijder = async (id: string) => {
@@ -232,12 +247,18 @@ export default function LeadsContent() {
                           </div>
                           <p className="text-xs font-bold mb-1.5 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Notitie</p>
                           <textarea defaultValue={l.notitie} rows={3} onBlur={(e) => { if (e.target.value !== l.notitie) updateNotitie(l.id, e.target.value); }} placeholder="Opvolging, afspraken..." className="w-full px-3 py-2 text-xs outline-none resize-none" style={{ ...S.veld, lineHeight: 1.6 }} />
-                          <div className="flex items-center justify-between mt-3">
-                            <div className="flex gap-2">
+                          <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               {l.email && <a href={`mailto:${l.email}`} className="px-4 py-2 text-xs font-semibold" style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>Mail</a>}
                               {l.telefoon && <a href={`tel:${l.telefoon}`} className="px-4 py-2 text-xs font-semibold" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>Bel</a>}
+                              {l.telefoon && <a href={`https://wa.me/31${l.telefoon.replace(/^0/, "").replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 text-xs font-semibold" style={{ backgroundColor: "#25d366", color: "#ffffff", fontFamily: "var(--font-inter)" }}>WhatsApp</a>}
+                              {l.status !== "deal" && (
+                                <button type="button" onClick={() => maakKlant(l)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-all hover:opacity-80" style={{ border: "1px solid #15803d", color: "#15803d", fontFamily: "var(--font-inter)" }}>
+                                  <UserCheck size={12} /> Maak klant
+                                </button>
+                              )}
                             </div>
-                            <button onClick={() => verwijder(l.id)} className="flex items-center gap-1.5 text-xs transition-all hover:opacity-70" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
+                            <button type="button" onClick={() => verwijder(l.id)} className="flex items-center gap-1.5 text-xs transition-all hover:opacity-70" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
                               <Trash2 size={12} /> Verwijder
                             </button>
                           </div>

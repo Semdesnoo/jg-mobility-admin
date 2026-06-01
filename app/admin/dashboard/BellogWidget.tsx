@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Phone, Plus, Check, Trash2, PhoneIncoming, RotateCcw } from "lucide-react";
+import { Phone, Plus, Check, Trash2, PhoneIncoming, RotateCcw, UserPlus } from "lucide-react";
 
 type Oproep = {
   id: string;
@@ -72,6 +72,22 @@ export default function BellogWidget() {
   const verwijder = async (id: string) => {
     await fetch(`/api/admin/bellog/${id}`, { method: "DELETE" });
     setOproepen((prev) => prev.filter((o) => o.id !== id));
+  };
+
+  const maakLead = async (o: Oproep) => {
+    await fetch("/api/admin/leads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        naam: o.naam,
+        telefoon: o.nummer,
+        bron: "telefoon",
+        notitie: o.notitie,
+        status: "nieuw",
+      }),
+    });
+    // Markeer oproep als afgehandeld
+    await toggle(o.id, "afgehandeld", true);
   };
 
   const gefilterd =
@@ -284,6 +300,14 @@ export default function BellogWidget() {
                 )}
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => maakLead(o)}
+                  title="Maak lead aan"
+                  className="p-1.5 transition-all hover:opacity-70"
+                >
+                  <UserPlus size={11} style={{ color: "rgba(0,19,55,0.4)" }} />
+                </button>
                 {o.terugbellen && (
                   <button
                     onClick={() => toggle(o.id, "afgehandeld", !o.afgehandeld)}
