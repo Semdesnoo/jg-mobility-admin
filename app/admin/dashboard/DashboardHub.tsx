@@ -1320,7 +1320,7 @@ function FacturenContent() {
 </style></head><body>
 <table style="width:100%;margin-bottom:28px"><tr>
   <td><div style="font-size:22pt;font-weight:700;color:#001337;letter-spacing:3px">JG MOBILITY</div>
-      <div style="font-size:9pt;color:#94a3b8;margin-top:4px">Juweellaan 35 · 2314 XT Leiden · info@jgmobility.nl</div></td>
+      <div style="font-size:9pt;color:#94a3b8;margin-top:4px">Arnhemseweg 10a · 2994 LA Barendrecht · info@jgmobility.nl</div></td>
   <td style="text-align:right;vertical-align:top">
     <div style="font-size:18pt;font-weight:300;color:#001337">Jaaroverzicht ${jaar}</div>
     <div style="font-size:9pt;color:#94a3b8;margin-top:4px">Gegenereerd op ${new Date().toLocaleDateString("nl-NL")}</div>
