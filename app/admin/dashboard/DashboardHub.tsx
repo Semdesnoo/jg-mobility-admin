@@ -62,18 +62,18 @@ type Dossier = {
 type IconProps = { size?: number; style?: React.CSSProperties; className?: string };
 
 const NAV: { id: Tab; label: string; icon: React.ComponentType<IconProps> }[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "email", label: "Email", icon: Mail },
-  { id: "voorraad", label: "Auto Voorraad", icon: Car },
-  { id: "leads", label: "Leads", icon: Target },
-  { id: "klanten", label: "Klanten", icon: Users },
-  { id: "afspraken", label: "Afspraken", icon: Calendar },
-  { id: "inkoop", label: "Inkoop & Taxatie", icon: TrendingDown },
-  { id: "cosignatie", label: "Cosignatie", icon: Handshake },
-  { id: "facturen", label: "Facturen", icon: FileText },
-  { id: "calculator", label: "Calculator", icon: Calculator },
-  { id: "statistieken", label: "Statistieken", icon: BarChart2 },
-  { id: "social", label: "Social Media", icon: Share2 },
+  { id: "dashboard",   label: "Dashboard",       icon: LayoutDashboard },
+  { id: "facturen",    label: "Facturen",         icon: FileText },
+  { id: "voorraad",    label: "Auto Voorraad",    icon: Car },
+  { id: "social",      label: "Social Media",     icon: Share2 },
+  { id: "email",       label: "Email",            icon: Mail },
+  { id: "leads",       label: "Leads",            icon: Target },
+  { id: "inkoop",      label: "Inkoop & Taxatie", icon: TrendingDown },
+  { id: "cosignatie",  label: "Cosignatie",       icon: Handshake },
+  { id: "calculator",  label: "Calculator",       icon: Calculator },
+  { id: "klanten",     label: "Klanten",          icon: Users },
+  { id: "afspraken",   label: "Afspraken",        icon: Calendar },
+  { id: "statistieken",label: "Statistieken",     icon: BarChart2 },
 ];
 
 function PageHeader({
