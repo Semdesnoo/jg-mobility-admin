@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, TrendingDown, ChevronDown, ChevronUp, Trash2, Search, BarChart2, AlertCircle } from "lucide-react";
+import { Plus, TrendingDown, ChevronDown, ChevronUp, Trash2, Search, BarChart2, AlertCircle, Award } from "lucide-react";
+import PrestatiesTab from "./PrestatiesTab";
 
 // ── Types ─────────────────────────────────────────────────────────
 type RdwData = {
@@ -77,7 +78,7 @@ function TrendBadge({ trend }: { trend: string }) {
 
 // ── Main ──────────────────────────────────────────────────────────
 export default function InkoopContent() {
-  const [tab, setTab] = useState<"taxatie" | "dossiers">("taxatie");
+  const [tab, setTab] = useState<"taxatie" | "prestaties" | "dossiers">("taxatie");
 
   return (
     <div>
@@ -87,14 +88,15 @@ export default function InkoopContent() {
           Inkoop & Taxatie
         </h2>
         <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-          Marktanalyse · Prijsadvies · Dossiers
+          Marktanalyse · Prijsadvies · Eigen Prestaties · Dossiers
         </p>
       </div>
 
       <div className="flex px-4 md:px-8" style={{ borderBottom: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#ffffff" }}>
         {([
-          { id: "taxatie" as const,  label: "Taxatietool",  Icon: Search },
-          { id: "dossiers" as const, label: "Dossiers",     Icon: TrendingDown },
+          { id: "taxatie" as const,    label: "Taxatietool",   Icon: Search },
+          { id: "prestaties" as const, label: "Prestaties",    Icon: Award },
+          { id: "dossiers" as const,   label: "Dossiers",      Icon: TrendingDown },
         ]).map(({ id, label, Icon }) => (
           <button key={id} type="button" onClick={() => setTab(id)}
             className="flex items-center gap-2 px-4 py-3.5 text-sm font-semibold transition-all"
@@ -110,8 +112,9 @@ export default function InkoopContent() {
         ))}
       </div>
 
-      {tab === "taxatie"  && <TaxatieTab />}
-      {tab === "dossiers" && <DossiersTab />}
+      {tab === "taxatie"    && <TaxatieTab />}
+      {tab === "prestaties" && <PrestatiesTab />}
+      {tab === "dossiers"   && <DossiersTab />}
     </div>
   );
 }
