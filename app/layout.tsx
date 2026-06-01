@@ -39,7 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="nl" className={`${playfair.variable} ${inter.variable}`}>
-      <body className="min-h-screen flex flex-col overflow-x-hidden">
+      <body className="h-full w-full flex flex-col overflow-hidden">
         <main className="flex-1">{children}</main>
       </body>
     </html>
