@@ -77,4 +77,77 @@ export async function initDB() {
       notitie TEXT DEFAULT ''
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS klanten (
+      id TEXT PRIMARY KEY,
+      naam TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      telefoon TEXT DEFAULT '',
+      adres TEXT DEFAULT '',
+      stad TEXT DEFAULT '',
+      notitie TEXT DEFAULT '',
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS afspraken (
+      id TEXT PRIMARY KEY,
+      datum TEXT NOT NULL,
+      tijd TEXT NOT NULL,
+      type TEXT DEFAULT 'proefrit',
+      klant_naam TEXT DEFAULT '',
+      klant_telefoon TEXT DEFAULT '',
+      klant_email TEXT DEFAULT '',
+      auto_naam TEXT DEFAULT '',
+      notitie TEXT DEFAULT '',
+      status TEXT DEFAULT 'gepland',
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS inkoop_dossiers (
+      id TEXT PRIMARY KEY,
+      datum TEXT NOT NULL,
+      merk TEXT DEFAULT '',
+      model TEXT DEFAULT '',
+      bouwjaar TEXT DEFAULT '',
+      km TEXT DEFAULT '',
+      kenteken TEXT DEFAULT '',
+      kleur TEXT DEFAULT '',
+      vin TEXT DEFAULT '',
+      aanbod_prijs INTEGER DEFAULT 0,
+      bod_prijs INTEGER DEFAULT 0,
+      aankoopprijs INTEGER DEFAULT 0,
+      naam TEXT DEFAULT '',
+      telefoon TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      status TEXT DEFAULT 'nieuw',
+      notitie TEXT DEFAULT '',
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS leads (
+      id TEXT PRIMARY KEY,
+      naam TEXT DEFAULT '',
+      telefoon TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      bron TEXT DEFAULT 'website',
+      interesse TEXT DEFAULT '',
+      budget TEXT DEFAULT '',
+      notitie TEXT DEFAULT '',
+      status TEXT DEFAULT 'nieuw',
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS auto_kosten (
+      id TEXT PRIMARY KEY,
+      auto_id INTEGER NOT NULL,
+      omschrijving TEXT DEFAULT '',
+      bedrag INTEGER DEFAULT 0,
+      datum TEXT DEFAULT '',
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
 }
