@@ -44,12 +44,14 @@ const S = {
 type LeegForm = {
   naam: string; email: string; telefoon: string;
   merk: string; model: string; bouwjaar: string; km: string;
+  kleur: string; brandstof: string; bodytype: string; apk: string; vermogen: string;
   vraagprijs: string; opmerking: string;
 };
 
 const LEEG: LeegForm = {
   naam: "", email: "", telefoon: "",
   merk: "", model: "", bouwjaar: "", km: "",
+  kleur: "", brandstof: "", bodytype: "", apk: "", vermogen: "",
   vraagprijs: "", opmerking: "",
 };
 
@@ -80,12 +82,17 @@ export default function CosignatieContent() {
     setRdwLaden(true);
     const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(kenteken)}`);
     if (res.ok) {
-      const data = await res.json();
-      if (data.merk) setForm((p) => ({
+      const d = await res.json();
+      if (d.merk) setForm((p) => ({
         ...p,
-        merk: data.merk ?? p.merk,
-        model: data.handelsbenaming ?? p.model,
-        bouwjaar: data.datum_eerste_toelating?.slice(0, 4) ?? p.bouwjaar,
+        merk:      d.merk      || p.merk,
+        model:     d.model     || p.model,
+        bouwjaar:  d.bouwjaar  ? String(d.bouwjaar) : p.bouwjaar,
+        kleur:     d.kleur     || p.kleur,
+        brandstof: d.brandstof || p.brandstof,
+        bodytype:  d.bodytype  || p.bodytype,
+        apk:       d.apk       || p.apk,
+        vermogen:  d.vermogen  || p.vermogen,
       }));
     }
     setRdwLaden(false);
@@ -201,15 +208,13 @@ export default function CosignatieContent() {
                 {rdwLaden && <div className="mb-2 w-4 h-4 rounded-full border-2 animate-spin flex-shrink-0" style={{ borderColor: "rgba(0,19,55,0.1)", borderTopColor: "#001337" }} />}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Klantgegevens */}
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={S.label}>Klantgegevens</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 {([
                   { label: "Naam klant *", field: "naam" as const },
                   { label: "E-mail", field: "email" as const },
                   { label: "Telefoon", field: "telefoon" as const },
-                  { label: "Merk *", field: "merk" as const },
-                  { label: "Model", field: "model" as const },
-                  { label: "Bouwjaar", field: "bouwjaar" as const },
-                  { label: "Kilometerstand", field: "km" as const },
                   { label: "Vraagprijs (€)", field: "vraagprijs" as const },
                 ]).map(({ label, field }) => (
                   <div key={field}>
@@ -217,6 +222,45 @@ export default function CosignatieContent() {
                     <input type="text" value={form[field]}
                       onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
                       className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Auto-gegevens (deels via RDW) */}
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={S.label}>
+                Voertuig {rdwLaden && <span className="text-[9px] ml-1 opacity-60">RDW ophalen...</span>}
+                {!rdwLaden && form.merk && <span className="text-[9px] ml-1" style={{ color: "#15803d" }}>✓ RDW ingevuld</span>}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {([
+                  { label: "Merk *", field: "merk" as const, rdw: true },
+                  { label: "Model", field: "model" as const, rdw: true },
+                  { label: "Bouwjaar", field: "bouwjaar" as const, rdw: true },
+                  { label: "Kleur", field: "kleur" as const, rdw: true },
+                  { label: "Brandstof", field: "brandstof" as const, rdw: true },
+                  { label: "Carrosserie", field: "bodytype" as const, rdw: true },
+                  { label: "Vermogen", field: "vermogen" as const, rdw: true },
+                  { label: "APK vervaldatum", field: "apk" as const, rdw: true },
+                  { label: "Kilometerstand *", field: "km" as const, rdw: false },
+                ]).map(({ label, field, rdw }) => (
+                  <div key={field}>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>
+                      {label}
+                      {rdw && form[field] && <span className="ml-1 text-[8px]" style={{ color: "#15803d" }}>RDW</span>}
+                      {field === "km" && <span className="ml-1 text-[9px]" style={{ color: "#b45309" }}>Zelf invullen</span>}
+                    </label>
+                    <input
+                      type="text"
+                      value={form[field]}
+                      onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
+                      placeholder={field === "km" ? "bijv. 85000" : ""}
+                      className="w-full px-3 py-2 text-sm outline-none"
+                      style={{
+                        ...S.veld,
+                        backgroundColor: rdw && form[field] ? "#f0fdf4" : "#fafafa",
+                        borderColor: rdw && form[field] ? "rgba(21,128,61,0.3)" : "rgba(0,19,55,0.15)",
+                      }}
+                    />
                   </div>
                 ))}
                 <div style={{ gridColumn: "span 2" }}>

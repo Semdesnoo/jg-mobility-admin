@@ -4,7 +4,7 @@ import sql from "@/lib/db";
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { status, notitie, concurrent_prijs, platform_prijzen, naam, email, telefoon, merk, model, bouwjaar, km, vraagprijs, opmerking } = body;
+  const { status, notitie, concurrent_prijs, platform_prijzen, naam, email, telefoon, merk, model, bouwjaar, km, vraagprijs, opmerking, kleur, brandstof, bodytype, apk, vermogen } = body;
 
   const geaccepteerd_op =
     status === "geaccepteerd" ? new Date().toISOString().slice(0, 10) : undefined;
@@ -22,7 +22,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       bouwjaar = COALESCE(${bouwjaar ?? null}, bouwjaar),
       km = COALESCE(${km ?? null}, km),
       vraagprijs = COALESCE(${vraagprijs ?? null}, vraagprijs),
-      opmerking = COALESCE(${opmerking ?? null}, opmerking),
+      opmerking  = COALESCE(${opmerking  ?? null}, opmerking),
+      kleur      = COALESCE(${kleur      ?? null}, kleur),
+      brandstof  = COALESCE(${brandstof  ?? null}, brandstof),
+      bodytype   = COALESCE(${bodytype   ?? null}, bodytype),
+      apk        = COALESCE(${apk        ?? null}, apk),
+      vermogen   = COALESCE(${vermogen   ?? null}, vermogen),
       platform_prijzen = CASE
         WHEN ${platform_prijzen ? JSON.stringify(platform_prijzen) : null}::jsonb IS NOT NULL
         THEN ${platform_prijzen ? JSON.stringify(platform_prijzen) : null}::jsonb

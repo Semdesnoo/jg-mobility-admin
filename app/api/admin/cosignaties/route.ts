@@ -7,6 +7,11 @@ async function migrate() {
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS concurrent_prijs TEXT`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS geaccepteerd_op DATE`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS platform_prijzen JSONB DEFAULT '{}'`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS kleur TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS brandstof TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bodytype TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS apk TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS vermogen TEXT DEFAULT ''`;
   } catch { /* table may not exist yet */ }
 }
 
@@ -23,15 +28,23 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await migrate();
-    const { merk, model, bouwjaar, km, vraagprijs, naam, email, telefoon, opmerking } = await req.json();
+    const {
+      merk, model, bouwjaar, km, vraagprijs, naam, email, telefoon, opmerking,
+      kleur, brandstof, bodytype, apk, vermogen,
+    } = await req.json();
     const now = new Date();
     const id = `cos_${Date.now()}`;
     const datum = now.toLocaleDateString("nl-NL");
     const tijd = now.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
     const geaccepteerd_op = now.toISOString().slice(0, 10);
     await sql`
-      INSERT INTO cosignaties (id, datum, tijd, naam, email, telefoon, merk, model, bouwjaar, km, vraagprijs, opmerking, aantal_fotos, status, notitie, geaccepteerd_op)
-      VALUES (${id}, ${datum}, ${tijd}, ${naam ?? ""}, ${email ?? ""}, ${telefoon ?? ""}, ${merk ?? ""}, ${model ?? ""}, ${bouwjaar ?? ""}, ${km ?? ""}, ${vraagprijs ?? ""}, ${opmerking ?? ""}, 0, 'geaccepteerd', '', ${geaccepteerd_op}::date)
+      INSERT INTO cosignaties (id, datum, tijd, naam, email, telefoon, merk, model, bouwjaar, km,
+        vraagprijs, opmerking, aantal_fotos, status, notitie, geaccepteerd_op,
+        kleur, brandstof, bodytype, apk, vermogen)
+      VALUES (${id}, ${datum}, ${tijd}, ${naam ?? ""}, ${email ?? ""}, ${telefoon ?? ""},
+              ${merk ?? ""}, ${model ?? ""}, ${bouwjaar ?? ""}, ${km ?? ""},
+              ${vraagprijs ?? ""}, ${opmerking ?? ""}, 0, 'geaccepteerd', '', ${geaccepteerd_op}::date,
+              ${kleur ?? ""}, ${brandstof ?? ""}, ${bodytype ?? ""}, ${apk ?? ""}, ${vermogen ?? ""})
     `;
     return Response.json({ ok: true, id });
   } catch (e) {
