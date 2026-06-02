@@ -4,7 +4,8 @@ import sql from "@/lib/db";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { pdfBase64 } = await req.json();
+  const { pdfBase64, type } = await req.json();
+  const isBedankt = type === "bedankt";
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL;
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar ? `(${f.auto_bouwjaar})` : ""].filter(Boolean).join(" ");
 
-  const htmlBody = `<!DOCTYPE html>
+  const betaalBody = `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
   <div style="border-bottom:3px solid #001337;padding-bottom:16px;margin-bottom:24px">
@@ -59,15 +60,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 </body>
 </html>`;
 
+  const bedankBody = `<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <div style="border-bottom:3px solid #001337;padding-bottom:16px;margin-bottom:24px">
+    <span style="font-size:22px;font-weight:700;color:#001337;letter-spacing:2px">JG MOBILITY</span>
+  </div>
+  <p style="font-size:15px">Geachte ${f.klant_naam || "klant"},</p>
+  <p style="font-size:15px;line-height:1.6">Hartelijk dank voor het vertrouwen in JG Mobility. Wij wensen u heel veel rijplezier met ${voertuig || "uw nieuwe voertuig"}!</p>
+  <p style="font-size:15px;line-height:1.6">In de bijlage vindt u uw factuur, voorzien van een <strong>betaald</strong>-vermelding. Bewaar deze goed &mdash; u kunt hem altijd gebruiken als aankoop- en betaalbewijs.</p>
+  <div style="background:#f0fdf4;border-left:4px solid #15803d;padding:16px 20px;margin:24px 0;line-height:2">
+    <div><span style="color:#16a34a;font-size:13px;font-weight:700">&#10003; VOLDAAN</span></div>
+    <div><span style="color:#64748b;font-size:13px">FACTUURNUMMER</span><br><strong>${f.factuur_nr}</strong></div>
+    ${voertuig ? `<div><span style="color:#64748b;font-size:13px">VOERTUIG</span><br><strong>${voertuig}</strong></div>` : ""}
+    <div><span style="color:#64748b;font-size:13px">TOTAALBEDRAG</span><br><strong style="font-size:18px;color:#001337">€${totaal.toLocaleString("nl-NL")}</strong></div>
+  </div>
+  <p style="font-size:15px;line-height:1.6">Heeft u vragen? Neem gerust contact met ons op via <a href="mailto:info@jgmobility.nl" style="color:#001337">info@jgmobility.nl</a>.</p>
+  <div style="border-top:1px solid #e2e8f0;padding-top:20px;margin-top:30px;font-size:13px;color:#64748b;line-height:1.8">
+    Met vriendelijke groet,<br><br>
+    <strong style="color:#001337;font-size:14px">JG Mobility</strong><br>
+    <a href="mailto:info@jgmobility.nl" style="color:#475569">info@jgmobility.nl</a><br>
+    <a href="https://www.jgmobility.nl" style="color:#475569">www.jgmobility.nl</a>
+  </div>
+</body>
+</html>`;
+
   try {
     const resend = new Resend(apiKey);
     await resend.emails.send({
       from: `JG Mobility <${fromEmail}>`,
       to: f.klant_email,
-      subject: `Factuur ${f.factuur_nr} - JG Mobility`,
-      html: htmlBody,
+      subject: isBedankt
+        ? `Bedankt voor uw aankoop bij JG Mobility — Factuur ${f.factuur_nr}`
+        : `Factuur ${f.factuur_nr} - JG Mobility`,
+      html: isBedankt ? bedankBody : betaalBody,
       attachments: [{
-        filename: `Factuur-${f.factuur_nr}.pdf`,
+        filename: isBedankt ? `Factuur-${f.factuur_nr}-betaald.pdf` : `Factuur-${f.factuur_nr}.pdf`,
         content: pdfBase64,
       }],
     });

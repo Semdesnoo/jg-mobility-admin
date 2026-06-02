@@ -869,7 +869,7 @@ const LEEG_FORM: FactuurForm = {
   vervaldatum: "", notitie: "",
 };
 
-function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
+function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: boolean } = {}): string {
   const autoBasePrijs = Number(f.verkoopprijs);
   let extraRegels: FactuurRegel[] = [];
   try { extraRegels = JSON.parse(f.regels || "[]").filter((r: FactuurRegel) => r.omschrijving && Number(r.prijs) > 0); } catch { /* */ }
@@ -883,6 +883,14 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
   const autoOmschrijving = [f.auto_merk, f.auto_model, f.auto_bouwjaar].filter(Boolean).join(" ") || "Voertuig";
   const autoKenteken = f.auto_kenteken ? ` &middot; ${f.auto_kenteken.toUpperCase()}` : "";
   const autoVin = f.auto_vin ? `<br><span style="font-size:8pt;color:#94a3b8">VIN: ${f.auto_vin.toUpperCase()}</span>` : "";
+
+  const betaald = opts.betaald === true;
+  const margeNote = f.btw_type === "marge"
+    ? `<br><span style="font-size:8pt;color:#94a3b8">Op dit voertuig is de margeregeling van toepassing. BTW is niet afzonderlijk vermeld (art. 28b t/m 28h Wet OB 1968).</span>`
+    : "";
+  const betaaldBadge = betaald
+    ? `<div style="display:inline-block;margin-top:10px;padding:5px 13px;background:#dcfce7;border:1px solid #15803d;font-size:8.5pt;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#15803d">&#10003; Betaald</div>`
+    : "";
 
   const regelRijen = [
     `<tr>
@@ -937,6 +945,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
       <td style="text-align:right;vertical-align:top;width:45%">
         <div style="font-size:28pt;font-weight:300;letter-spacing:8px;color:#001337;line-height:1;text-transform:uppercase">Factuur</div>
         <div style="font-size:10pt;color:#94a3b8;margin-top:6px;letter-spacing:.5px">#${f.factuur_nr}</div>
+        ${betaaldBadge}
       </td>
     </tr>
   </table>
@@ -1010,10 +1019,11 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string): string {
 
   <!-- Betaaltekst -->
   <div style="font-size:9pt;color:#475569;line-height:1.85;border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:12px">
-    Wij vragen u vriendelijk het bedrag van €${eindtotaal.toLocaleString("nl-NL")} ${f.vervaldatum ? `voor ${f.vervaldatum}` : "binnen 30 dagen na ontvangst"} over te maken
+    ${betaald
+      ? `Deze factuur is volledig voldaan. Hartelijk dank voor uw betaling en het vertrouwen in JG Mobility &mdash; wij wensen u heel veel rijplezier!${margeNote}`
+      : `Wij vragen u vriendelijk het bedrag van €${eindtotaal.toLocaleString("nl-NL")} ${f.vervaldatum ? `voor ${f.vervaldatum}` : "binnen 30 dagen na ontvangst"} over te maken
     ${f.betaalwijze === "bank" ? "op rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "te voldoen per contant"}.
-    <br>Factuur uitgereikt door JG MOBILITY.
-    ${f.btw_type === "marge" ? `<br><span style="font-size:8pt;color:#94a3b8">Op dit voertuig is de margeregeling van toepassing. BTW is niet afzonderlijk vermeld (art. 28b t/m 28h Wet OB 1968).</span>` : ""}
+    <br>Factuur uitgereikt door JG MOBILITY.${margeNote}`}
   </div>
 
   ${f.notitie ? `<div style="font-size:9pt;color:#475569;font-style:italic;margin-bottom:16px;padding:10px 14px;background:#f8fafc;border-left:3px solid #cbd5e1">${f.notitie}</div>` : ""}
@@ -1044,6 +1054,7 @@ function FacturenContent() {
   const [rdwStatus, setRdwStatus] = useState<"idle" | "gevonden" | "niet_gevonden">("idle");
   const [periode, setPeriode] = useState<"alles" | "week" | "maand" | "kwartaal" | "jaar">("alles");
   const [mailStatus, setMailStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
+  const [bedankStatus, setBedankStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -1170,21 +1181,52 @@ function FacturenContent() {
     if (openId === id) setOpenId(null);
   };
 
-  const printFactuur = async (f: Factuur) => {
-    let logoSrc = "";
+  const haalLogoSrc = async (): Promise<string> => {
     try {
       const res = await fetch(encodeURI("/JG Mobility.png"));
-      if (res.ok) {
-        const blob = await res.blob();
-        logoSrc = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => resolve("");
-          reader.readAsDataURL(blob);
-        });
-      }
-    } catch { /* logo niet beschikbaar */ }
+      if (!res.ok) return "";
+      const blob = await res.blob();
+      return await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve("");
+        reader.readAsDataURL(blob);
+      });
+    } catch { return ""; }
+  };
 
+  // Rendert factuur-HTML naar een base64 PDF via html2pdf.js (client-side)
+  const factuurNaarPdfBase64 = async (html: string, filename: string): Promise<string> => {
+    const html2pdf = (await import("html2pdf.js")).default;
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;visibility:hidden;";
+    document.body.appendChild(iframe);
+    return await new Promise<string>((resolve, reject) => {
+      iframe.onload = async () => {
+        try {
+          const body = iframe.contentDocument?.body;
+          if (!body) { reject(new Error("Render mislukt")); return; }
+          const dataUri = await html2pdf().set({
+            margin: 0,
+            filename,
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          }).from(body).output("datauristring");
+          document.body.removeChild(iframe);
+          resolve((dataUri as string).split(",")[1]);
+        } catch (err) {
+          if (document.body.contains(iframe)) document.body.removeChild(iframe);
+          reject(err);
+        }
+      };
+      const doc = iframe.contentDocument;
+      if (doc) { doc.open(); doc.write(html); doc.close(); }
+    });
+  };
+
+  const printFactuur = async (f: Factuur) => {
+    const logoSrc = await haalLogoSrc();
     const html = genereerFactuurHTML(f, logoSrc);
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;";
@@ -1210,54 +1252,10 @@ function FacturenContent() {
     }
     setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
-      // Logo ophalen
-      let logoSrc = "";
-      try {
-        const r = await fetch(encodeURI("/JG Mobility.png"));
-        if (r.ok) {
-          const blob = await r.blob();
-          logoSrc = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(blob);
-          });
-        }
-      } catch { /* logo niet beschikbaar */ }
-
-      // Factuur HTML genereren
+      const logoSrc = await haalLogoSrc();
       const html = genereerFactuurHTML(f, logoSrc);
+      const pdfBase64 = await factuurNaarPdfBase64(html, `Factuur-${f.factuur_nr}.pdf`);
 
-      // PDF genereren via html2pdf.js (client-side)
-      const html2pdf = (await import("html2pdf.js")).default;
-      const iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;visibility:hidden;";
-      document.body.appendChild(iframe);
-
-      const pdfBase64 = await new Promise<string>((resolve, reject) => {
-        iframe.onload = async () => {
-          try {
-            const body = iframe.contentDocument?.body;
-            if (!body) { reject(new Error("Render mislukt")); return; }
-            const dataUri = await html2pdf().set({
-              margin: 0,
-              filename: `Factuur-${f.factuur_nr}.pdf`,
-              image: { type: "jpeg", quality: 0.98 },
-              html2canvas: { scale: 2, useCORS: true, logging: false },
-              jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-            }).from(body).output("datauristring");
-            document.body.removeChild(iframe);
-            resolve((dataUri as string).split(",")[1]);
-          } catch (err) {
-            if (document.body.contains(iframe)) document.body.removeChild(iframe);
-            reject(err);
-          }
-        };
-        const doc = iframe.contentDocument;
-        if (doc) { doc.open(); doc.write(html); doc.close(); }
-      });
-
-      // Versturen via server (Resend)
       const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1276,6 +1274,39 @@ function FacturenContent() {
       setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
       alert(`Versturen mislukt: ${String(err)}`);
       setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+    }
+  };
+
+  // Bedankmail: stuurt de factuur met "Betaald"-stempel als blijvend bewijs voor de klant
+  const verstuurBedankmail = async (f: Factuur) => {
+    if (!f.klant_email) {
+      alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
+      return;
+    }
+    setBedankStatus((prev) => ({ ...prev, [f.id]: "laden" }));
+    try {
+      const logoSrc = await haalLogoSrc();
+      const html = genereerFactuurHTML(f, logoSrc, { betaald: true });
+      const pdfBase64 = await factuurNaarPdfBase64(html, `Factuur-${f.factuur_nr}-betaald.pdf`);
+
+      const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfBase64, type: "bedankt" }),
+      });
+
+      if (res.ok) {
+        setBedankStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+        await updateStatus(f.id, "betaald");
+        setTimeout(() => setBedankStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Onbekende fout");
+      }
+    } catch (err) {
+      setBedankStatus((prev) => ({ ...prev, [f.id]: "fout" }));
+      alert(`Versturen mislukt: ${String(err)}`);
+      setTimeout(() => setBedankStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
     }
   };
 
@@ -1941,6 +1972,14 @@ function FacturenContent() {
                               style={{ backgroundColor: mailStatus[f.id] === "ok" ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
                               {mailStatus[f.id] === "laden" ? "PDF maken..." : mailStatus[f.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
+                            </button>
+                            <button
+                              onClick={() => verstuurBedankmail(f)}
+                              disabled={bedankStatus[f.id] === "laden"}
+                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
+                              style={{ backgroundColor: bedankStatus[f.id] === "ok" ? "#065f46" : "#047857", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                            >
+                              {bedankStatus[f.id] === "laden" ? "PDF maken..." : bedankStatus[f.id] === "ok" ? "✓ Verzonden" : "Bedankmail + factuur"}
                             </button>
                             <button
                               onClick={() => startBewerken(f)}
