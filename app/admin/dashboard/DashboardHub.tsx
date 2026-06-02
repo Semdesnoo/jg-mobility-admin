@@ -963,7 +963,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   </table>
 
   <!-- KVK/BTW/IBAN + datum links | Klant rechts -->
-  <table style="width:100%;margin-bottom:32px;padding-bottom:56px;border-bottom:1.5px solid #001337">
+  <table style="width:100%">
     <tr>
       <td style="vertical-align:top;width:50%">
         <table style="font-size:9pt">
@@ -995,6 +995,9 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
       </td>
     </tr>
   </table>
+
+  <!-- Scheidingslijn: ruim onder de klantgegevens (telefoonnummer), net boven de kolomtitels -->
+  <div style="border-bottom:1.5px solid #001337;margin-top:40px;margin-bottom:36px"></div>
 
   <!-- Regelstabel -->
   <table style="width:100%;margin-bottom:4px">
