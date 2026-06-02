@@ -31,11 +31,21 @@ export default function AdminLogin() {
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4"
-      style={{ backgroundColor: "#001337" }}
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "0 1rem",
+        backgroundColor: "#001337",
+      }}
     >
       <div
         className="w-full max-w-sm p-10"
         style={{
+          width: "100%",
+          maxWidth: "380px",
+          padding: "2.5rem",
           backgroundColor: "rgba(255,255,255,0.04)",
           border: "1px solid rgba(255,255,255,0.08)",
         }}
