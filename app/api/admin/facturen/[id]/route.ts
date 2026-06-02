@@ -38,7 +38,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   await sql`
     UPDATE facturen SET
       status = COALESCE(${body.status ?? null}, status),
-      notitie = COALESCE(${body.notitie ?? null}, notitie)
+      notitie = COALESCE(${body.notitie ?? null}, notitie),
+      factuur_nr = COALESCE(${body.factuur_nr ?? null}, factuur_nr)
     WHERE id = ${id}
   `;
   return Response.json({ ok: true });

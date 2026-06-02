@@ -17,9 +17,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const jaar = new Date().getFullYear();
-    const rows = await sql`SELECT COUNT(*) as count FROM facturen WHERE factuur_nr LIKE ${"JGM-" + jaar + "-%"}`;
-    const nr = String(Number(rows[0].count) + 1).padStart(3, "0");
-    const factuur_nr = `JGM-${jaar}-${nr}`;
+    // Doorlopende nummering via een teller die nooit terugloopt — ook niet als een
+    // eerdere factuur is verwijderd. (COUNT(*) gaf dubbele nummers na verwijderen.)
+    // De teller wordt geseed vanaf het hoogste bestaande nummer en atomair opgehoogd.
+    const prefix = `JGM-${jaar}-`;
+    const maxRows = await sql`
+      SELECT COALESCE(MAX(CAST(SPLIT_PART(factuur_nr, '-', 3) AS INTEGER)), 0) AS max_nr
+      FROM facturen WHERE factuur_nr LIKE ${prefix + "%"}
+    `;
+    const maxBestaand = Number(maxRows[0].max_nr) || 0;
+    const tellerKey = `factuur_teller_${jaar}`;
+    const bumped = await sql`
+      INSERT INTO settings (key, value) VALUES (${tellerKey}, ${String(maxBestaand + 1)})
+      ON CONFLICT (key) DO UPDATE SET value = (GREATEST(CAST(settings.value AS INTEGER), ${maxBestaand}) + 1)::TEXT
+      RETURNING value
+    `;
+    const nr = String(Number(bumped[0].value)).padStart(3, "0");
+    const factuur_nr = `${prefix}${nr}`;
 
     const id = `fac_${Date.now()}`;
     const datum = body.datum || new Date().toLocaleDateString("nl-NL");
