@@ -834,12 +834,24 @@ type Factuur = {
   notitie: string;
   status: string;
   regels: string;
+  factuurmail_verstuurd_op?: string;
+  bedankmail_verstuurd_op?: string;
 };
 
 const FACTUUR_STATUS: Record<string, { label: string; color: string; bg: string }> = {
   concept:   { label: "Concept",   color: "#92400e", bg: "#fef3c7" },
   verzonden: { label: "Verzonden", color: "#1d4ed8", bg: "#dbeafe" },
   betaald:   { label: "Betaald",   color: "#15803d", bg: "#dcfce7" },
+};
+
+// Toont een opgeslagen ISO-verzendmoment als "2 juni 2026, 14:30" (leeg = nog niet verstuurd)
+const formatVerstuurd = (val?: string): string => {
+  if (!val) return "";
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("nl-NL", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
 };
 
 type FactuurForm = {
@@ -1174,6 +1186,16 @@ function FacturenContent() {
     setFacturen((prev) => prev.map((f) => (f.id === id ? { ...f, status } : f)));
   };
 
+  // Zet het verzendmoment direct in beeld (lijst + "nieuwste factuur"-banner) zonder refresh
+  const markVerstuurd = (
+    id: string,
+    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
+    iso: string,
+  ) => {
+    setFacturen((prev) => prev.map((f) => (f.id === id ? { ...f, [veld]: iso } : f)));
+    setNieuwsteFactuur((prev) => (prev && prev.id === id ? { ...prev, [veld]: iso } : prev));
+  };
+
   const verwijder = async (id: string) => {
     if (!confirm("Factuur definitief verwijderen?")) return;
     await fetch(`/api/admin/facturen/${id}`, { method: "DELETE" });
@@ -1250,6 +1272,10 @@ function FacturenContent() {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
+    if (f.factuurmail_verstuurd_op && !confirm(
+      `Deze factuurmail is al verstuurd op ${formatVerstuurd(f.factuurmail_verstuurd_op)}.\n\n` +
+      `Weet je zeker dat je hem nóg een keer wilt versturen?`
+    )) return;
     setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
@@ -1263,7 +1289,9 @@ function FacturenContent() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setMailStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+        markVerstuurd(f.id, "factuurmail_verstuurd_op", data.verstuurd_op ?? new Date().toISOString());
         await updateStatus(f.id, "verzonden");
         setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
       } else {
@@ -1283,6 +1311,10 @@ function FacturenContent() {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
+    if (f.bedankmail_verstuurd_op && !confirm(
+      `Deze bedankmail is al verstuurd op ${formatVerstuurd(f.bedankmail_verstuurd_op)}.\n\n` +
+      `Weet je zeker dat je hem nóg een keer wilt versturen?`
+    )) return;
     setBedankStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
@@ -1296,7 +1328,9 @@ function FacturenContent() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setBedankStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+        markVerstuurd(f.id, "bedankmail_verstuurd_op", data.verstuurd_op ?? new Date().toISOString());
         await updateStatus(f.id, "betaald");
         setTimeout(() => setBedankStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
       } else {
@@ -1803,9 +1837,9 @@ function FacturenContent() {
                 onClick={() => verstuurMail(nieuwsteFactuur)}
                 disabled={mailStatus[nieuwsteFactuur.id] === "laden"}
                 className="px-4 py-2 text-xs font-semibold disabled:opacity-60"
-                style={{ backgroundColor: mailStatus[nieuwsteFactuur.id] === "ok" ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                style={{ backgroundColor: (mailStatus[nieuwsteFactuur.id] === "ok" || nieuwsteFactuur.factuurmail_verstuurd_op) ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
               >
-                {mailStatus[nieuwsteFactuur.id] === "laden" ? "PDF maken..." : mailStatus[nieuwsteFactuur.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
+                {mailStatus[nieuwsteFactuur.id] === "laden" ? "PDF maken..." : (mailStatus[nieuwsteFactuur.id] === "ok" || nieuwsteFactuur.factuurmail_verstuurd_op) ? "✓ Verstuurd" : "Verstuur per mail"}
               </button>
               <button
                 onClick={() => setNieuwsteFactuur(null)}
@@ -1969,17 +2003,17 @@ function FacturenContent() {
                               onClick={() => verstuurMail(f)}
                               disabled={mailStatus[f.id] === "laden"}
                               className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
-                              style={{ backgroundColor: mailStatus[f.id] === "ok" ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              style={{ backgroundColor: (mailStatus[f.id] === "ok" || f.factuurmail_verstuurd_op) ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
-                              {mailStatus[f.id] === "laden" ? "PDF maken..." : mailStatus[f.id] === "ok" ? "✓ Verzonden" : "Verstuur per mail"}
+                              {mailStatus[f.id] === "laden" ? "PDF maken..." : (mailStatus[f.id] === "ok" || f.factuurmail_verstuurd_op) ? "✓ Verstuurd" : "Verstuur per mail"}
                             </button>
                             <button
                               onClick={() => verstuurBedankmail(f)}
                               disabled={bedankStatus[f.id] === "laden"}
                               className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
-                              style={{ backgroundColor: bedankStatus[f.id] === "ok" ? "#065f46" : "#047857", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              style={{ backgroundColor: (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "#065f46" : "#047857", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
-                              {bedankStatus[f.id] === "laden" ? "PDF maken..." : bedankStatus[f.id] === "ok" ? "✓ Verzonden" : "Bedankmail + factuur"}
+                              {bedankStatus[f.id] === "laden" ? "PDF maken..." : (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "✓ Verstuurd" : "Bedankmail + factuur"}
                             </button>
                             <button
                               onClick={() => startBewerken(f)}
@@ -1996,6 +2030,20 @@ function FacturenContent() {
                               Verwijder
                             </button>
                           </div>
+                          {(f.factuurmail_verstuurd_op || f.bedankmail_verstuurd_op) && (
+                            <div className="mt-3 flex flex-col gap-1">
+                              {f.factuurmail_verstuurd_op && (
+                                <p className="text-[11px] font-medium" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
+                                  ✓ Factuurmail verstuurd op {formatVerstuurd(f.factuurmail_verstuurd_op)}
+                                </p>
+                              )}
+                              {f.bedankmail_verstuurd_op && (
+                                <p className="text-[11px] font-medium" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
+                                  ✓ Bedankmail verstuurd op {formatVerstuurd(f.bedankmail_verstuurd_op)}
+                                </p>
+                              )}
+                            </div>
+                          )}
                           {f.notitie && (
                             <div className="mt-4 p-3 text-xs" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: "1px solid rgba(0,19,55,0.07)", color: "rgba(0,19,55,0.65)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
                               {f.notitie}

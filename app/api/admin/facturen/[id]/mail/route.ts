@@ -99,7 +99,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         content: pdfBase64,
       }],
     });
-    return Response.json({ ok: true });
+
+    // Leg het verzendmoment vast als blijvend bewijs. .catch() zodat een ontbrekende
+    // kolom (migratie nog niet gedraaid) nooit een al-verstuurde mail als fout rapporteert.
+    const verstuurdOp = new Date().toISOString();
+    if (isBedankt) {
+      await sql`UPDATE facturen SET bedankmail_verstuurd_op = ${verstuurdOp} WHERE id = ${id}`.catch(() => null);
+    } else {
+      await sql`UPDATE facturen SET factuurmail_verstuurd_op = ${verstuurdOp} WHERE id = ${id}`.catch(() => null);
+    }
+
+    return Response.json({ ok: true, verstuurd_op: verstuurdOp });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });
   }
