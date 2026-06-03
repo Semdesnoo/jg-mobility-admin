@@ -100,6 +100,40 @@ function extractLaatsteJson(text: string): string | null {
   return null;
 }
 
+// Eén generatie-poging. useWebSearch=true gebruikt Anthropic's server-side web_search
+// (handelt 'pause_turn' af); false valt terug op puur modelkennis (zonder tools).
+async function genereerMetClaude(
+  client: Anthropic,
+  userPrompt: string,
+  useWebSearch: boolean
+): Promise<{ laatsteTekst: string; stopReason: string | null }> {
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
+  let laatsteTekst = "";
+  let stopReason: string | null = null;
+  for (let i = 0; i < 6; i++) {
+    const resp = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8000,
+      system: SYSTEM_PROMPT,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(useWebSearch ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 } as any] } : {}),
+      messages,
+    });
+    stopReason = resp.stop_reason ?? null;
+    const rondeTekst = resp.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    if (rondeTekst) laatsteTekst = rondeTekst;
+    if (resp.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: resp.content });
+      continue;
+    }
+    break;
+  }
+  return { laatsteTekst, stopReason };
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
@@ -124,44 +158,24 @@ ${autoInfo}
 
 Geef daarna de versie, transmissie, omschrijving en volledige optielijst als JSON.`;
 
-    // web_search_20250305 is een SERVER-side tool: Anthropic voert de zoekopdracht(en) zelf
-    // uit binnen de call en levert de resultaten direct aan het model. Geen handmatige
-    // tool-loop nodig. Bij een lange zoekopdracht kan de API 'pause_turn' teruggeven; dan
-    // zetten we de call voort door de assistant-content terug te sturen. We verzamelen alle
-    // text-blocks; het eindantwoord (de JSON) zit aan het eind.
-    const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
-    let laatsteTekst = ""; // alleen de tekst van de LAATSTE ronde (vermijdt proza uit zoekrondes)
-    let stopReason: string | null = null;
-    for (let i = 0; i < 6; i++) {
-      const resp = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 } as any],
-        messages,
-      });
-      stopReason = resp.stop_reason ?? null;
-      const rondeTekst = resp.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("\n");
-      if (rondeTekst) laatsteTekst = rondeTekst;
-      if (resp.stop_reason === "pause_turn") {
-        messages.push({ role: "assistant", content: resp.content });
-        continue;
-      }
-      break;
+    // Probeer eerst met internet-zoekopdracht (actuele, exacte uitrusting). Is web search
+    // niet beschikbaar op het account of faalt het, dan terugval op puur modelkennis zodat
+    // de AI tóch uitvoering + omschrijving + opties invult.
+    let res: { laatsteTekst: string; stopReason: string | null };
+    try {
+      res = await genereerMetClaude(client, userPrompt, true);
+    } catch {
+      res = await genereerMetClaude(client, userPrompt, false);
     }
 
-    if (stopReason === "max_tokens") {
+    if (res.stopReason === "max_tokens") {
       return Response.json(
         { error: "AI-antwoord werd afgekapt (te lang). Probeer opnieuw of vul handmatig in." },
         { status: 500 }
       );
     }
 
-    const jsonText = extractLaatsteJson(laatsteTekst);
+    const jsonText = extractLaatsteJson(res.laatsteTekst);
     if (!jsonText) {
       return Response.json({ error: "AI gaf geen geldig JSON terug" }, { status: 500 });
     }
