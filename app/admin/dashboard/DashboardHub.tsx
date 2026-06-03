@@ -896,8 +896,13 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   const autoKenteken = f.auto_kenteken ? ` &middot; ${f.auto_kenteken.toUpperCase()}` : "";
   const autoVin = f.auto_vin ? `<br><span style="font-size:8pt;color:#94a3b8">VIN: ${f.auto_vin.toUpperCase()}</span>` : "";
 
+  // Geen voertuigvelden ingevuld én geen verkoopprijs → factuur zonder voertuig (bv. een dienst)
+  const heeftVoertuig = Boolean(
+    f.auto_merk || f.auto_model || f.auto_bouwjaar || f.auto_kenteken || f.auto_vin
+  ) || autoBasePrijs > 0;
+
   const betaald = opts.betaald === true;
-  const margeNote = f.btw_type === "marge"
+  const margeNote = f.btw_type === "marge" && heeftVoertuig
     ? `<br><span style="font-size:8pt;color:#94a3b8">Op dit voertuig is de margeregeling van toepassing. BTW is niet afzonderlijk vermeld (art. 28b t/m 28h Wet OB 1968).</span>`
     : "";
   const betaaldBadge = betaald
@@ -905,19 +910,21 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
     : "";
 
   const regelRijen = [
-    `<tr>
+    heeftVoertuig
+      ? `<tr>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;color:#1e293b;font-size:10pt">${autoOmschrijving}${autoKenteken}${autoVin}</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${subtotaalExAuto.toLocaleString("nl-NL")}</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt;width:60px">1</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${subtotaalExAuto.toLocaleString("nl-NL")}</td>
-    </tr>`,
+    </tr>`
+      : "",
     ...extraRegels.map((r) => `<tr>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;color:#1e293b;font-size:10pt">${r.omschrijving}</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${Number(r.prijs).toLocaleString("nl-NL")}</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">1</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${Number(r.prijs).toLocaleString("nl-NL")}</td>
     </tr>`),
-  ].join("");
+  ].filter(Boolean).join("");
 
   return `<!DOCTYPE html>
 <html lang="nl">
