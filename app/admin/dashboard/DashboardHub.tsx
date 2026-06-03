@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import Link from "next/link";
 import {
   LayoutDashboard,
@@ -61,20 +61,46 @@ type Dossier = {
 
 type IconProps = { size?: number; style?: React.CSSProperties; className?: string };
 
-const NAV: { id: Tab; label: string; icon: React.ComponentType<IconProps> }[] = [
-  { id: "dashboard",   label: "Dashboard",       icon: LayoutDashboard },
-  { id: "facturen",    label: "Facturen",         icon: FileText },
-  { id: "voorraad",    label: "Auto Voorraad",    icon: Car },
-  { id: "social",      label: "Social Media",     icon: Share2 },
-  { id: "email",       label: "Email",            icon: Mail },
-  { id: "leads",       label: "Leads",            icon: Target },
-  { id: "inkoop",      label: "Inkoop & Taxatie", icon: TrendingDown },
-  { id: "cosignatie",  label: "Cosignatie",       icon: Handshake },
-  { id: "calculator",  label: "Calculator",       icon: Calculator },
-  { id: "klanten",     label: "Klanten",          icon: Users },
-  { id: "afspraken",   label: "Afspraken",        icon: Calendar },
-  { id: "statistieken",label: "Statistieken",     icon: BarChart2 },
+type NavItem = { id: Tab; label: string; icon: React.ComponentType<IconProps> };
+
+// Menu gegroepeerd onder kopjes (zoals een dashboard met secties).
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Dashboard",
+    items: [
+      { id: "dashboard",    label: "Dashboard",       icon: LayoutDashboard },
+      { id: "statistieken", label: "Statistieken",    icon: BarChart2 },
+    ],
+  },
+  {
+    title: "Auto",
+    items: [
+      { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
+      { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
+      { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
+      { id: "calculator", label: "Calculator",       icon: Calculator },
+      { id: "leads",      label: "Leads",            icon: Target },
+      { id: "afspraken",  label: "Afspraken",        icon: Calendar },
+    ],
+  },
+  {
+    title: "Boekhouding",
+    items: [
+      { id: "facturen", label: "Facturen", icon: FileText },
+      { id: "klanten",  label: "Klanten",  icon: Users },
+    ],
+  },
+  {
+    title: "Socials",
+    items: [
+      { id: "social", label: "Social Media", icon: Share2 },
+      { id: "email",  label: "Email",        icon: Mail },
+    ],
+  },
 ];
+
+// Platte lijst voor lookups (bv. de paginatitel bij de actieve tab).
+const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 function PageHeader({
   title,
@@ -256,22 +282,32 @@ export default function DashboardHub() {
         </div>
 
         {/* Navigatie */}
-        <nav className="flex-1 py-4 overflow-y-auto">
-          {NAV.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className="w-full flex items-center gap-3 px-5 py-3.5 text-sm text-left transition-all"
-              style={{
-                fontFamily: "var(--font-inter)",
-                color: tab === id ? "#ffffff" : "rgba(255,255,255,0.42)",
-                backgroundColor: tab === id ? "rgba(255,255,255,0.09)" : "transparent",
-                borderLeft: `2px solid ${tab === id ? "#ffffff" : "transparent"}`,
-              }}
-            >
-              <Icon size={15} />
-              {label}
-            </button>
+        <nav className="flex-1 py-3 overflow-y-auto">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title} className="mb-1.5">
+              <p
+                className="px-5 pt-3 pb-1 text-[9px] font-semibold tracking-widest uppercase"
+                style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-inter)" }}
+              >
+                {group.title}
+              </p>
+              {group.items.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setTab(id)}
+                  className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-left transition-all"
+                  style={{
+                    fontFamily: "var(--font-inter)",
+                    color: tab === id ? "#ffffff" : "rgba(255,255,255,0.42)",
+                    backgroundColor: tab === id ? "rgba(255,255,255,0.09)" : "transparent",
+                    borderLeft: `2px solid ${tab === id ? "#ffffff" : "transparent"}`,
+                  }}
+                >
+                  <Icon size={15} />
+                  {label}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -397,25 +433,32 @@ export default function DashboardHub() {
             </div>
           </div>
 
-          {/* Nav kaarten — 3 kolommen, past altijd op scherm */}
-          <div className="flex-1 px-3 pt-3 pb-3 grid grid-cols-3 gap-2 content-start overflow-hidden">
-            {NAV.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => { setTab(id); setMobileHub(false); }}
-                className="flex flex-col items-center justify-center py-3 px-1 text-center transition-all active:scale-95"
-                style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-              >
-                <div
-                  className="flex items-center justify-center mb-1.5"
-                  style={{ width: "32px", height: "32px", backgroundColor: "rgba(0,19,55,0.05)" }}
-                >
-                  <Icon size={15} style={{ color: "#001337" }} />
-                </div>
-                <p className="text-[11px] font-bold leading-tight" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                  {label}
+          {/* Nav kaarten — gegroepeerd onder kopjes */}
+          <div className="flex-1 px-3 pt-3 pb-3 grid grid-cols-3 gap-2 content-start overflow-y-auto">
+            {NAV_GROUPS.map((group) => (
+              <Fragment key={group.title}>
+                <p className="col-span-3 text-[10px] font-bold uppercase tracking-wider mt-1 mb-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                  {group.title}
                 </p>
-              </button>
+                {group.items.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => { setTab(id); setMobileHub(false); }}
+                    className="flex flex-col items-center justify-center py-3 px-1 text-center transition-all active:scale-95"
+                    style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
+                  >
+                    <div
+                      className="flex items-center justify-center mb-1.5"
+                      style={{ width: "32px", height: "32px", backgroundColor: "rgba(0,19,55,0.05)" }}
+                    >
+                      <Icon size={15} style={{ color: "#001337" }} />
+                    </div>
+                    <p className="text-[11px] font-bold leading-tight" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                      {label}
+                    </p>
+                  </button>
+                ))}
+              </Fragment>
             ))}
           </div>
         </div>
