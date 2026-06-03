@@ -886,11 +886,18 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   let extraRegels: FactuurRegel[] = [];
   try { extraRegels = JSON.parse(f.regels || "[]").filter((r: FactuurRegel) => r.omschrijving && Number(r.prijs) > 0); } catch { /* */ }
 
-  const extraTotaal = extraRegels.reduce((s, r) => s + Number(r.prijs), 0);
-  const subtotaalExAuto = f.btw_type === "21" ? Math.round(autoBasePrijs / 1.21) : autoBasePrijs;
-  const subtotaal = subtotaalExAuto + extraTotaal;
-  const btwBedrag = f.btw_type === "21" ? autoBasePrijs - subtotaalExAuto : 0;
-  const eindtotaal = subtotaal + btwBedrag;
+  const is21 = f.btw_type === "21";
+  // Ingevoerde prijzen zijn incl. BTW. In de regeltabel staat het bedrag ex. BTW;
+  // bij 21% reken je dat terug (prijs / 1,21), bij marge blijft het gelijk.
+  const exBtw = (incl: number): number => (is21 ? Math.round((incl / 1.21) * 100) / 100 : incl);
+  const fmtBedrag = (n: number): string =>
+    n.toLocaleString("nl-NL", is21 ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+
+  const subtotaalExAuto = exBtw(autoBasePrijs);
+  const brutoTotaal = autoBasePrijs + extraRegels.reduce((s, r) => s + Number(r.prijs), 0);
+  const subtotaal = subtotaalExAuto + extraRegels.reduce((s, r) => s + exBtw(Number(r.prijs)), 0);
+  const btwBedrag = is21 ? Math.round((brutoTotaal - subtotaal) * 100) / 100 : 0;
+  const eindtotaal = brutoTotaal;
 
   const autoOmschrijving = [f.auto_merk, f.auto_model, f.auto_bouwjaar].filter(Boolean).join(" ") || "Voertuig";
   const autoKenteken = f.auto_kenteken ? ` &middot; ${f.auto_kenteken.toUpperCase()}` : "";
@@ -913,17 +920,20 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
     heeftVoertuig
       ? `<tr>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;color:#1e293b;font-size:10pt">${autoOmschrijving}${autoKenteken}${autoVin}</td>
-      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${subtotaalExAuto.toLocaleString("nl-NL")}</td>
+      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${fmtBedrag(subtotaalExAuto)}</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt;width:60px">1</td>
-      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${subtotaalExAuto.toLocaleString("nl-NL")}</td>
+      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${fmtBedrag(subtotaalExAuto)}</td>
     </tr>`
       : "",
-    ...extraRegels.map((r) => `<tr>
+    ...extraRegels.map((r) => {
+      const regelEx = fmtBedrag(exBtw(Number(r.prijs)));
+      return `<tr>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;color:#1e293b;font-size:10pt">${r.omschrijving}</td>
-      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${Number(r.prijs).toLocaleString("nl-NL")}</td>
+      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${regelEx}</td>
       <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">1</td>
-      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${Number(r.prijs).toLocaleString("nl-NL")}</td>
-    </tr>`),
+      <td style="padding:11px 0;border-bottom:1px solid #e8eaf0;text-align:center;color:#1e293b;font-size:10pt">€&nbsp;${regelEx}</td>
+    </tr>`;
+    }),
   ].filter(Boolean).join("");
 
   return `<!DOCTYPE html>
@@ -1025,17 +1035,17 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   <table style="width:270px;margin-left:auto;margin-bottom:30px;margin-top:10px">
     <tr>
       <td style="font-size:9.5pt;color:#64748b;padding:4px 0">Subtotaal</td>
-      <td style="font-size:9.5pt;color:#64748b;text-align:right;padding:4px 0">€&nbsp;${subtotaal.toLocaleString("nl-NL")}</td>
+      <td style="font-size:9.5pt;color:#64748b;text-align:right;padding:4px 0">€&nbsp;${fmtBedrag(subtotaal)}</td>
     </tr>
     ${f.btw_type === "21"
       ? `<tr>
           <td style="font-size:9.5pt;color:#1d4ed8;padding:4px 0;border-bottom:1px solid #e2e8f0">BTW (21%)</td>
-          <td style="font-size:9.5pt;color:#1d4ed8;text-align:right;padding:4px 0;border-bottom:1px solid #e2e8f0">€&nbsp;${btwBedrag.toLocaleString("nl-NL")}</td>
+          <td style="font-size:9.5pt;color:#1d4ed8;text-align:right;padding:4px 0;border-bottom:1px solid #e2e8f0">€&nbsp;${fmtBedrag(btwBedrag)}</td>
         </tr>`
       : `<tr><td colspan="2" style="border-bottom:1px solid #e2e8f0;padding:3px 0"></td></tr>`}
     <tr>
       <td style="font-size:12pt;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#001337;padding:9px 0 0">Eindtotaal</td>
-      <td style="font-size:12pt;font-weight:700;color:#001337;text-align:right;padding:9px 0 0">€&nbsp;${eindtotaal.toLocaleString("nl-NL")}</td>
+      <td style="font-size:12pt;font-weight:700;color:#001337;text-align:right;padding:9px 0 0">€&nbsp;${fmtBedrag(eindtotaal)}</td>
     </tr>
   </table>
 
@@ -1043,7 +1053,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   <div style="font-size:9pt;color:#475569;line-height:1.85;border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:12px">
     ${betaald
       ? `Deze factuur is volledig voldaan. Hartelijk dank voor uw betaling en het vertrouwen in JG Mobility &mdash; wij wensen u heel veel rijplezier!${margeNote}`
-      : `Wij vragen u vriendelijk het bedrag van €${eindtotaal.toLocaleString("nl-NL")} ${f.vervaldatum ? `voor ${f.vervaldatum}` : "binnen 30 dagen na ontvangst"} over te maken
+      : `Wij vragen u vriendelijk het bedrag van €${fmtBedrag(eindtotaal)} ${f.vervaldatum ? `voor ${f.vervaldatum}` : "binnen 30 dagen na ontvangst"} over te maken
     ${f.betaalwijze === "bank" ? "op rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "te voldoen per contant"}.
     <br>Factuur uitgereikt door JG MOBILITY.${margeNote}`}
   </div>
@@ -1386,13 +1396,15 @@ function FacturenContent() {
   };
 
   const berekenTotalen = (f: Factuur) => {
-    let subtotaal = Number(f.verkoopprijs) || 0;
+    let bruto = Number(f.verkoopprijs) || 0;
     try {
       const regels = JSON.parse(f.regels || "[]");
-      subtotaal += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
+      bruto += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
     } catch { /* */ }
-    const btw = f.btw_type === "21" ? Math.round(subtotaal * 21) / 100 : 0;
-    return { subtotaal, btw, eindtotaal: subtotaal + btw };
+    // Prijzen zijn incl. BTW. Bij 21% reken je het ex-BTW bedrag en de BTW terug uit het bruto.
+    const subtotaal = f.btw_type === "21" ? Math.round((bruto / 1.21) * 100) / 100 : bruto;
+    const btw = f.btw_type === "21" ? Math.round((bruto - subtotaal) * 100) / 100 : 0;
+    return { subtotaal, btw, eindtotaal: bruto };
   };
 
   const printJaaroverzicht = (jaar: string, lijst: Factuur[]) => {

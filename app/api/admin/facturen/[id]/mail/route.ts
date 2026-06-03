@@ -19,11 +19,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const f = rows[0];
   if (!f.klant_email) return Response.json({ error: "Klant heeft geen e-mailadres" }, { status: 400 });
 
+  // Prijzen zijn incl. BTW → totaal = wat de klant betaalt (geen *1.21 erbovenop).
+  // Dit moet gelijk zijn aan het eindtotaal op de PDF.
   let totaal = Number(f.verkoopprijs) || 0;
   try {
     const regels = JSON.parse(f.regels || "[]");
     totaal += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
-    if (f.btw_type === "21") totaal = Math.round(totaal * 1.21);
   } catch { /* gebruik verkoopprijs */ }
 
   const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar ? `(${f.auto_bouwjaar})` : ""].filter(Boolean).join(" ");
