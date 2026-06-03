@@ -1118,6 +1118,7 @@ function FacturenContent() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"lijst" | "nieuw" | "archief">("lijst");
   const [selectedJaar, setSelectedJaar] = useState<string>("");
+  const [selectie, setSelectie] = useState<Set<string>>(new Set());
   const [form, setForm] = useState<FactuurForm>(LEEG_FORM);
   const [regels, setRegels] = useState<FactuurRegel[]>(LEEG_REGELS);
   const [saving, setSaving] = useState(false);
@@ -1450,6 +1451,38 @@ function FacturenContent() {
     return { subtotaal, btw, eindtotaal: bruto };
   };
 
+  // Exporteert de facturen als CSV (semicolon + komma-decimaal + BOM → opent direct in Excel NL)
+  const exportFacturenCSV = (lijst: Factuur[], jaar: string) => {
+    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const num = (n: number) => n.toFixed(2).replace(".", ",");
+    const kolommen = ["Factuurnummer", "Datum", "Klant", "Voertuig", "Kenteken", "Betaalwijze", "BTW-type", "Bedrag excl. BTW", "BTW-bedrag", "Totaal incl. BTW"];
+    const rijen = lijst.map((f) => {
+      const t = berekenTotalen(f);
+      const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar].filter(Boolean).join(" ");
+      return [
+        esc(f.factuur_nr), esc(f.datum), esc(f.klant_naam || ""), esc(voertuig),
+        esc(f.auto_kenteken ? f.auto_kenteken.toUpperCase() : ""),
+        esc(f.betaalwijze === "bank" ? "Bank" : "Contant"),
+        esc(f.btw_type === "21" ? "21% BTW" : "Marge"),
+        num(t.subtotaal), num(t.btw), num(t.eindtotaal),
+      ].join(";");
+    });
+    const tot = lijst.reduce((a, f) => {
+      const t = berekenTotalen(f);
+      return { omzet: a.omzet + t.subtotaal, btw: a.btw + t.btw, totaal: a.totaal + t.eindtotaal };
+    }, { omzet: 0, btw: 0, totaal: 0 });
+    const totaalRij = [esc(`Totaal ${lijst.length} facturen`), "", "", "", "", "", "", num(tot.omzet), num(tot.btw), num(tot.totaal)].join(";");
+    const csv = "﻿" + [kolommen.map(esc).join(";"), ...rijen, totaalRij].join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `JG-Mobility-facturen-${jaar}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+
   const printJaaroverzicht = (jaar: string, lijst: Factuur[]) => {
     const totalen = lijst.reduce((acc, f) => {
       const t = berekenTotalen(f);
@@ -1738,6 +1771,23 @@ function FacturenContent() {
       return { omzet: acc.omzet + t.subtotaal, btw: acc.btw + t.btw, totaal: acc.totaal + t.eindtotaal };
     }, { omzet: 0, btw: 0, totaal: 0 });
 
+    // Selectie: aangevinkte facturen, anders het hele jaar exporteren
+    const geselecteerd = jaarLijst.filter(f => selectie.has(f.id));
+    const exportLijst = geselecteerd.length ? geselecteerd : jaarLijst;
+    const alleGeselecteerd = jaarLijst.length > 0 && geselecteerd.length === jaarLijst.length;
+    const selectieTotaal = geselecteerd.reduce((s, f) => s + berekenTotalen(f).eindtotaal, 0);
+    const toggleAlle = () => setSelectie(prev => {
+      const n = new Set(prev);
+      if (alleGeselecteerd) jaarLijst.forEach(f => n.delete(f.id));
+      else jaarLijst.forEach(f => n.add(f.id));
+      return n;
+    });
+    const toggleEen = (id: string) => setSelectie(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
     return (
       <div>
         <PageHeader
@@ -1746,11 +1796,20 @@ function FacturenContent() {
           action={
             <div className="flex gap-2">
               <button
-                onClick={() => printJaaroverzicht(actuelJaar, jaarLijst)}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
+                onClick={() => exportFacturenCSV(exportLijst, actuelJaar)}
+                disabled={exportLijst.length === 0}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40"
+                style={{ backgroundColor: "#15803d", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+              >
+                Excel{geselecteerd.length ? ` (${geselecteerd.length})` : ""}
+              </button>
+              <button
+                onClick={() => printJaaroverzicht(actuelJaar, exportLijst)}
+                disabled={exportLijst.length === 0}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40"
                 style={{ border: "1px solid #001337", color: "#001337", fontFamily: "var(--font-inter)" }}
               >
-                Afdrukken / PDF
+                PDF{geselecteerd.length ? ` (${geselecteerd.length})` : ""}
               </button>
               <button
                 onClick={() => setView("lijst")}
@@ -1802,6 +1861,24 @@ function FacturenContent() {
                 ))}
               </div>
 
+              {/* Selectie-balk */}
+              {jaarLijst.length > 0 && (
+                <div className="flex items-center justify-between gap-3 mb-3 px-4 py-2.5" style={{ backgroundColor: geselecteerd.length ? "#f0fdf4" : "#ffffff", border: `1px solid ${geselecteerd.length ? "#86efac" : "rgba(0,19,55,0.07)"}` }}>
+                  <p className="text-xs" style={{ color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-inter)" }}>
+                    {geselecteerd.length ? (
+                      <><strong style={{ color: "#15803d" }}>{geselecteerd.length} geselecteerd</strong> · € {selectieTotaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })} — Excel/PDF exporteert alleen deze.</>
+                    ) : (
+                      "Vink facturen aan om alleen díe te exporteren. Niets aangevinkt = alle facturen van dit jaar."
+                    )}
+                  </p>
+                  {geselecteerd.length > 0 && (
+                    <button onClick={() => setSelectie(new Set())} className="text-xs font-semibold whitespace-nowrap transition-all hover:opacity-70" style={{ color: "#1d4ed8", fontFamily: "var(--font-inter)" }}>
+                      Selectie wissen
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Tabel */}
               {jaarLijst.length === 0 ? (
                 <div className="flex items-center justify-center py-16" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
@@ -1812,6 +1889,9 @@ function FacturenContent() {
                   <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ borderBottom: "1.5px solid #001337" }}>
+                        <th className="px-3 py-3" style={{ width: "34px" }}>
+                          <input type="checkbox" checked={alleGeselecteerd} onChange={toggleAlle} aria-label="Alles selecteren" style={{ width: 15, height: 15, cursor: "pointer", accentColor: "#001337" }} />
+                        </th>
                         {["Factuur nr.", "Datum", "Klant", "Voertuig", "Betaling", "BTW", "Excl. BTW", "BTW", "Totaal"].map(h => (
                           <th key={h} className="px-3 py-3 text-left" style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "#001337", whiteSpace: "nowrap" }}>{h}</th>
                         ))}
@@ -1822,7 +1902,10 @@ function FacturenContent() {
                         const t = berekenTotalen(f);
                         const voertuig = [f.auto_merk, f.auto_model].filter(Boolean).join(" ");
                         return (
-                          <tr key={f.id} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                          <tr key={f.id} style={{ backgroundColor: selectie.has(f.id) ? "#eff6ff" : (i % 2 === 0 ? "#ffffff" : "#f8fafc"), borderBottom: "1px solid #f1f5f9" }}>
+                            <td className="px-3 py-2.5" style={{ width: "34px" }}>
+                              <input type="checkbox" checked={selectie.has(f.id)} onChange={() => toggleEen(f.id)} aria-label={`Selecteer ${f.factuur_nr}`} style={{ width: 15, height: 15, cursor: "pointer", accentColor: "#001337" }} />
+                            </td>
                             <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: "#001337", whiteSpace: "nowrap" }}>{f.factuur_nr}</td>
                             <td className="px-3 py-2.5 text-xs" style={{ color: "#475569", whiteSpace: "nowrap" }}>{f.datum}</td>
                             <td className="px-3 py-2.5 text-xs" style={{ color: "#1e293b" }}>{f.klant_naam || "—"}</td>
@@ -1844,7 +1927,7 @@ function FacturenContent() {
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop: "2px solid #001337", backgroundColor: "#f8fafc" }}>
-                        <td colSpan={6} className="px-3 py-3 text-xs font-bold" style={{ color: "#001337" }}>Totaal {jaarLijst.length} facturen</td>
+                        <td colSpan={7} className="px-3 py-3 text-xs font-bold" style={{ color: "#001337" }}>Totaal {jaarLijst.length} facturen</td>
                         <td className="px-3 py-3 text-xs font-bold text-right" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {totalen.omzet.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
                         <td className="px-3 py-3 text-xs font-bold text-right" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {totalen.btw.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
                         <td className="px-3 py-3 text-sm font-bold text-right" style={{ color: "#001337", whiteSpace: "nowrap" }}>€ {totalen.totaal.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</td>
