@@ -1077,6 +1077,7 @@ function FacturenContent() {
   const [periode, setPeriode] = useState<"alles" | "week" | "maand" | "kwartaal" | "jaar">("alles");
   const [mailStatus, setMailStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   const [bedankStatus, setBedankStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
+  const [downloadStatus, setDownloadStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -1275,6 +1276,36 @@ function FacturenContent() {
         if (document.body.contains(iframe)) document.body.removeChild(iframe);
       }, 2000);
     }, 500);
+  };
+
+  // Slaat de factuur als PDF-bestand op (download), via dezelfde PDF-generatie als de mailbijlage
+  const downloadFactuur = async (f: Factuur) => {
+    setDownloadStatus((prev) => ({ ...prev, [f.id]: "laden" }));
+    try {
+      const logoSrc = await haalLogoSrc();
+      const html = genereerFactuurHTML(f, logoSrc);
+      const filename = `Factuur-${f.factuur_nr}.pdf`;
+      const pdfBase64 = await factuurNaarPdfBase64(html, filename);
+
+      const bytes = atob(pdfBase64);
+      const arr = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+      setDownloadStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+      setTimeout(() => setDownloadStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+    } catch (err) {
+      setDownloadStatus((prev) => ({ ...prev, [f.id]: "fout" }));
+      alert(`Opslaan mislukt: ${String(err)}`);
+      setTimeout(() => setDownloadStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+    }
   };
 
   const verstuurMail = async (f: Factuur) => {
@@ -2008,6 +2039,14 @@ function FacturenContent() {
                               style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
                               Afdrukken / PDF
+                            </button>
+                            <button
+                              onClick={() => downloadFactuur(f)}
+                              disabled={downloadStatus[f.id] === "laden"}
+                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
+                              style={{ backgroundColor: downloadStatus[f.id] === "ok" ? "#15803d" : "#334155", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                            >
+                              {downloadStatus[f.id] === "laden" ? "PDF maken..." : downloadStatus[f.id] === "ok" ? "✓ Opgeslagen" : "Opslaan als PDF"}
                             </button>
                             <button
                               onClick={() => verstuurMail(f)}
