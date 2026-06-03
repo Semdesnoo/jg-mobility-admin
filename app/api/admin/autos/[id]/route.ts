@@ -9,9 +9,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const auto = await getAutoById(Number(id));
   if (!auto) return Response.json({ error: "Auto niet gevonden" }, { status: 404 });
 
-  if (typeof body.prijs === "number" && body.prijs > 0) {
+  // Prijs en status worden ONAFHANKELIJK verwerkt: je kunt in één PATCH beide zetten.
+  if (typeof body.prijs === "number" && Number.isFinite(body.prijs) && body.prijs > 0) {
     auto.prijs = body.prijs;
-  } else if (body.status === "verkocht") {
+  }
+
+  if (body.status === "verkocht") {
     auto.verkocht = true;
     auto.gereserveerd = false;
     if (!auto.verkocht_op) auto.verkocht_op = new Date().toISOString();
@@ -19,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     auto.verkocht = false;
     auto.gereserveerd = true;
     auto.verkocht_op = undefined;
-  } else if (body.status !== undefined) {
+  } else if (body.status === "beschikbaar") {
     auto.verkocht = false;
     auto.gereserveerd = false;
     auto.verkocht_op = undefined;

@@ -23,6 +23,11 @@ export type Auto = {
   verkocht?: boolean;
   gereserveerd?: boolean;
   verkocht_op?: string;
+  // Optionele RDW-extra's (meegestuurd door het formulier)
+  kenteken?: string;
+  cilinderinhoud?: string;
+  aantalDeuren?: string;
+  aantalCilinders?: string;
   // Omschrijving
   omschrijving: string;
   // Opties per categorie

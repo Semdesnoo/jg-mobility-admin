@@ -79,10 +79,12 @@ export default function AutoToevoegen() {
         setAiError(data.error ?? "AI genereren mislukt");
       }
     } else {
+      const geldigeTransmissies = ["Handgeschakeld", "Automatisch", "Semi-automaat"];
       setForm((prev) => ({
         ...prev,
         omschrijving: data.omschrijving || prev.omschrijving,
         versie: data.versie || prev.versie,
+        transmissie: geldigeTransmissies.includes(data.transmissie) ? data.transmissie : prev.transmissie,
       }));
       if (data.opties?.length) setOpties(data.opties);
     }
@@ -197,20 +199,22 @@ export default function AutoToevoegen() {
     try {
       let fotoUrls: string[] = [];
 
-      // Upload foto's als er zijn
+      // Upload foto's rechtstreeks naar Vercel Blob (gedeelde opslag voor admin + website).
+      // De volgorde blijft behouden (Promise.all), dus de eerste foto blijft de hoofdfoto.
       if (fotoFiles.length > 0) {
+        const { upload } = await import("@vercel/blob/client");
         const kenteken = form.kenteken.replace(/-/g, "").toUpperCase() || `auto-${Date.now()}`;
-        const fd = new FormData();
-        fd.append("kenteken", kenteken);
-        fotoFiles.forEach((f) => fd.append("photos", f));
-
-        const uploadRes = await fetch("/api/admin/upload-photos", {
-          method: "POST",
-          body: fd,
-        });
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadData.error ?? "Upload mislukt");
-        fotoUrls = uploadData.urls;
+        fotoUrls = await Promise.all(
+          fotoFiles.map(async (file, i) => {
+            const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+            const pad = `autos/${kenteken}/${String(i + 1).padStart(2, "0")}.${ext}`;
+            const blob = await upload(pad, file, {
+              access: "public",
+              handleUploadUrl: "/api/admin/upload-photos",
+            });
+            return blob.url;
+          })
+        );
       }
 
       // Sla auto op

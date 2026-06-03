@@ -42,3 +42,20 @@ export function generateSlug(merk: string, model: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
+
+// Garandeert een unieke slug. Is de basis-slug al door een ANDERE auto in gebruik,
+// dan wordt -2, -3, ... toegevoegd. Voorkomt de 23505 unique-constraint crash bij
+// twee auto's met identiek merk + model.
+export async function ensureUniqueSlug(base: string, currentId?: number): Promise<string> {
+  const basis = base || "auto";
+  let kandidaat = basis;
+  let n = 1;
+  for (let poging = 0; poging < 1000; poging++) {
+    const rows = await sql`SELECT id FROM autos WHERE slug = ${kandidaat} LIMIT 1`;
+    const bezet = rows[0];
+    if (!bezet || (currentId != null && Number(bezet.id) === currentId)) return kandidaat;
+    n += 1;
+    kandidaat = `${basis}-${n}`;
+  }
+  return `${basis}-${Date.now()}`;
+}

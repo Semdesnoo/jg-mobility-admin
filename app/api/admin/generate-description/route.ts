@@ -3,15 +3,21 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const SYSTEM_PROMPT = `Je bent een Nederlandse auto-expert en copywriter voor JG Mobility in Barendrecht.
 
-Je krijgt kentekengegevens van een auto. Zoek op internet naar de volledige standaarduitrusting, het exacte trim-niveau en alle bekende opties voor dit specifieke model en bouwjaar.
+Je krijgt kentekengegevens van een auto. Gebruik de web_search-tool om op internet de volledige standaarduitrusting, het exacte trim-niveau en alle bekende opties voor dit specifieke model en bouwjaar op te zoeken. Baseer je antwoord op die zoekresultaten plus je eigen kennis.
 
-Genereer daarna drie dingen: versie, omschrijving, en een zo VOLLEDIG mogelijke optielijst.
+Genereer daarna vier dingen: versie, transmissie, omschrijving, en een zo VOLLEDIG mogelijke optielijst.
 
 ---
 
 ## VERSIE:
 Formaat: "150 pk | DSG Automaat | Panoramadak | Navi | ACC"
 Max 80 tekens. Altijd: pk + transmissie + 3-4 opvallende kenmerken of trim-naam.
+
+---
+
+## TRANSMISSIE:
+Bepaal de transmissie van deze specifieke uitvoering en geef EXACT één van deze drie waarden terug:
+"Handgeschakeld", "Automatisch" of "Semi-automaat". Bij twijfel: kies wat voor dit model/motor/bouwjaar het meest gangbaar is.
 
 ---
 
@@ -35,9 +41,10 @@ Aandrijving: motortype + cc + pk (eerste item), versnellingsbak (type+trappen), 
 
 ---
 
-## Output (ALLEEN geldig JSON, niets anders):
+## Output (ALLEEN geldig JSON als LAATSTE bericht, niets erna):
 {
   "versie": "...",
+  "transmissie": "Handgeschakeld",
   "omschrijving": "...",
   "opties": [
     { "categorie": "Exterieur", "items": ["...", "..."] },
@@ -61,7 +68,7 @@ Bekende uitvoering: ${versie || "onbekend"}
 Bouwjaar: ${bouwjaar}
 Kilometerstand: ${Number(km || 0).toLocaleString("nl-NL")} km
 Brandstof: ${brandstof}
-Transmissie: ${transmissie}
+Transmissie (indicatie): ${transmissie || "onbekend"}
 Vermogen: ${vermogen || "onbekend"}
 Cilinderinhoud: ${cilinderinhoud ? cilinderinhoud + " liter" : "onbekend"}
 Aantal cilinders: ${aantalCilinders || "onbekend"}
@@ -73,6 +80,24 @@ APK: ${apk}
 BTW/Marge: ${btw}
 Bekleding: ${bekleding}
   `.trim();
+}
+
+// Haalt het laatste, accolade-gebalanceerde JSON-object uit de tekst. Robuuster dan een
+// greedy regex: een losse '{' in citaat-/voorbeeldtekst vóór het echte JSON-blok zorgt niet
+// meer voor een te vroege start. We scannen vanaf de laatste '}' terug naar de bijbehorende '{'.
+function extractLaatsteJson(text: string): string | null {
+  const eind = text.lastIndexOf("}");
+  if (eind === -1) return null;
+  let diepte = 0;
+  for (let i = eind; i >= 0; i--) {
+    const c = text[i];
+    if (c === "}") diepte++;
+    else if (c === "{") {
+      diepte--;
+      if (diepte === 0) return text.slice(i, eind + 1);
+    }
+  }
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -92,48 +117,56 @@ export async function POST(request: NextRequest) {
 
     const client = new Anthropic({ apiKey });
 
-    const userPrompt = `Zoek op internet naar de volledige uitrusting van deze auto.
-Zoek naar: "${merk} ${model} ${vermogen || ""} uitrusting specificaties standaard opties"
+    const userPrompt = `Zoek op internet naar de volledige uitrusting van deze auto:
+"${merk} ${model} ${vermogen || ""} uitrusting specificaties standaard opties"
 
 ${autoInfo}
 
-Genereer de versie, omschrijving en volledige optielijst als JSON.`;
+Geef daarna de versie, transmissie, omschrijving en volledige optielijst als JSON.`;
 
+    // web_search_20250305 is een SERVER-side tool: Anthropic voert de zoekopdracht(en) zelf
+    // uit binnen de call en levert de resultaten direct aan het model. Geen handmatige
+    // tool-loop nodig. Bij een lange zoekopdracht kan de API 'pause_turn' teruggeven; dan
+    // zetten we de call voort door de assistant-content terug te sturen. We verzamelen alle
+    // text-blocks; het eindantwoord (de JSON) zit aan het eind.
     const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
-    let finalText = "";
-
-    for (let i = 0; i < 8; i++) {
+    let laatsteTekst = ""; // alleen de tekst van de LAATSTE ronde (vermijdt proza uit zoekrondes)
+    let stopReason: string | null = null;
+    for (let i = 0; i < 6; i++) {
       const resp = await client.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 5000,
+        max_tokens: 8000,
         system: SYSTEM_PROMPT,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: [{ type: "web_search_20250305", name: "web_search" } as any],
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 } as any],
         messages,
       });
-
-      for (const block of resp.content) {
-        if (block.type === "text") finalText = block.text;
-      }
-
-      if (resp.stop_reason === "end_turn") break;
-
-      if (resp.stop_reason === "tool_use") {
+      stopReason = resp.stop_reason ?? null;
+      const rondeTekst = resp.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n");
+      if (rondeTekst) laatsteTekst = rondeTekst;
+      if (resp.stop_reason === "pause_turn") {
         messages.push({ role: "assistant", content: resp.content });
-        const toolResults: Anthropic.ToolResultBlockParam[] = resp.content
-          .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-          .map((b) => ({ type: "tool_result" as const, tool_use_id: b.id, content: "Search executed." }));
-        if (toolResults.length > 0) messages.push({ role: "user", content: toolResults });
+        continue;
       }
+      break;
     }
 
-    const jsonMatch = finalText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    if (stopReason === "max_tokens") {
+      return Response.json(
+        { error: "AI-antwoord werd afgekapt (te lang). Probeer opnieuw of vul handmatig in." },
+        { status: 500 }
+      );
+    }
+
+    const jsonText = extractLaatsteJson(laatsteTekst);
+    if (!jsonText) {
       return Response.json({ error: "AI gaf geen geldig JSON terug" }, { status: 500 });
     }
 
-    return Response.json(JSON.parse(jsonMatch[0]));
-
+    return Response.json(JSON.parse(jsonText));
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });
   }
