@@ -244,7 +244,7 @@ export default function AutoToevoegen() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f5f5f5" }}>
+    <div className="h-screen overflow-y-auto" style={{ backgroundColor: "#f5f5f5" }}>
       {/* Header */}
       <div
         className="px-6 py-5 sticky top-0 z-40"
