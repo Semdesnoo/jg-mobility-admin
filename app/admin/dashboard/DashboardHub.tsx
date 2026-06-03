@@ -1984,7 +1984,7 @@ function FacturenContent() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                        €{Number(f.verkoopprijs).toLocaleString("nl-NL")}
+                        €{berekenTotalen(f).eindtotaal.toLocaleString("nl-NL")}
                       </p>
                       <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
                         {f.datum} · {f.btw_type === "marge" ? "Marge" : "21% BTW"}
