@@ -72,8 +72,8 @@ export async function GET() {
     let verkochtDezeMaand = 0;
     const verkopenPerMaand: Record<string, number> = {};
     for (const a of verkocht) {
-      const d = a.verkocht_op ? new Date(a.verkocht_op) : null;
-      if (!d || isNaN(d.getTime())) continue;
+      const d = parseDatum(a.verkocht_op);
+      if (!d) continue;
       const k = maandKey(d);
       verkopenPerMaand[k] = (verkopenPerMaand[k] ?? 0) + 1;
       if (d.getFullYear() === ditJaar) verkochtDitJaar++;
@@ -111,8 +111,8 @@ export async function GET() {
     const standtijdVerkocht: number[] = [];
     for (const a of verkocht) {
       if (!a.toegevoegd_op || !a.verkocht_op) continue;
-      const tot = new Date(a.verkocht_op);
-      if (isNaN(tot.getTime())) continue;
+      const tot = parseDatum(a.verkocht_op);
+      if (!tot) continue;
       const dagen = dagenTussen(a.toegevoegd_op, tot);
       if (dagen != null) standtijdVerkocht.push(dagen);
     }
