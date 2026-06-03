@@ -23,6 +23,7 @@ export type Auto = {
   verkocht?: boolean;
   gereserveerd?: boolean;
   verkocht_op?: string;
+  toegevoegd_op?: string; // wanneer de auto in de voorraad kwam (voor standtijd-statistiek)
   // Optionele RDW-extra's (meegestuurd door het formulier)
   kenteken?: string;
   cilinderinhoud?: string;

@@ -153,4 +153,11 @@ export async function initDB() {
       aangemaakt TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  // Backfill standtijd-startdatum voor bestaande auto's: vanaf nu wordt de showroom-tijd
+  // bijgehouden. Eenmalig + idempotent (alleen waar het veld nog ontbreekt).
+  await sql`
+    UPDATE autos
+    SET data = jsonb_set(data, '{toegevoegd_op}', to_jsonb(now()::text), true)
+    WHERE NOT (data ? 'toegevoegd_op')
+  `.catch(() => null);
 }

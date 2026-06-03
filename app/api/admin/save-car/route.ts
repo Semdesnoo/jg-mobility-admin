@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { saveAuto, getNextId, generateSlug, ensureUniqueSlug } from "@/lib/autos-db";
+import { saveAuto, getNextId, generateSlug, ensureUniqueSlug, getAutoById } from "@/lib/autos-db";
 import { revalidateWebsite } from "@/lib/revalidate";
 import type { Auto } from "@/lib/autos";
 
@@ -30,9 +30,14 @@ export async function POST(request: NextRequest) {
     const bouwjaar = Number.isFinite(bouwjaarNum) && bouwjaarNum > 0 ? bouwjaarNum : 0;
 
     // ── Id + unieke slug ──
-    const id = Number(body.id) > 0 ? Number(body.id) : await getNextId();
+    const isBestaand = Number(body.id) > 0;
+    const id = isBestaand ? Number(body.id) : await getNextId();
     const baseSlug = String(body.slug || "").trim() || generateSlug(merk, model);
     const slug = await ensureUniqueSlug(baseSlug, id);
+
+    // toegevoegd_op (voor standtijd): behoud bij bewerken, anders nu
+    const bestaand = isBestaand ? await getAutoById(id) : null;
+    const toegevoegd_op = String(body.toegevoegd_op || bestaand?.toegevoegd_op || new Date().toISOString());
 
     // ── Whitelist: alleen bekende Auto-velden naar de DB (geen ongewenste rommel) ──
     // Alleen vertrouwde foto-bronnen toestaan (eigen /public-paden, Vercel Blob, AutoScout-import).
@@ -75,6 +80,7 @@ export async function POST(request: NextRequest) {
       gereserveerd: Boolean(body.gereserveerd),
       omschrijving: String(body.omschrijving ?? ""),
       opties,
+      toegevoegd_op,
       ...(body.verkocht_op ? { verkocht_op: String(body.verkocht_op) } : {}),
       ...(body.kenteken ? { kenteken: String(body.kenteken) } : {}),
       ...(body.cilinderinhoud ? { cilinderinhoud: String(body.cilinderinhoud) } : {}),

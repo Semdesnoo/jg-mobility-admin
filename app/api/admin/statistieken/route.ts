@@ -2,89 +2,195 @@ import sql from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+const MS_PER_DAG = 86_400_000;
+
+type AutoData = {
+  merk?: string;
+  model?: string;
+  prijs?: number | string;
+  verkocht?: boolean;
+  gereserveerd?: boolean;
+  verkocht_op?: string;
+  toegevoegd_op?: string;
+};
+
+function maandKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Pakt zowel "31-5-2026" (NL) als "2026-05-31" / ISO-datums.
+function parseDatum(s: string | undefined): Date | null {
+  if (!s) return null;
+  if (s.includes("T")) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const p = s.split("-").map((x) => parseInt(x, 10));
+  if (p.length !== 3 || p.some(isNaN)) return null;
+  const [a, b, c] = p;
+  const [jaar, maand, dag] = a > 31 ? [a, b, c] : [c, b, a];
+  const d = new Date(jaar, maand - 1, dag);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function dagenTussen(vanISO: string, tot: Date): number | null {
+  const d0 = new Date(vanISO);
+  if (isNaN(d0.getTime())) return null;
+  return Math.max(0, Math.round((tot.getTime() - d0.getTime()) / MS_PER_DAG));
+}
+
+function gemiddelde(arr: number[]): number | null {
+  return arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+}
+
 export async function GET() {
   try {
-    const [facturen, autos, dossiers, leads] = await Promise.all([
-      sql`SELECT datum, verkoopprijs, btw_type, status FROM facturen`,
-      sql`SELECT data FROM autos`,
-      sql`SELECT inkoop, verkoopprijs, btw_type, kosten, aangemaakt FROM dossiers`,
-      sql`SELECT status, aangemaakt FROM leads`.catch(() => []),
+    // Elke query apart afgevangen: een ontbrekende tabel mag het dashboard niet slopen.
+    const [autosRows, facturenRows, leadsRows, afsprakenRows] = await Promise.all([
+      sql`SELECT data FROM autos`.catch(() => []),
+      sql`SELECT datum, verkoopprijs, btw_type, status, regels FROM facturen`.catch(() => []),
+      sql`SELECT status FROM leads`.catch(() => []),
+      sql`SELECT status FROM afspraken`.catch(() => []),
     ]);
 
-    const autoData = autos.map((a) => {
-      const d = typeof a.data === "string" ? JSON.parse(a.data) : a.data;
-      return d;
-    });
+    const autos: AutoData[] = autosRows.map((a) =>
+      (typeof a.data === "string" ? JSON.parse(a.data) : a.data) as AutoData
+    );
+    const nu = new Date();
+    const ditJaar = nu.getFullYear();
+    const dezeMaand = maandKey(nu);
 
-    const verkochtAutos = autoData.filter((a) => a.verkocht);
+    // ── Voorraad & verkoop ──
+    const verkocht = autos.filter((a) => a.verkocht);
+    const gereserveerd = autos.filter((a) => a.gereserveerd && !a.verkocht);
+    const beschikbaar = autos.filter((a) => !a.verkocht && !a.gereserveerd);
 
-    // Omzet per maand (laatste 12 maanden, uit betaalde facturen)
-    const omzetPerMaand: Record<string, number> = {};
-    const verkochteFacturen = facturen.filter((f) => f.status === "betaald");
-    for (const f of verkochteFacturen) {
-      const parts = (f.datum as string).split("-").map(Number);
-      if (parts.length < 3) continue;
-      const key = `${parts[2]}-${String(parts[1]).padStart(2, "0")}`;
-      omzetPerMaand[key] = (omzetPerMaand[key] ?? 0) + Number(f.verkoopprijs);
-    }
+    const voorraadwaarde = beschikbaar.reduce((s, a) => s + (Number(a.prijs) || 0), 0);
+    const gemVraagprijs = beschikbaar.length ? Math.round(voorraadwaarde / beschikbaar.length) : 0;
 
-    // Verkopen per maand (uit autos verkocht_op)
+    let verkochtDitJaar = 0;
+    let verkochtDezeMaand = 0;
     const verkopenPerMaand: Record<string, number> = {};
-    for (const a of verkochtAutos) {
-      if (!a.verkocht_op) continue;
-      const d = new Date(a.verkocht_op);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      verkopenPerMaand[key] = (verkopenPerMaand[key] ?? 0) + 1;
+    for (const a of verkocht) {
+      const d = a.verkocht_op ? new Date(a.verkocht_op) : null;
+      if (!d || isNaN(d.getTime())) continue;
+      const k = maandKey(d);
+      verkopenPerMaand[k] = (verkopenPerMaand[k] ?? 0) + 1;
+      if (d.getFullYear() === ditJaar) verkochtDitJaar++;
+      if (k === dezeMaand) verkochtDezeMaand++;
     }
 
-    // Marge stats uit dossiers
-    const marges: number[] = [];
-    for (const d of dossiers) {
-      if (!d.verkoopprijs || Number(d.verkoopprijs) <= 0) continue;
-      let kosten = 0;
-      try { kosten = (JSON.parse(d.kosten as string) as { bedrag: string }[]).reduce((s, k) => s + (parseFloat(k.bedrag) || 0), 0); } catch { /* */ }
-      const kostprijs = Number(d.inkoop) + kosten;
-      const verkoop = Number(d.verkoopprijs);
-      let winst = 0;
-      if (d.btw_type === "marge") {
-        const m = verkoop - kostprijs;
-        winst = m > 0 ? Math.round((m - (m * 21) / 121) * 100) / 100 : m;
-      } else {
-        const ex = Math.round((verkoop / 1.21) * 100) / 100;
-        winst = Math.round((ex - kostprijs) * 100) / 100;
+    // ── Omzet uit betaalde facturen (eindtotaal = verkoopprijs + extra regels) ──
+    const eindtotaal = (f: { verkoopprijs?: unknown; regels?: unknown }): number => {
+      let bruto = Number(f.verkoopprijs) || 0;
+      try {
+        const r = JSON.parse((f.regels as string) || "[]") as { prijs?: unknown }[];
+        bruto += r.reduce((s, x) => s + (Number(x.prijs) || 0), 0);
+      } catch { /* alleen verkoopprijs */ }
+      return bruto;
+    };
+    const betaald = facturenRows.filter((f) => f.status === "betaald");
+    let totaalOmzet = 0;
+    let omzetDitJaar = 0;
+    let omzetDezeMaand = 0;
+    const omzetPerMaand: Record<string, number> = {};
+    for (const f of betaald) {
+      const bedrag = eindtotaal(f);
+      totaalOmzet += bedrag;
+      const d = parseDatum(f.datum as string);
+      if (d) {
+        const k = maandKey(d);
+        omzetPerMaand[k] = (omzetPerMaand[k] ?? 0) + bedrag;
+        if (d.getFullYear() === ditJaar) omzetDitJaar += bedrag;
+        if (k === dezeMaand) omzetDezeMaand += bedrag;
       }
-      marges.push(winst);
     }
-    const gemiddeldeMarge = marges.length > 0 ? Math.round(marges.reduce((s, v) => s + v, 0) / marges.length) : 0;
+    const gemVerkoopprijs = betaald.length ? Math.round(totaalOmzet / betaald.length) : 0;
 
-    // Merken frequentie
-    const merkenCount: Record<string, number> = {};
-    for (const a of verkochtAutos) {
-      if (a.merk) merkenCount[a.merk] = (merkenCount[a.merk] ?? 0) + 1;
+    // ── Standtijd (showroom-tijd) ──
+    const standtijdVerkocht: number[] = [];
+    for (const a of verkocht) {
+      if (!a.toegevoegd_op || !a.verkocht_op) continue;
+      const tot = new Date(a.verkocht_op);
+      if (isNaN(tot.getTime())) continue;
+      const dagen = dagenTussen(a.toegevoegd_op, tot);
+      if (dagen != null) standtijdVerkocht.push(dagen);
     }
-    const topMerken = Object.entries(merkenCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([merk, count]) => ({ merk, count }));
+    const voorraadStandtijden: { merk: string; model: string; dagen: number }[] = [];
+    for (const a of beschikbaar) {
+      if (!a.toegevoegd_op) continue;
+      const dagen = dagenTussen(a.toegevoegd_op, nu);
+      if (dagen != null) {
+        voorraadStandtijden.push({ merk: a.merk || "Onbekend", model: a.model || "", dagen });
+      }
+    }
+    const gemStandtijdVerkocht = gemiddelde(standtijdVerkocht);
+    const gemStandtijdVoorraad = gemiddelde(voorraadStandtijden.map((x) => x.dagen));
+    const langstInVoorraad = [...voorraadStandtijden].sort((a, b) => b.dagen - a.dagen).slice(0, 6);
+    const standtijdDataCount = standtijdVerkocht.length + voorraadStandtijden.length;
 
-    // Leads per status
+    // ── Per merk ──
+    const merkMap = new Map<string, { voorraad: number; verkocht: number; standtijden: number[] }>();
+    const ensure = (m: string) => {
+      const key = m || "Onbekend";
+      if (!merkMap.has(key)) merkMap.set(key, { voorraad: 0, verkocht: 0, standtijden: [] });
+      return merkMap.get(key)!;
+    };
+    for (const a of beschikbaar) {
+      const e = ensure(a.merk || "Onbekend");
+      e.voorraad++;
+      if (a.toegevoegd_op) {
+        const dg = dagenTussen(a.toegevoegd_op, nu);
+        if (dg != null) e.standtijden.push(dg);
+      }
+    }
+    for (const a of verkocht) ensure(a.merk || "Onbekend").verkocht++;
+    const perMerk = [...merkMap.entries()]
+      .map(([merk, e]) => ({
+        merk,
+        voorraad: e.voorraad,
+        verkocht: e.verkocht,
+        gemStandtijd: gemiddelde(e.standtijden),
+      }))
+      .sort((a, b) => b.voorraad + b.verkocht - (a.voorraad + a.verkocht));
+
+    // ── Leads & afspraken ──
     const leadsPerStatus: Record<string, number> = {};
-    for (const l of leads) {
-      leadsPerStatus[l.status as string] = (leadsPerStatus[l.status as string] ?? 0) + 1;
+    for (const l of leadsRows) {
+      const s = (l.status as string) || "nieuw";
+      leadsPerStatus[s] = (leadsPerStatus[s] ?? 0) + 1;
     }
+    const openAfspraken = afsprakenRows.filter(
+      (a) => a.status !== "afgehandeld" && a.status !== "geannuleerd"
+    ).length;
 
     return Response.json({
+      totaalVerkocht: verkocht.length,
+      verkochtDitJaar,
+      verkochtDezeMaand,
+      inVoorraad: beschikbaar.length,
+      gereserveerd: gereserveerd.length,
+      voorraadwaarde,
+      gemVraagprijs,
+      totaalOmzet,
+      omzetDitJaar,
+      omzetDezeMaand,
+      gemVerkoopprijs,
+      betaaldeFacturen: betaald.length,
       omzetPerMaand,
       verkopenPerMaand,
-      gemiddeldeMarge,
-      topMerken,
+      gemStandtijdVerkocht,
+      gemStandtijdVoorraad,
+      standtijdDataCount,
+      langstInVoorraad,
+      perMerk,
       leadsPerStatus,
-      totaalVerkocht: verkochtAutos.length,
-      totaalFacturen: verkochteFacturen.length,
-      totaalOmzet: verkochteFacturen.reduce((s, f) => s + Number(f.verkoopprijs), 0),
+      openAfspraken,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return Response.json({ error: msg }, { status: 500 });
+    return Response.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
