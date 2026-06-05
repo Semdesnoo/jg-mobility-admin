@@ -21,6 +21,7 @@ import {
   Target,
   BarChart2,
   Search,
+  Pencil,
 } from "lucide-react";
 import GmailWidget from "./GmailWidget";
 import DeleteButton from "./DeleteButton";
@@ -482,6 +483,24 @@ function DashboardContent({
   refresh: () => void;
 }) {
   const totaalWaarde = beschikbaar.reduce((s, a) => s + a.prijs, 0);
+  const [prijsEdit, setPrijsEdit] = useState<{ id: number; waarde: string } | null>(null);
+  const [prijsBezig, setPrijsBezig] = useState(false);
+
+  const updatePrijs = async (id: number, prijs: number) => {
+    if (!Number.isFinite(prijs) || prijs <= 0) { alert("Vul een geldige prijs in (groter dan 0)."); return; }
+    setPrijsBezig(true);
+    try {
+      await fetch(`/api/admin/autos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prijs }),
+      });
+      setPrijsEdit(null);
+      refresh();
+    } finally {
+      setPrijsBezig(false);
+    }
+  };
 
   const updateStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
     if (status === "gereserveerd" && !confirm("Wil je deze auto als Gereserveerd markeren?")) return;
@@ -620,14 +639,7 @@ function DashboardContent({
                           {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
                         </p>
                       </div>
-                      <div className="text-right flex-shrink-0 md:mr-2">
-                        <p className="text-sm md:text-base font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                          €{auto.prijs.toLocaleString("nl-NL")}
-                        </p>
-                        <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
-                          {auto.fotos?.length ?? 0} foto&apos;s
-                        </p>
-                      </div>
+                      <PrijsBewerk auto={auto} edit={prijsEdit} setEdit={setPrijsEdit} bezig={prijsBezig} onSave={updatePrijs} />
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
                       {(["beschikbaar", "gereserveerd", "verkocht"] as const).map((s) => {
@@ -697,9 +709,76 @@ function EmailContent() {
 }
 
 // ── Auto Voorraad ───────────────────────────────────────────────
+// Inline bewerkbare prijs: klik op de prijs → invoer → opslaan → meteen door naar de
+// website via de PATCH-route (die saveAuto + revalidateWebsite doet).
+function PrijsBewerk({ auto, edit, setEdit, bezig, onSave }: {
+  auto: Auto;
+  edit: { id: number; waarde: string } | null;
+  setEdit: (e: { id: number; waarde: string } | null) => void;
+  bezig: boolean;
+  onSave: (id: number, prijs: number) => void;
+}) {
+  return (
+    <div className="text-right flex-shrink-0 md:mr-2">
+      {edit && edit.id === auto.id ? (
+        <div className="flex items-center gap-1 justify-end">
+          <span className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>€</span>
+          <input
+            type="number"
+            autoFocus
+            value={edit.waarde}
+            onChange={(e) => setEdit({ id: auto.id, waarde: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave(auto.id, Number(edit.waarde));
+              if (e.key === "Escape") setEdit(null);
+            }}
+            className="w-24 px-2 py-1 text-sm font-bold text-right outline-none"
+            style={{ border: "1px solid #001337", color: "#001337", fontFamily: "var(--font-inter)" }}
+          />
+          <button onClick={() => onSave(auto.id, Number(edit.waarde))} disabled={bezig} title="Opslaan"
+            className="px-2 py-1 text-xs font-bold transition-all hover:opacity-80 disabled:opacity-50"
+            style={{ backgroundColor: "#15803d", color: "#ffffff", fontFamily: "var(--font-inter)" }}>✓</button>
+          <button onClick={() => setEdit(null)} title="Annuleren"
+            className="px-2 py-1 text-xs font-bold transition-all hover:opacity-80"
+            style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#64748b", fontFamily: "var(--font-inter)" }}>✕</button>
+        </div>
+      ) : (
+        <button onClick={() => setEdit({ id: auto.id, waarde: String(auto.prijs) })} title="Klik om de prijs aan te passen"
+          className="flex items-center gap-1.5 ml-auto transition-all hover:opacity-70">
+          <Pencil size={11} style={{ color: "rgba(0,19,55,0.3)" }} />
+          <span className="text-sm md:text-base font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+            €{auto.prijs.toLocaleString("nl-NL")}
+          </span>
+        </button>
+      )}
+      <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+        {auto.fotos?.length ?? 0} foto&apos;s
+      </p>
+    </div>
+  );
+}
+
 function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => void }) {
   const beschikbaar = autos.filter((a) => !a.verkocht);
   const verkocht = autos.filter((a) => a.verkocht);
+  const [prijsEdit, setPrijsEdit] = useState<{ id: number; waarde: string } | null>(null);
+  const [prijsBezig, setPrijsBezig] = useState(false);
+
+  const updatePrijs = async (id: number, prijs: number) => {
+    if (!Number.isFinite(prijs) || prijs <= 0) { alert("Vul een geldige prijs in (groter dan 0)."); return; }
+    setPrijsBezig(true);
+    try {
+      await fetch(`/api/admin/autos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prijs }),
+      });
+      setPrijsEdit(null);
+      refresh();
+    } finally {
+      setPrijsBezig(false);
+    }
+  };
 
   const updateStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
     if (status === "gereserveerd" && !confirm("Wil je deze auto als Gereserveerd markeren?")) return;
@@ -799,15 +878,8 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
                         {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
                       </p>
                     </div>
-                    {/* Prijs — altijd rechts in bovenste rij */}
-                    <div className="text-right flex-shrink-0 md:mr-2">
-                      <p className="text-sm md:text-base font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                        €{auto.prijs.toLocaleString("nl-NL")}
-                      </p>
-                      <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
-                        {auto.fotos?.length ?? 0} foto&apos;s
-                      </p>
-                    </div>
+                    {/* Prijs — bewerkbaar, altijd rechts in bovenste rij */}
+                    <PrijsBewerk auto={auto} edit={prijsEdit} setEdit={setPrijsEdit} bezig={prijsBezig} onSave={updatePrijs} />
                   </div>
                   {/* Onderste rij: knoppen */}
                   <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
