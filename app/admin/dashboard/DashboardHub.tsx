@@ -1196,6 +1196,7 @@ function FacturenContent() {
   const [view, setView] = useState<"lijst" | "nieuw" | "archief">("lijst");
   const [selectedJaar, setSelectedJaar] = useState<string>("");
   const [selectie, setSelectie] = useState<Set<string>>(new Set());
+  const [exportBezig, setExportBezig] = useState(false);
   const [form, setForm] = useState<FactuurForm>(LEEG_FORM);
   const [regels, setRegels] = useState<FactuurRegel[]>(LEEG_REGELS);
   const [saving, setSaving] = useState(false);
@@ -1529,35 +1530,35 @@ function FacturenContent() {
   };
 
   // Exporteert de facturen als CSV (semicolon + komma-decimaal + BOM → opent direct in Excel NL)
-  const exportFacturenCSV = (lijst: Factuur[], jaar: string) => {
-    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
-    const num = (n: number) => n.toFixed(2).replace(".", ",");
-    const kolommen = ["Factuurnummer", "Datum", "Klant", "Voertuig", "Kenteken", "Betaalwijze", "BTW-type", "Bedrag excl. BTW", "BTW-bedrag", "Totaal incl. BTW"];
-    const rijen = lijst.map((f) => {
-      const t = berekenTotalen(f);
-      const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar].filter(Boolean).join(" ");
-      return [
-        esc(f.factuur_nr), esc(f.datum), esc(f.klant_naam || ""), esc(voertuig),
-        esc(f.auto_kenteken ? f.auto_kenteken.toUpperCase() : ""),
-        esc(f.betaalwijze === "bank" ? "Bank" : "Contant"),
-        esc(f.btw_type === "21" ? "21% BTW" : "Marge"),
-        num(t.subtotaal), num(t.btw), num(t.eindtotaal),
-      ].join(";");
-    });
-    const tot = lijst.reduce((a, f) => {
-      const t = berekenTotalen(f);
-      return { omzet: a.omzet + t.subtotaal, btw: a.btw + t.btw, totaal: a.totaal + t.eindtotaal };
-    }, { omzet: 0, btw: 0, totaal: 0 });
-    const totaalRij = [esc(`Totaal ${lijst.length} facturen`), "", "", "", "", "", "", num(tot.omzet), num(tot.btw), num(tot.totaal)].join(";");
-    const csv = "﻿" + [kolommen.map(esc).join(";"), ...rijen, totaalRij].join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `JG-Mobility-facturen-${jaar}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  // Genereert een net opgemaakt Excel-bestand (.xlsx) met logo via de server-route.
+  const exportFacturenExcel = async (lijst: Factuur[], jaar: string) => {
+    if (lijst.length === 0) return;
+    setExportBezig(true);
+    try {
+      const logo = await haalLogoSrc();
+      const res = await fetch("/api/admin/facturen/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ facturen: lijst, jaar, logo }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Fout ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `JG-Mobility-facturen-${jaar}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      alert(`Excel-export mislukt: ${String(err instanceof Error ? err.message : err)}`);
+    } finally {
+      setExportBezig(false);
+    }
   };
 
   const printJaaroverzicht = (jaar: string, lijst: Factuur[]) => {
@@ -1873,12 +1874,12 @@ function FacturenContent() {
           action={
             <div className="flex gap-2">
               <button
-                onClick={() => exportFacturenCSV(exportLijst, actuelJaar)}
-                disabled={exportLijst.length === 0}
+                onClick={() => exportFacturenExcel(exportLijst, actuelJaar)}
+                disabled={exportLijst.length === 0 || exportBezig}
                 className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40"
                 style={{ backgroundColor: "#15803d", color: "#ffffff", fontFamily: "var(--font-inter)" }}
               >
-                Excel{geselecteerd.length ? ` (${geselecteerd.length})` : ""}
+                {exportBezig ? "Bezig…" : `Excel${geselecteerd.length ? ` (${geselecteerd.length})` : ""}`}
               </button>
               <button
                 onClick={() => printJaaroverzicht(actuelJaar, exportLijst)}
@@ -1969,8 +1970,8 @@ function FacturenContent() {
                         <th className="px-3 py-3" style={{ width: "34px" }}>
                           <input type="checkbox" checked={alleGeselecteerd} onChange={toggleAlle} aria-label="Alles selecteren" style={{ width: 15, height: 15, cursor: "pointer", accentColor: "#001337" }} />
                         </th>
-                        {["Factuur nr.", "Datum", "Klant", "Voertuig", "Betaling", "BTW", "Excl. BTW", "BTW", "Totaal"].map(h => (
-                          <th key={h} className="px-3 py-3 text-left" style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "#001337", whiteSpace: "nowrap" }}>{h}</th>
+                        {["Factuur nr.", "Datum", "Klant", "Voertuig", "Betaling", "BTW-type", "Excl. BTW", "BTW", "Totaal"].map((h, i) => (
+                          <th key={i} className={`px-3 py-3 ${i >= 6 ? "text-right" : i >= 4 ? "text-center" : "text-left"}`} style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "#001337", whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
