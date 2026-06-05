@@ -76,7 +76,8 @@ export async function POST(req: Request) {
       const base64 = logo.split(",")[1];
       const extension = logo.includes("jpeg") || logo.includes("jpg") ? "jpeg" : "png";
       const imgId = wb.addImage({ base64, extension });
-      ws.addImage(imgId, { tl: { col: 0.25, row: 0.3 }, ext: { width: 150, height: 46 } });
+      // Logo is vierkant (1:1) — klein vierkant renderen (niet uitrekken), netjes in de kopband.
+      ws.addImage(imgId, { tl: { col: 0.3, row: 0.18 }, ext: { width: 40, height: 40 } });
     }
 
     ws.mergeCells("G1:J1");
