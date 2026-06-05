@@ -3,16 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
-const PULS_PROMPT = `Je bent een expert op de Nederlandse tweedehands automarkt. Analyseer de huidige markt voor een kleine autohandelaar in Nederland.
-
-Zoek live naar actuele informatie op Marktplaats.nl, AutoScout24.nl en AutoWeek.nl over:
-1. Welke gebruikte auto-modellen zijn nu het meest gevraagd en verkopen snel?
-2. Welke segmenten groeien (SUV, EV, compacts)?
-3. Welke modellen bieden de beste inkoopkansen (lage inkoopprijs, hoge vraag)?
-4. Welke modellen zijn te vermijden (veel aanbod, dalende prijzen)?
-
-Geef je antwoord UITSLUITEND als dit JSON object (geen andere tekst):
-{
+const JSON_VORM = `{
   "samenvatting": "2-3 zinnen actueel marktoverzicht in het Nederlands",
   "markt_temperatuur": 7,
   "hot_modellen": [
@@ -22,40 +13,80 @@ Geef je antwoord UITSLUITEND als dit JSON object (geen andere tekst):
     { "merk": "...", "model": "...", "reden": "veel aanbod / dalende prijzen" }
   ],
   "trending_segmenten": [
-    { "naam": "Compacte SUV", "trend": "stijgend", "score": 9, "reden": "..." },
-    { "naam": "Elektrisch", "trend": "stabiel", "score": 6, "reden": "..." }
+    { "naam": "Compacte SUV", "trend": "stijgend", "score": 9, "reden": "..." }
   ],
   "inzichten": [
     "Diesel onder €10.000 loopt goed bij particulieren",
-    "SUVs met automaat hebben kortere standtijd",
-    "Voorraad EV groeit maar marge staat onder druk"
+    "SUVs met automaat hebben kortere standtijd"
   ]
-}
+}`;
 
-Regels: gehele getallen, trend = stijgend/stabiel/dalend, scores 1-10, minimaal 5 hot_modellen, minimaal 3 te_vermijden, minimaal 3 trending_segmenten, minimaal 4 inzichten.`;
+const PULS_PROMPT = `Je bent een expert op de Nederlandse tweedehands automarkt. Analyseer de huidige markt voor een kleine autohandelaar in Nederland.
+
+Gebruik je web_search-tool om actuele informatie te zoeken (bijvoorbeeld op Marktplaats, AutoScout24 en AutoWeek) over:
+1. Welke gebruikte auto-modellen zijn nu het meest gevraagd en verkopen snel?
+2. Welke segmenten groeien (SUV, EV, compacts)?
+3. Welke modellen bieden de beste inkoopkansen (lage inkoopprijs, hoge vraag)?
+4. Welke modellen zijn te vermijden (veel aanbod, dalende prijzen)?
+
+Geef je antwoord UITSLUITEND als dit JSON-object (geen andere tekst):
+${JSON_VORM}
+
+Regels: gehele getallen, trend = stijgend/stabiel/dalend, scores 1-10, minimaal 5 hot_modellen, minimaal 3 te_vermijden, minimaal 3 trending_segmenten, minimaal 4 inzichten. Lukt het zoeken niet, baseer je dan op je eigen kennis en vermeld dat kort in de samenvatting.`;
 
 const ZOEK_PROMPT = (zoekterm: string) =>
   `Je bent een expert op de Nederlandse tweedehands automarkt. Analyseer de markt specifiek voor: "${zoekterm}"
 
-Zoek live op Marktplaats.nl, AutoScout24.nl en AutoWeek.nl naar actuele vraagprijzen, aanbod en vraag voor dit specifieke segment.
+Gebruik je web_search-tool om live te zoeken (bijvoorbeeld op Marktplaats, AutoScout24 en AutoWeek) naar actuele vraagprijzen, aanbod en vraag voor dit specifieke segment.
 
-Geef je antwoord UITSLUITEND als dit JSON object (geen andere tekst):
-{
-  "samenvatting": "2-3 zinnen analyse van '${zoekterm}' in het Nederlands",
-  "markt_temperatuur": 7,
-  "hot_modellen": [
-    { "rang": 1, "merk": "...", "model": "...", "segment": "...", "gem_prijs": 18500, "aanbod_score": 5, "vraag_score": 8, "trend": "stabiel", "advies": "..." }
-  ],
-  "te_vermijden": [
-    { "merk": "...", "model": "...", "reden": "..." }
-  ],
-  "trending_segmenten": [
-    { "naam": "...", "trend": "stijgend", "score": 8, "reden": "..." }
-  ],
-  "inzichten": ["...", "...", "..."]
+Geef je antwoord UITSLUITEND als dit JSON-object (geen andere tekst), met "samenvatting" toegespitst op '${zoekterm}':
+${JSON_VORM}
+
+Regels: gehele getallen, trend = stijgend/stabiel/dalend, scores 1-10, focus op de opgegeven zoekopdracht. Lukt het zoeken niet, baseer je dan op je eigen kennis en vermeld dat kort in de samenvatting.`;
+
+// Laatste accolade-gebalanceerde JSON-object uit de tekst (robuust tegen omringende tekst).
+function extractLaatsteJson(text: string): string | null {
+  const eind = text.lastIndexOf("}");
+  if (eind === -1) return null;
+  let diepte = 0;
+  for (let i = eind; i >= 0; i--) {
+    const c = text[i];
+    if (c === "}") diepte++;
+    else if (c === "{") {
+      diepte--;
+      if (diepte === 0) return text.slice(i, eind + 1);
+    }
+  }
+  return null;
 }
 
-Regels: gehele getallen, trend = stijgend/stabiel/dalend, scores 1-10, focus op de opgegeven zoekopdracht.`;
+// Eén analyse. useWebSearch=true gebruikt de server-side web_search (handelt pause_turn af);
+// false valt terug op modelkennis.
+async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boolean): Promise<string> {
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+  let laatsteTekst = "";
+  for (let i = 0; i < 6; i++) {
+    const resp = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 6000,
+      ...(useWebSearch
+        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 5 }] }
+        : {}),
+      messages,
+    });
+    const rondeTekst = resp.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    if (rondeTekst) laatsteTekst = rondeTekst;
+    if (resp.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: resp.content });
+      continue;
+    }
+    break;
+  }
+  return laatsteTekst;
+}
 
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -66,27 +97,24 @@ export async function POST(req: Request) {
 
   const client = new Anthropic({ apiKey });
 
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 4000,
-    tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const textBlock = [...response.content].reverse().find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    return Response.json({ error: "Geen antwoord van AI" }, { status: 500 });
+  // Eerst met web search; geen bruikbare JSON of een fout → terugval op modelkennis.
+  let tekst = "";
+  try {
+    tekst = await vraagMarkt(client, prompt, true);
+    if (!extractLaatsteJson(tekst)) tekst = await vraagMarkt(client, prompt, false);
+  } catch {
+    tekst = await vraagMarkt(client, prompt, false);
   }
 
-  const jsonMatch = textBlock.text.trim().match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return Response.json({ error: "Kon marktdata niet ophalen", raw: textBlock.text }, { status: 422 });
+  const jsonText = extractLaatsteJson(tekst);
+  if (!jsonText) {
+    return Response.json({ error: "Kon marktdata niet ophalen", raw: tekst.slice(0, 300) }, { status: 422 });
   }
 
   try {
-    const data = JSON.parse(jsonMatch[0]);
+    const data = JSON.parse(jsonText);
     return Response.json({ ...data, gegenereerd_op: new Date().toISOString(), type, zoekterm });
   } catch {
-    return Response.json({ error: "Ongeldige data van AI", raw: jsonMatch[0] }, { status: 422 });
+    return Response.json({ error: "Ongeldige data van AI", raw: jsonText.slice(0, 300) }, { status: 422 });
   }
 }
