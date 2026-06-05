@@ -22,6 +22,7 @@ import {
   BarChart2,
   Search,
   Pencil,
+  LayoutGrid,
 } from "lucide-react";
 import GmailWidget from "./GmailWidget";
 import DeleteButton from "./DeleteButton";
@@ -30,9 +31,10 @@ import AfsprakenContent from "./AfsprakenContent";
 import InkoopContent from "./InkoopContent";
 import LeadsContent from "./LeadsContent";
 import StatistiekenContent from "./StatistiekenContent";
+import MoliboxPage from "./MoliboxPage";
 import CosignatieContent from "./CosignatieContent";
 
-type Tab = "dashboard" | "email" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "leads" | "statistieken";
+type Tab = "dashboard" | "email" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "leads" | "statistieken" | "molibox";
 
 type Auto = {
   id: number;
@@ -82,6 +84,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: "calculator", label: "Calculator",       icon: Calculator },
       { id: "leads",      label: "Leads",            icon: Target },
       { id: "afspraken",  label: "Afspraken",        icon: Calendar },
+      { id: "molibox",    label: "Molibox",          icon: LayoutGrid },
     ],
   },
   {
@@ -213,6 +216,7 @@ const NAV_META: Record<Tab, string> = {
   calculator:   "Bereken marge per auto",
   statistieken: "Omzet & prestaties",
   social:       "Posts & marketing",
+  molibox:      "Externe tool",
 };
 
 export default function DashboardHub() {
@@ -382,6 +386,7 @@ export default function DashboardHub() {
         {tab === "facturen" && <FacturenContent />}
         {tab === "calculator" && <CalculatorContent />}
         {tab === "statistieken" && <StatistiekenContent />}
+        {tab === "molibox" && <MoliboxPage />}
         {tab === "social" && (
           <PlaceholderTab
             icon={Share2}
