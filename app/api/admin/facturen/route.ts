@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const rows = await sql`SELECT * FROM facturen ORDER BY datum DESC`;
+    // Sorteer op factuurnummer (sequentieel, betrouwbaar) i.p.v. op de datum-tekst,
+    // want "31-5-2026" sorteert als tekst verkeerd t.o.v. "3-6-2026".
+    const rows = await sql`SELECT * FROM facturen ORDER BY factuur_nr DESC`;
     return Response.json(rows);
   } catch {
     return Response.json([], { status: 200 });

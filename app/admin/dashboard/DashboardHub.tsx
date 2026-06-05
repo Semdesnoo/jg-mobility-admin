@@ -2040,7 +2040,7 @@ function FacturenContent() {
       return datum.getFullYear() === nu.getFullYear();
     }
     return true;
-  });
+  }).sort((a, b) => b.factuur_nr.localeCompare(a.factuur_nr)); // op nummer, nieuwste boven (ongeacht status)
 
   // ── Lijstweergave ───────────────────────────────────────────
   return (
