@@ -180,7 +180,9 @@ Geef daarna de versie, transmissie, omschrijving en volledige optielijst als JSO
       return Response.json({ error: "AI gaf geen geldig JSON terug" }, { status: 500 });
     }
 
-    return Response.json(JSON.parse(jsonText));
+    // Web search voegt citatie-markup toe (<cite index="...">...</cite>); die strippen we eruit.
+    const schoon = jsonText.replace(/<cite\b[^>]*>/gi, "").replace(/<\/cite>/gi, "");
+    return Response.json(JSON.parse(schoon));
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });
   }

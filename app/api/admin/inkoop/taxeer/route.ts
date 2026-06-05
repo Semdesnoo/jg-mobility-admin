@@ -100,11 +100,13 @@ Regels:
     return Response.json({ error: "Kon marktdata niet ophalen", raw: tekst.slice(0, 300) }, { status: 422 });
   }
 
+  // Web search voegt citatie-markup toe (<cite index="...">...</cite>); die strippen we eruit.
+  const schoon = jsonText.replace(/<cite\b[^>]*>/gi, "").replace(/<\/cite>/gi, "");
   let markt: Record<string, number | string>;
   try {
-    markt = JSON.parse(jsonText);
+    markt = JSON.parse(schoon);
   } catch {
-    return Response.json({ error: "Ongeldige marktdata", raw: jsonText.slice(0, 300) }, { status: 422 });
+    return Response.json({ error: "Ongeldige marktdata", raw: schoon.slice(0, 300) }, { status: 422 });
   }
 
   const gemiddeld = Number(markt.gemiddelde_prijs) || 0;

@@ -111,10 +111,12 @@ export async function POST(req: Request) {
     return Response.json({ error: "Kon marktdata niet ophalen", raw: tekst.slice(0, 300) }, { status: 422 });
   }
 
+  // Web search voegt citatie-markup toe (<cite index="...">...</cite>); die strippen we eruit.
+  const schoon = jsonText.replace(/<cite\b[^>]*>/gi, "").replace(/<\/cite>/gi, "");
   try {
-    const data = JSON.parse(jsonText);
+    const data = JSON.parse(schoon);
     return Response.json({ ...data, gegenereerd_op: new Date().toISOString(), type, zoekterm });
   } catch {
-    return Response.json({ error: "Ongeldige data van AI", raw: jsonText.slice(0, 300) }, { status: 422 });
+    return Response.json({ error: "Ongeldige data van AI", raw: schoon.slice(0, 300) }, { status: 422 });
   }
 }
