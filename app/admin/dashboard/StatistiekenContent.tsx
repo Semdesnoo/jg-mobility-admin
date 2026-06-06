@@ -35,8 +35,10 @@ const MERK_KLEUREN = ["#2563eb", "#15803d", "#d97706", "#7c3aed", "#0891b2", "#d
 
 const fmtEur = (v: number) => `€${v.toLocaleString("nl-NL", { maximumFractionDigits: 0 })}`;
 const fmtDagen = (n: number | null) => (n == null ? "—" : `${n} ${n === 1 ? "dag" : "dagen"}`);
-// Kleurschaal voor standtijd: vers (groen) → te lang (rood)
+// Kleurschaal voor standtijd: vers (groen) → te lang (rood). Felle variant voor
+// decoratieve balken/stippen; donkere variant voor het getal als tekst (leesbaar op wit).
 const standtijdKleur = (d: number) => (d >= 90 ? "#dc2626" : d >= 60 ? "#ea580c" : d >= 30 ? "#ca8a04" : "#16a34a");
+const standtijdTekstKleur = (d: number) => (d >= 90 ? "#b91c1c" : d >= 60 ? "#c2410c" : d >= 30 ? "#b45309" : "#15803d");
 
 function BarChart({ data, formatter, color = "#001337" }: { data: Record<string, number>; formatter: (v: number) => string; color?: string }) {
   const nu = new Date();
@@ -221,7 +223,7 @@ export default function StatistiekenContent() {
                           <div className="flex-1 h-2 overflow-hidden" style={{ backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 99 }}>
                             <div className="h-full" style={{ width: `${Math.max(Math.round((a.dagen / max) * 100), 6)}%`, backgroundColor: kleur, borderRadius: 99 }} />
                           </div>
-                          <span className="text-sm font-bold flex-shrink-0" style={{ color: kleur, fontFamily: "var(--font-inter)", minWidth: 70, textAlign: "right" }}>{fmtDagen(a.dagen)}</span>
+                          <span className="text-sm font-bold flex-shrink-0" style={{ color: standtijdTekstKleur(a.dagen), fontFamily: "var(--font-inter)", minWidth: 70, textAlign: "right" }}>{fmtDagen(a.dagen)}</span>
                         </div>
                       );
                     })}
@@ -253,7 +255,7 @@ export default function StatistiekenContent() {
                           </td>
                           <td className="px-3 py-2.5 text-sm text-right font-semibold" style={{ color: "#2563eb" }}>{m.voorraad}</td>
                           <td className="px-3 py-2.5 text-sm text-right font-semibold" style={{ color: "#15803d" }}>{m.verkocht}</td>
-                          <td className="px-3 py-2.5 text-sm text-right font-semibold" style={{ color: m.gemStandtijd != null ? standtijdKleur(m.gemStandtijd) : "rgba(0,19,55,0.4)" }}>{fmtDagen(m.gemStandtijd)}</td>
+                          <td className="px-3 py-2.5 text-sm text-right font-semibold" style={{ color: m.gemStandtijd != null ? standtijdTekstKleur(m.gemStandtijd) : "rgba(0,19,55,0.4)" }}>{fmtDagen(m.gemStandtijd)}</td>
                         </tr>
                       ))}
                     </tbody>
