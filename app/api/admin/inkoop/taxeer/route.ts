@@ -21,19 +21,19 @@ function extractLaatsteJson(text: string): string | null {
 
 // Eén markt-analyse. useWebSearch=true gebruikt de server-side web_search (handelt pause_turn af);
 // false valt terug op modelkennis (een schatting zonder live advertenties).
-async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boolean): Promise<string> {
+async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boolean, signal?: AbortSignal): Promise<string> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
   let laatsteTekst = "";
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const resp = await client.messages.create({
       // Sonnet: betrouwbaarder met web search + nauwkeuriger redeneren dan Haiku (accuratere taxatie).
       model: "claude-sonnet-4-6",
-      max_tokens: 6000,
+      max_tokens: 4500,
       ...(useWebSearch
-        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 6 }] }
+        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 4 }] }
         : {}),
       messages,
-    });
+    }, signal ? { signal } : undefined);
     const rondeTekst = resp.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
@@ -132,10 +132,17 @@ Regels:
 
   const client = new Anthropic({ apiKey });
 
-  // Eerst met web search; geen bruikbare JSON of een fout → terugval op modelkennis.
+  // Eerst met web search, met een harde 48s-grens (Vercel kapt de functie op 60s af).
+  // Duurt het zoeken te lang of mislukt het → snelle terugval op modelkennis binnen de marge.
   let tekst = "";
   try {
-    tekst = await vraagMarkt(client, prompt, true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 48000);
+    try {
+      tekst = await vraagMarkt(client, prompt, true, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
     if (!extractLaatsteJson(tekst)) tekst = await vraagMarkt(client, prompt, false);
   } catch {
     tekst = await vraagMarkt(client, prompt, false);

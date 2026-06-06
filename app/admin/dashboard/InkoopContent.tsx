@@ -294,7 +294,7 @@ function TaxatieTab() {
           </button>
           {laden && (
             <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-              Claude zoekt live op Marktplaats, AutoScout24, Gaspedaal & meer... (~30-60 sec)
+              Claude zoekt live op Marktplaats, AutoScout24, Gaspedaal & meer... (~20-45 sec)
             </p>
           )}
           {resultaat && (
