@@ -11,11 +11,16 @@ type RdwData = {
   brandstof: string; bodytype: string; apk: string; vermogen: string;
 };
 
+type Vergelijkbaar = { titel: string; bouwjaar?: number; km?: number; prijs: number; platform?: string };
+
 type MarktData = {
   gemiddelde_prijs: number; min_prijs: number; max_prijs: number;
   aantal_aanbod: number; prijs_trend: string;
   marktplaats_gemiddeld?: number; autoscout_gemiddeld?: number;
   vraag_score: number; advies: string;
+  betrouwbaarheid?: "hoog" | "midden" | "laag";
+  aantal_gevonden?: number;
+  vergelijkbare?: Vergelijkbaar[];
 };
 
 type Berekening = {
@@ -129,8 +134,8 @@ function TaxatieTab() {
   const [rdwLaden, setRdwLaden]           = useState(false);
   const [rdwFout, setRdwFout]             = useState<string | null>(null);
   const [km, setKm]                       = useState("");
-  const [gewensteMarge, setGewensteMarge] = useState(15);
-  const [geschatteKosten, setGeschatteKosten] = useState(600);
+  const [gewensteMarge, setGewensteMarge] = useState(10);
+  const [geschatteKosten, setGeschatteKosten] = useState(0);
   const [laden, setLaden]                 = useState(false);
   const [resultaat, setResultaat]         = useState<{ markt: MarktData; berekening: Berekening } | null>(null);
   const [fout, setFout]                   = useState<string | null>(null);
@@ -159,7 +164,7 @@ function TaxatieTab() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         merk: rdw.merk, model: rdw.model, bouwjaar: rdw.bouwjaar,
-        km, brandstof: rdw.brandstof,
+        km, brandstof: rdw.brandstof, vermogen: rdw.vermogen, bodytype: rdw.bodytype,
         gewenste_marge: gewensteMarge,
         geschatte_kosten: geschatteKosten,
       }),
@@ -285,7 +290,7 @@ function TaxatieTab() {
           </button>
           {laden && (
             <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-              Claude zoekt live op Marktplaats & AutoScout24... (~15 sec)
+              Claude zoekt live op Marktplaats, AutoScout24, Gaspedaal & meer... (~30-60 sec)
             </p>
           )}
           {resultaat && (
@@ -313,10 +318,21 @@ function TaxatieTab() {
             <div style={{ backgroundColor: "#001337" }}>
               <div className="px-5 py-3 flex items-center justify-between"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                <p className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>
-                  Prijsadvies — {rdw?.merk} {rdw?.model} {rdw?.bouwjaar}
-                </p>
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider"
+                    style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>
+                    Prijsadvies — {rdw?.merk} {rdw?.model} {rdw?.bouwjaar}
+                  </p>
+                  {resultaat.markt.betrouwbaarheid && (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 self-start" style={{
+                      backgroundColor: resultaat.markt.betrouwbaarheid === "hoog" ? "rgba(74,222,128,0.15)" : resultaat.markt.betrouwbaarheid === "midden" ? "rgba(251,191,36,0.15)" : "rgba(248,113,113,0.15)",
+                      color: resultaat.markt.betrouwbaarheid === "hoog" ? "#4ade80" : resultaat.markt.betrouwbaarheid === "midden" ? "#fbbf24" : "#f87171",
+                      fontFamily: "var(--font-inter)", borderRadius: 4,
+                    }}>
+                      ● Betrouwbaarheid: {resultaat.markt.betrouwbaarheid}{resultaat.markt.aantal_gevonden ? ` · ${resultaat.markt.aantal_gevonden} advertenties` : ""}
+                    </span>
+                  )}
+                </div>
                 <ScoreRing score={resultaat.berekening.aantrekkelijkheid} />
               </div>
               <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -469,6 +485,47 @@ function TaxatieTab() {
                 </div>
               </div>
             </div>
+
+            {/* Gevonden vergelijkbare advertenties — de basis van de taxatie */}
+            {resultaat.markt.vergelijkbare && resultaat.markt.vergelijkbare.length > 0 && (
+              <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-2" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+                  <p className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+                    Gevonden vergelijkbare auto&apos;s
+                  </p>
+                  <span className="text-xs" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                    {resultaat.markt.aantal_gevonden ?? resultaat.markt.vergelijkbare.length} advertenties · basis van deze taxatie
+                  </span>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1.5px solid rgba(0,19,55,0.1)" }}>
+                        {["Advertentie", "Bouwjaar", "Km", "Platform", "Vraagprijs"].map((h, i) => (
+                          <th key={h} className="px-5 py-2.5" style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase", color: "rgba(0,19,55,0.45)", textAlign: i === 4 ? "right" : i >= 1 ? "center" : "left", whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultaat.markt.vergelijkbare.map((v, i) => (
+                        <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                          <td className="px-5 py-2.5 text-xs font-semibold" style={{ color: "#001337" }}>{v.titel}</td>
+                          <td className="px-5 py-2.5 text-xs text-center" style={{ color: "#475569" }}>{v.bouwjaar ?? "—"}</td>
+                          <td className="px-5 py-2.5 text-xs text-center" style={{ color: "#475569" }}>{v.km != null ? `${v.km.toLocaleString("nl-NL")} km` : "—"}</td>
+                          <td className="px-5 py-2.5 text-xs text-center" style={{ color: "#475569" }}>{v.platform ?? "—"}</td>
+                          <td className="px-5 py-2.5 text-sm text-right font-bold" style={{ color: "#001337" }}>{fmt(v.prijs)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-5 py-3" style={{ borderTop: "1px solid rgba(0,19,55,0.07)", backgroundColor: "rgba(0,19,55,0.02)" }}>
+                  <p className="text-[11px] leading-relaxed" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                    Dit zijn de daadwerkelijk online gevonden advertenties waarop de taxatie is gebaseerd. Controleer ze zelf voor 100% zekerheid — staat, opties, historie en regio kunnen de prijs beïnvloeden.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Opslaan */}
             <div className="flex items-center gap-3">
