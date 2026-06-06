@@ -23,6 +23,9 @@ import {
   Search,
   Pencil,
   LayoutGrid,
+  CheckCircle2,
+  Package,
+  Wallet,
 } from "lucide-react";
 import GmailWidget from "./GmailWidget";
 import DeleteButton from "./DeleteButton";
@@ -141,23 +144,49 @@ function PageHeader({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  accent = "#001337",
+}: {
+  label: string;
+  value: string | number;
+  icon?: React.ComponentType<IconProps>;
+  accent?: string;
+}) {
   return (
     <div
-      className="p-6"
-      style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
+      className="relative p-5 md:p-6 overflow-hidden transition-all duration-200 hover:-translate-y-0.5"
+      style={{
+        backgroundColor: "#ffffff",
+        border: "1px solid rgba(0,19,55,0.07)",
+        boxShadow: "0 1px 3px rgba(0,19,55,0.05)",
+      }}
     >
+      {/* accentstreep links */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: accent }} />
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wider"
+          style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}
+        >
+          {label}
+        </p>
+        {Icon && (
+          <div
+            className="flex items-center justify-center flex-shrink-0"
+            style={{ width: 30, height: 30, backgroundColor: `${accent}14`, borderRadius: 8 }}
+          >
+            <Icon size={15} style={{ color: accent }} />
+          </div>
+        )}
+      </div>
       <p
-        className="text-3xl font-bold mb-1"
+        className="text-2xl md:text-[28px] font-bold leading-none"
         style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
       >
         {value}
-      </p>
-      <p
-        className="text-xs"
-        style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}
-      >
-        {label}
       </p>
     </div>
   );
@@ -542,24 +571,28 @@ function DashboardContent({
       <div className="p-4 md:p-8 flex flex-col gap-5 md:gap-7">
         {/* Statistieken */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="In aanbod" value={beschikbaar.length} />
-          <StatCard label="Verkocht" value={verkocht.length} />
-          <StatCard label="Totaal voertuigen" value={autos.length} />
+          <StatCard label="In aanbod" value={beschikbaar.length} icon={Car} accent="#15803d" />
+          <StatCard label="Verkocht" value={verkocht.length} icon={CheckCircle2} accent="#1d4ed8" />
+          <StatCard label="Totaal voertuigen" value={autos.length} icon={Package} accent="#7c3aed" />
           <StatCard
             label="Totale voorraadwaarde"
             value={totaalWaarde ? `€${totaalWaarde.toLocaleString("nl-NL")}` : "—"}
+            icon={Wallet}
+            accent="#b45309"
           />
         </div>
 
         {/* Mail (links) + Calculator (rechts) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-7 items-start">
           <GmailWidget />
-          <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+          <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
             <div
-              className="px-5 py-4 flex items-center gap-2"
+              className="px-5 py-4 flex items-center gap-2.5"
               style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}
             >
-              <Calculator size={15} style={{ color: "#001337" }} />
+              <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
+                <Calculator size={14} style={{ color: "#001337" }} />
+              </div>
               <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
                 Marge Calculator
               </h2>
@@ -576,15 +609,21 @@ function DashboardContent({
         {/* Voorraad — volle breedte */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-              Voorraad
-            </h3>
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
+                <Car size={14} style={{ color: "#001337" }} />
+              </div>
+              <h3 className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                Voorraad
+              </h3>
+              <span className="text-[11px] font-semibold px-2 py-0.5" style={{ backgroundColor: "rgba(0,19,55,0.05)", color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", borderRadius: 6 }}>{autos.length}</span>
+            </div>
             <Link
               href="/admin/auto-toevoegen"
-              className="flex items-center gap-1.5 text-xs font-medium transition-all hover:opacity-60"
-              style={{ color: "#001337", fontFamily: "var(--font-inter)" }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90"
+              style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
             >
-              <Plus size={11} /> Nieuwe auto
+              <Plus size={12} /> Nieuwe auto
             </Link>
           </div>
           {autos.length === 0 ? (
@@ -3074,9 +3113,11 @@ function KentekenWidget() {
   ].filter(([, v]) => v) as [string, string][] : [];
 
   return (
-    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
-      <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
-        <Search size={15} style={{ color: "#001337" }} />
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+      <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+        <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
+          <Search size={14} style={{ color: "#001337" }} />
+        </div>
         <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Kenteken Check</h2>
       </div>
       <div className="p-4">

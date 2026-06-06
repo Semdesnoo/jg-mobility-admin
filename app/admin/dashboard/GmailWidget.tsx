@@ -117,7 +117,7 @@ export default function GmailWidget() {
     return (
       <div
         className="p-6"
-        style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", minHeight: "400px" }}
+        style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", minHeight: "400px" }}
       >
         <div className="flex items-center gap-2 mb-5">
           <Mail size={15} style={{ color: "#001337" }} />
@@ -175,7 +175,7 @@ export default function GmailWidget() {
   return (
     <div
       className="flex flex-col"
-      style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", minHeight: "400px" }}
+      style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", minHeight: "400px" }}
     >
       {/* Header */}
       <div
