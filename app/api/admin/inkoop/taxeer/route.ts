@@ -30,7 +30,7 @@ async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boole
       model: useWebSearch ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001",
       max_tokens: useWebSearch ? 4500 : 2500,
       ...(useWebSearch
-        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 4 }] }
+        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 3 }] }
         : {}),
       messages,
     }, signal ? { signal } : undefined);
@@ -132,17 +132,22 @@ Regels:
 
   const client = new Anthropic({ apiKey });
 
-  // Web search met een HARDE 40s-grens via Promise.race (Vercel kapt de functie op 60s af).
-  // Wint de timeout, dan stoppen we de zoek-call en vallen snel terug op modelkennis (Haiku),
-  // zodat er altijd binnen de limiet een antwoord komt — nooit meer een 504.
+  // Eenvoudige, betrouwbare terugval-prompt (modelkennis) voor als het live zoeken te traag is.
+  const fallbackPrompt = `Je bent een Nederlandse auto-taxateur. Schat de marktwaarde van een ${merk} ${model}, bouwjaar ${bouwjaar}${kmTxt}${specsTxt}${bodyTxt} op de Nederlandse occasionmarkt, op basis van je eigen kennis (niet live zoeken).
+Geef UITSLUITEND dit JSON-object met realistische gehele getallen:
+{"gemiddelde_prijs": 0, "min_prijs": 0, "max_prijs": 0, "aantal_aanbod": 0, "prijs_trend": "stabiel", "vraag_score": 5, "betrouwbaarheid": "laag", "aantal_gevonden": 0, "vergelijkbare": [], "advies": "Schatting op basis van kennis; geen live advertenties opgehaald."}`;
+
+  // Web search met een HARDE 48s-grens via Promise.race (Vercel kapt de functie op 60s af).
+  // Wint de timeout, dan stoppen we de zoek-call en vallen snel terug op een kennis-schatting,
+  // zodat er ALTIJD binnen de limiet een bruikbaar antwoord komt — nooit meer een 504.
   let tekst = "";
   const controller = new AbortController();
   const webSearch = vraagMarkt(client, prompt, true, controller.signal).catch(() => "");
-  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 40000));
+  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 48000));
   tekst = await Promise.race([webSearch, timeout]);
   controller.abort();
   if (!extractLaatsteJson(tekst)) {
-    tekst = await vraagMarkt(client, prompt, false);
+    tekst = await vraagMarkt(client, fallbackPrompt, false);
   }
 
   const jsonText = extractLaatsteJson(tekst);
