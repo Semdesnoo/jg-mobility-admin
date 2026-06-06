@@ -56,7 +56,7 @@ function BarChart({ data, formatter, color = "#001337" }: { data: Record<string,
       {maanden.map((m, i) => {
         const v = waarden[i];
         const hoogte = Math.max((v / max) * 100, v > 0 ? 4 : 0);
-        const [jaar, maandNr] = m.split("-");
+        const maandNr = m.split("-")[1];
         const isHuidig = m === huidig;
         return (
           <div key={m} className="flex-1 flex flex-col items-center gap-1 group relative">
@@ -83,7 +83,6 @@ function BarChart({ data, formatter, color = "#001337" }: { data: Record<string,
             <p className="text-[9px]" style={{ color: isHuidig ? color : "rgba(0,19,55,0.35)", fontWeight: isHuidig ? 700 : 400, fontFamily: "var(--font-inter)" }}>
               {MAAND_NAMEN[parseInt(maandNr) - 1]}
             </p>
-            {i === 11 && <p className="text-[9px]" style={{ color: "rgba(0,19,55,0.25)", fontFamily: "var(--font-inter)" }}>{jaar}</p>}
           </div>
         );
       })}
