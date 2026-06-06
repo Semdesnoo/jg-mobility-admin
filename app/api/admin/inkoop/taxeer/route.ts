@@ -26,9 +26,9 @@ async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boole
   let laatsteTekst = "";
   for (let i = 0; i < 4; i++) {
     const resp = await client.messages.create({
-      // Sonnet: betrouwbaarder met web search + nauwkeuriger redeneren dan Haiku (accuratere taxatie).
-      model: "claude-sonnet-4-6",
-      max_tokens: 4500,
+      // Sonnet + web search voor de echte taxatie; bij terugval snel Haiku zonder tools (modelkennis).
+      model: useWebSearch ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001",
+      max_tokens: useWebSearch ? 4500 : 2500,
       ...(useWebSearch
         ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 4 }] }
         : {}),
@@ -132,19 +132,16 @@ Regels:
 
   const client = new Anthropic({ apiKey });
 
-  // Eerst met web search, met een harde 48s-grens (Vercel kapt de functie op 60s af).
-  // Duurt het zoeken te lang of mislukt het → snelle terugval op modelkennis binnen de marge.
+  // Web search met een HARDE 40s-grens via Promise.race (Vercel kapt de functie op 60s af).
+  // Wint de timeout, dan stoppen we de zoek-call en vallen snel terug op modelkennis (Haiku),
+  // zodat er altijd binnen de limiet een antwoord komt — nooit meer een 504.
   let tekst = "";
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 48000);
-    try {
-      tekst = await vraagMarkt(client, prompt, true, controller.signal);
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!extractLaatsteJson(tekst)) tekst = await vraagMarkt(client, prompt, false);
-  } catch {
+  const controller = new AbortController();
+  const webSearch = vraagMarkt(client, prompt, true, controller.signal).catch(() => "");
+  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 40000));
+  tekst = await Promise.race([webSearch, timeout]);
+  controller.abort();
+  if (!extractLaatsteJson(tekst)) {
     tekst = await vraagMarkt(client, prompt, false);
   }
 
