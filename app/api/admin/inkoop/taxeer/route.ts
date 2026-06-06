@@ -48,11 +48,32 @@ async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boole
   return laatsteTekst;
 }
 
+// ── Koerslijst-waardebepaling (afschrijvingsmodel op de RDW-catalogusprijs) ──
+// Aandeel van de nieuwprijs (incl. BTW/BPM) dat een occasion gemiddeld nog waard is per
+// leeftijd in jaren — benadering van de Nederlandse afschrijvingscurve.
+function retentieFactor(leeftijdJaren: number): number {
+  const curve = [1.0, 0.78, 0.66, 0.56, 0.48, 0.42, 0.36, 0.31, 0.27, 0.235, 0.20, 0.175, 0.15, 0.13, 0.115, 0.10];
+  if (leeftijdJaren <= 0) return 1.0;
+  if (leeftijdJaren >= 15) return 0.09;
+  const i = Math.floor(leeftijdJaren);
+  const frac = leeftijdJaren - i;
+  return curve[i] + (curve[i + 1] - curve[i]) * frac;
+}
+
+// Correctie voor kilometerstand t.o.v. het verwachte aantal (~14.000 km/jaar in NL).
+function kmFactor(km: number, leeftijdJaren: number): number {
+  if (!km || km <= 0) return 1.0;
+  const verwacht = Math.max(leeftijdJaren, 0.5) * 14000;
+  const afwijking = km - verwacht; // positief = bovengemiddeld → lagere waarde
+  const pct = -(afwijking / 30000) * 0.06; // ~6% per 30.000 km afwijking
+  return Math.max(0.75, Math.min(1.25, 1 + pct));
+}
+
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
 
-  const { merk, model, bouwjaar, km, brandstof, vermogen, bodytype, gewenste_marge = 10, geschatte_kosten = 0 } = await req.json();
+  const { merk, model, bouwjaar, km, brandstof, vermogen, bodytype, catalogusprijs = 0, gewenste_marge = 10, geschatte_kosten = 0 } = await req.json();
 
   if (!merk || !model || !bouwjaar) {
     return Response.json({ error: "Merk, model en bouwjaar zijn verplicht" }, { status: 400 });
@@ -124,14 +145,43 @@ Regels:
     return Response.json({ error: "Ongeldige marktdata", raw: schoon.slice(0, 300) }, { status: 422 });
   }
 
-  const gemiddeld = Number(markt.gemiddelde_prijs) || 0;
   const margeDecimaal = gewenste_marge / 100;
+  const huidigJaar = new Date().getFullYear();
+  const leeftijd = bouwjaar ? Math.max(0, huidigJaar - Number(bouwjaar)) : 0;
+  const kmNum = parseInt(String(km)) || 0;
+  const catalogus = Number(catalogusprijs) || 0;
 
-  // Aanbevolen inkoopprijs: gemiddelde_marktprijs × (1 - marge%) - geschatte_kosten
-  const maxInkoop = Math.round(gemiddeld * (1 - margeDecimaal) - geschatte_kosten);
-  const verwachteVerkoop = Math.round(gemiddeld * 0.97); // licht onder marktgemiddeld voor snelle verkoop
+  // 1) Koerslijst-waarde uit de RDW-nieuwprijs (afschrijving + km-correctie).
+  const koerslijstWaarde = catalogus > 0
+    ? Math.round(catalogus * retentieFactor(leeftijd) * kmFactor(kmNum, leeftijd))
+    : 0;
+
+  // 2) Live marktwaarde uit de gevonden advertenties (vraagprijzen liggen ~4% boven verkoop).
+  const marktGemiddeld = Number(markt.gemiddelde_prijs) || 0;
+  const marktVerkoop = marktGemiddeld > 0 ? Math.round(marktGemiddeld * 0.96) : 0;
+
+  // 3) Blend: veel advertenties → live markt zwaarder; weinig/geen → koerslijst (afschrijving)
+  //    vangt het op (precies waar 'advertenties middelen' faalt bij zeldzame auto's).
+  const aantalGevonden = Number(markt.aantal_gevonden) || 0;
+  let wMarkt = 0, wKoers = 0;
+  if (marktVerkoop > 0 && koerslijstWaarde > 0) {
+    if (aantalGevonden >= 5) { wMarkt = 0.70; wKoers = 0.30; }
+    else if (aantalGevonden >= 2) { wMarkt = 0.55; wKoers = 0.45; }
+    else { wMarkt = 0.35; wKoers = 0.65; }
+  } else if (marktVerkoop > 0) { wMarkt = 1; }
+  else if (koerslijstWaarde > 0) { wKoers = 1; }
+
+  const verwachteVerkoop =
+    Math.round(marktVerkoop * wMarkt + koerslijstWaarde * wKoers) || marktVerkoop || koerslijstWaarde || marktGemiddeld;
+
+  const bron = koerslijstWaarde > 0 && marktVerkoop > 0 ? "koerslijst + live markt"
+    : koerslijstWaarde > 0 ? "koerslijst (RDW-nieuwprijs)"
+    : "live markt";
+
+  // 4) Max inkoop = verkoopwaarde − marge − kosten.
+  const maxInkoop = Math.round(verwachteVerkoop * (1 - margeDecimaal) - geschatte_kosten);
   const geschatteMarge = verwachteVerkoop - maxInkoop - geschatte_kosten;
-  const margePercentage = gemiddeld > 0 ? Math.round((geschatteMarge / verwachteVerkoop) * 100) : 0;
+  const margePercentage = verwachteVerkoop > 0 ? Math.round((geschatteMarge / verwachteVerkoop) * 100) : 0;
 
   const vraagScore = Number(markt.vraag_score) || 5;
   const aantalAanbod = Number(markt.aantal_aanbod) || 0;
@@ -151,6 +201,10 @@ Regels:
       geschatte_kosten,
       gewenste_marge,
       aantrekkelijkheid: Math.min(10, Math.max(1, aantrekkelijkheid)),
+      catalogusprijs: catalogus,
+      koerslijst_waarde: koerslijstWaarde,
+      markt_waarde: marktVerkoop,
+      bron,
     },
   });
 }

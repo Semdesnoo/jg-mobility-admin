@@ -9,6 +9,7 @@ import MarktoverzichtTab from "./MarktoverzichtTab";
 type RdwData = {
   merk: string; model: string; bouwjaar: number; kleur: string;
   brandstof: string; bodytype: string; apk: string; vermogen: string;
+  catalogusprijs?: number;
 };
 
 type Vergelijkbaar = { titel: string; bouwjaar?: number; km?: number; prijs: number; platform?: string };
@@ -28,6 +29,8 @@ type Berekening = {
   geschatte_marge: number; marge_percentage: number;
   geschatte_kosten: number; gewenste_marge: number;
   aantrekkelijkheid: number;
+  catalogusprijs?: number; koerslijst_waarde?: number; markt_waarde?: number;
+  bron?: string;
 };
 
 type InkoopDossier = {
@@ -165,6 +168,7 @@ function TaxatieTab() {
       body: JSON.stringify({
         merk: rdw.merk, model: rdw.model, bouwjaar: rdw.bouwjaar,
         km, brandstof: rdw.brandstof, vermogen: rdw.vermogen, bodytype: rdw.bodytype,
+        catalogusprijs: rdw.catalogusprijs,
         gewenste_marge: gewensteMarge,
         geschatte_kosten: geschatteKosten,
       }),
@@ -356,6 +360,38 @@ function TaxatieTab() {
               </div>
             </div>
 
+            {/* Koerslijst-opbouw — hoe de waarde is bepaald (nieuwprijs → afschrijving → live markt) */}
+            <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+              <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-2" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Koerslijst-opbouw</p>
+                {resultaat.berekening.bron && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5" style={{ backgroundColor: "rgba(0,19,55,0.05)", color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", borderRadius: 4 }}>
+                    bron: {resultaat.berekening.bron}
+                  </span>
+                )}
+              </div>
+              <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Nieuwprijs (RDW)",     value: resultaat.berekening.catalogusprijs ? fmt(resultaat.berekening.catalogusprijs) : "—", sub: "catalogusprijs",        accent: "#64748b" },
+                  { label: "Koerslijst-waarde",    value: resultaat.berekening.koerslijst_waarde ? fmt(resultaat.berekening.koerslijst_waarde) : "—", sub: "na afschrijving + km", accent: "#7c3aed" },
+                  { label: "Live marktwaarde",     value: resultaat.berekening.markt_waarde ? fmt(resultaat.berekening.markt_waarde) : "—",      sub: "uit advertenties",     accent: "#0d9488" },
+                  { label: "Geadviseerde verkoop", value: fmt(resultaat.berekening.verwachte_verkoop),                                          sub: "blend van beide",      accent: "#15803d" },
+                ].map((s) => (
+                  <div key={s.label} className="relative p-3 overflow-hidden" style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.06)" }}>
+                    <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: s.accent }} />
+                    <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{s.label}</p>
+                    <p className="text-lg font-bold leading-none" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>{s.value}</p>
+                    <p className="text-[9px] mt-1" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>{s.sub}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-3" style={{ borderTop: "1px solid rgba(0,19,55,0.07)", backgroundColor: "rgba(0,19,55,0.02)" }}>
+                <p className="text-[11px] leading-relaxed" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                  De koerslijst-waarde komt uit de RDW-nieuwprijs met een afschrijvings- en kilometercorrectie; de live marktwaarde uit de gevonden advertenties. De geadviseerde verkoopprijs is een gewogen combinatie — bij weinig advertenties weegt de koerslijst zwaarder.
+                </p>
+              </div>
+            </div>
+
             {/* Marktdata */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
@@ -469,7 +505,7 @@ function TaxatieTab() {
                     <table className="w-full text-xs" style={{ fontFamily: "var(--font-inter)" }}>
                       <tbody>
                         {[
-                          ["Marktprijs gemiddeld",  fmt(resultaat.markt.gemiddelde_prijs), false],
+                          ["Geadviseerde verkoop",  fmt(resultaat.berekening.verwachte_verkoop), false],
                           ["Gewenste marge",        `${resultaat.berekening.gewenste_marge}%`, false],
                           ["Geschatte kosten",      `− ${fmt(resultaat.berekening.geschatte_kosten)}`, false],
                           ["= Max inkoopprijs",     fmt(resultaat.berekening.max_inkoop), true],

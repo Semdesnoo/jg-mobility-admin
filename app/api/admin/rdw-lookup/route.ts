@@ -89,6 +89,11 @@ export async function GET(request: NextRequest) {
     const aantalDeuren = v.aantal_deuren ?? "";
     const aantalCilinders = v.aantal_cilinders ?? "";
 
+    // Catalogusprijs = originele nieuwprijs incl. BTW/BPM. Ankerwaarde voor de koerslijst-
+    // berekening (afschrijving). Niet elk voertuig heeft het (import/ouder) → dan 0.
+    const catalogusprijs = v.catalogusprijs ? parseInt(v.catalogusprijs) : 0;
+    const datumEersteToelating = v.datum_eerste_toelating ? String(v.datum_eerste_toelating) : "";
+
     return Response.json({
       kenteken,
       merk,
@@ -102,6 +107,8 @@ export async function GET(request: NextRequest) {
       cilinderinhoud,
       aantalDeuren,
       aantalCilinders,
+      catalogusprijs,
+      datumEersteToelating,
     });
   } catch {
     return Response.json({ error: "RDW opzoeking mislukt" }, { status: 500 });
