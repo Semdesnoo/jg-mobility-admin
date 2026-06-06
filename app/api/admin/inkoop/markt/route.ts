@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 90;
+export const maxDuration = 60;
 
 const JSON_VORM = `{
   "samenvatting": "2-3 zinnen actueel marktoverzicht in het Nederlands",
@@ -62,18 +62,18 @@ function extractLaatsteJson(text: string): string | null {
 
 // Eén analyse. useWebSearch=true gebruikt de server-side web_search (handelt pause_turn af);
 // false valt terug op modelkennis.
-async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boolean): Promise<string> {
+async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boolean, signal?: AbortSignal): Promise<string> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
   let laatsteTekst = "";
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const resp = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 6000,
       ...(useWebSearch
-        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 5 }] }
+        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 4 }] }
         : {}),
       messages,
-    });
+    }, signal ? { signal } : undefined);
     const rondeTekst = resp.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
@@ -97,12 +97,17 @@ export async function POST(req: Request) {
 
   const client = new Anthropic({ apiKey });
 
-  // Eerst met web search; geen bruikbare JSON of een fout → terugval op modelkennis.
+  // Web search met een HARDE 42s-grens via Promise.race (Vercel kapt de functie op 60s af).
+  // Wint de timeout, dan stoppen we het zoeken en vallen terug op modelkennis binnen de marge —
+  // altijd een antwoord, nooit een 504. 'live' = de live-zoekopdracht leverde bruikbare data.
   let tekst = "";
-  try {
-    tekst = await vraagMarkt(client, prompt, true);
-    if (!extractLaatsteJson(tekst)) tekst = await vraagMarkt(client, prompt, false);
-  } catch {
+  const controller = new AbortController();
+  const webSearch = vraagMarkt(client, prompt, true, controller.signal).catch(() => "");
+  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 42000));
+  tekst = await Promise.race([webSearch, timeout]);
+  controller.abort();
+  let live = !!extractLaatsteJson(tekst);
+  if (!live) {
     tekst = await vraagMarkt(client, prompt, false);
   }
 
@@ -115,7 +120,7 @@ export async function POST(req: Request) {
   const schoon = jsonText.replace(/<cite\b[^>]*>/gi, "").replace(/<\/cite>/gi, "");
   try {
     const data = JSON.parse(schoon);
-    return Response.json({ ...data, gegenereerd_op: new Date().toISOString(), type, zoekterm });
+    return Response.json({ ...data, gegenereerd_op: new Date().toISOString(), type, zoekterm, live });
   } catch {
     return Response.json({ error: "Ongeldige data van AI", raw: schoon.slice(0, 300) }, { status: 422 });
   }

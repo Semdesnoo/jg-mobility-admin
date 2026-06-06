@@ -22,6 +22,7 @@ type MarktData = {
   gegenereerd_op: string;
   type: string;
   zoekterm?: string;
+  live?: boolean;
 };
 
 const S = {
@@ -176,9 +177,18 @@ export default function MarktoverzichtTab() {
                 <p className="text-sm max-w-2xl" style={{ color: "rgba(0,19,55,0.65)", fontFamily: "var(--font-inter)", lineHeight: 1.7 }}>
                   {data.samenvatting}
                 </p>
-                <p className="text-[10px] mt-1.5" style={S.label}>
-                  Gegenereerd op {new Date(data.gegenereerd_op).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" })}
-                </p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5" style={{
+                    backgroundColor: data.live === false ? "#fef3c7" : "#dcfce7",
+                    color: data.live === false ? "#b45309" : "#15803d",
+                    fontFamily: "var(--font-inter)", borderRadius: 4,
+                  }}>
+                    ● {data.live === false ? "Kennis-schatting (live zoeken was te traag)" : "Live data"}
+                  </span>
+                  <p className="text-[10px]" style={S.label}>
+                    Gegenereerd op {new Date(data.gegenereerd_op).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" })}
+                  </p>
+                </div>
               </div>
               <button type="button" onClick={() => analyseer(data.type === "zoek" ? "zoek" : "puls")} disabled={laden}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all hover:opacity-70 disabled:opacity-40 flex-shrink-0"
