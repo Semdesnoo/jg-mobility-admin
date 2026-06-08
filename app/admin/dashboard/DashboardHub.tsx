@@ -805,6 +805,8 @@ function PrijsBewerk({ auto, edit, setEdit, bezig, onSave }: {
 function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => void }) {
   const beschikbaar = autos.filter((a) => !a.verkocht);
   const verkocht = autos.filter((a) => a.verkocht);
+  const [tab, setTab] = useState<"voorraad" | "verkocht">("voorraad");
+  const lijst = tab === "voorraad" ? beschikbaar : verkocht;
   const [prijsEdit, setPrijsEdit] = useState<{ id: number; waarde: string } | null>(null);
   const [prijsBezig, setPrijsBezig] = useState(false);
 
@@ -855,6 +857,30 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
         }
       />
       <div className="p-4 md:p-8">
+        {/* Tabbladen: scheidt de actieve voorraad van de verkochte auto's */}
+        <div className="flex items-center gap-1 mb-5 flex-wrap">
+          {([
+            { key: "voorraad", label: "Voorraad", aantal: beschikbaar.length },
+            { key: "verkocht", label: "Verkocht", aantal: verkocht.length },
+          ] as const).map((t) => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className="px-4 py-2 text-sm font-semibold transition-all hover:opacity-80"
+                style={{
+                  backgroundColor: active ? "#001337" : "transparent",
+                  color: active ? "#ffffff" : "rgba(0,19,55,0.45)",
+                  border: `1px solid ${active ? "#001337" : "rgba(0,19,55,0.12)"}`,
+                  fontFamily: "var(--font-inter)",
+                }}
+              >
+                {t.label} ({t.aantal})
+              </button>
+            );
+          })}
+        </div>
         {autos.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center py-28"
@@ -875,9 +901,22 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
               <Plus size={13} /> Eerste auto toevoegen
             </Link>
           </div>
+        ) : lijst.length === 0 ? (
+          <div
+            className="flex flex-col items-center justify-center py-28"
+            style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
+          >
+            <Car size={40} style={{ color: "rgba(0,19,55,0.1)" }} />
+            <p
+              className="text-lg font-bold mt-5"
+              style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
+            >
+              {tab === "voorraad" ? "Geen auto's in de voorraad" : "Nog geen verkochte auto's"}
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {autos.map((auto) => {
+            {lijst.map((auto) => {
               const statusColors: Record<string, { bg: string; color: string }> = {
                 beschikbaar: { bg: "#dcfce7", color: "#15803d" },
                 gereserveerd: { bg: "#fef3c7", color: "#b45309" },
