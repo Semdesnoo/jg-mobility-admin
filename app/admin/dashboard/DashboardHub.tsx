@@ -665,9 +665,9 @@ function DashboardContent({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                          <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                          <Link href={`/admin/auto-bewerken/${auto.id}`} className="text-sm font-bold transition-all hover:underline" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
                             {auto.merk} {auto.model}
-                          </p>
+                          </Link>
                           {auto.verkocht && (
                             <span className="text-[9px] px-1.5 py-0.5 tracking-widest uppercase" style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
                               Verkocht
@@ -704,6 +704,13 @@ function DashboardContent({
                           </button>
                         );
                       })}
+                      <Link
+                        href={`/admin/auto-bewerken/${auto.id}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90"
+                        style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                      >
+                        <Pencil size={11} /> Bewerken
+                      </Link>
                       <a
                         href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
                         target="_blank"
@@ -947,9 +954,9 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                        <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                        <Link href={`/admin/auto-bewerken/${auto.id}`} className="text-sm font-bold transition-all hover:underline" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
                           {auto.merk} {auto.model}
-                        </p>
+                        </Link>
                         {auto.verkocht && (
                           <span className="text-[9px] px-1.5 py-0.5 tracking-widest uppercase" style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>Verkocht</span>
                         )}
@@ -984,6 +991,13 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
                         </button>
                       );
                     })}
+                    <Link
+                      href={`/admin/auto-bewerken/${auto.id}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90"
+                      style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                    >
+                      <Pencil size={11} /> Bewerken
+                    </Link>
                     <a
                       href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
                       target="_blank"

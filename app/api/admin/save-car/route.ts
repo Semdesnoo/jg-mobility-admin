@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     const bouwjaarNum = Number(body.bouwjaar);
-    const bouwjaar = Number.isFinite(bouwjaarNum) && bouwjaarNum > 0 ? bouwjaarNum : 0;
+    let bouwjaar = Number.isFinite(bouwjaarNum) && bouwjaarNum > 0 ? bouwjaarNum : 0;
 
     // ── Id + unieke slug ──
     const isBestaand = Number(body.id) > 0;
@@ -38,6 +38,10 @@ export async function POST(request: NextRequest) {
     // toegevoegd_op (voor standtijd): behoud bij bewerken, anders nu
     const bestaand = isBestaand ? await getAutoById(id) : null;
     const toegevoegd_op = String(body.toegevoegd_op || bestaand?.toegevoegd_op || new Date().toISOString());
+
+    // Leeg/ongeldig bouwjaar bij bewerken? Behoud de bestaande waarde i.p.v. 0 weg te schrijven
+    // (saveAuto overschrijft het hele record, dus 0 zou het correcte bouwjaar definitief wissen).
+    if (bouwjaar === 0 && bestaand?.bouwjaar) bouwjaar = bestaand.bouwjaar;
 
     // ── Whitelist: alleen bekende Auto-velden naar de DB (geen ongewenste rommel) ──
     // Alleen vertrouwde foto-bronnen toestaan (eigen /public-paden, Vercel Blob, AutoScout-import).
