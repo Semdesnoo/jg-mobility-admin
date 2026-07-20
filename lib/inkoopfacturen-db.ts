@@ -62,11 +62,61 @@ async function init() {
   `;
 }
 
-/** Gmail-id's die we al hebben geïmporteerd — voorkomt dubbele boekingen. */
+/** Gmail-id's die we al hebben geïmporteerd — voorkomt dat dezelfde mail
+ *  twee keer wordt geboekt. */
 export async function bestaandeGmailIds(): Promise<Set<string>> {
   await init();
   const rows = await sql`SELECT gmail_message_id FROM inkoop_facturen WHERE gmail_message_id IS NOT NULL`;
   return new Set(rows.map((r) => r.gmail_message_id as string));
+}
+
+/**
+ * Leverancier tot een vergelijkbare kern terugbrengen: kleine letters, zonder
+ * rechtsvorm, leestekens of dubbele spaties. Zo herkent "Vissinga Automotive
+ * B.V." zich in "vissinga automotive" en "RDW" in "Rijksdienst voor het
+ * Wegverkeer (RDW)".
+ */
+export function normaliseerLeverancier(naam: string): string {
+  return (naam || "")
+    .toLowerCase()
+    .replace(/\b(b\.?v\.?|n\.?v\.?|v\.?o\.?f\.?|holding|group|se|gmbh|ltd|inc)\b/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Zoekt een al geboekte factuur die inhoudelijk hetzelfde is als de nieuwe —
+ * dezelfde leverancier én (vrijwel) hetzelfde bedrag. Dit is de bescherming
+ * tegen dubbel boeken wanneer eerst een bevestigingsmail binnenkomt en later de
+ * echte PDF-factuur: dat zijn twee verschillende mails, dus de gmail_message_id
+ * verschilt, maar leverancier + bedrag komen overeen.
+ *
+ * Bewust conservatief: een dubbel bedrag in de boekhouding is erger dan één keer
+ * ten onrechte overslaan (dat kun je met de hand alsnog toevoegen). Twee echte
+ * facturen van dezelfde leverancier met exact hetzelfde bedrag zijn zeldzaam;
+ * mocht dat toch spelen, dan wordt de tweede gemeld als overgeslagen zodat je
+ * hem zelf kunt boeken.
+ */
+export async function vindDubbeleFactuur(
+  leverancier: string,
+  bedrag: number
+): Promise<InkoopFactuur | null> {
+  await init();
+  if (!bedrag || bedrag <= 0) return null;
+  const kern = normaliseerLeverancier(leverancier);
+  if (!kern) return null;
+
+  // Kandidaten met (vrijwel) hetzelfde bedrag ophalen; de leverancier-kern
+  // vergelijken we in code, zodat dezelfde normalisatie geldt als hierboven.
+  const rows = await sql`
+    SELECT * FROM inkoop_facturen
+    WHERE ABS(bedrag_incl - ${bedrag}) < 0.02
+  `;
+  for (const r of rows) {
+    if (normaliseerLeverancier(r.leverancier as string) === kern) return mapRow(r);
+  }
+  return null;
 }
 
 function mapRow(r: Record<string, unknown>): InkoopFactuur {
