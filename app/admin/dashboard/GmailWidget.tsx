@@ -43,6 +43,9 @@ function formatDate(dateStr: string): string {
 
 export default function GmailWidget() {
   const [connected, setConnected] = useState<boolean | null>(null);
+  // Waarom de koppeling niet werkt — "verlopen" verdient een andere tekst dan
+  // "nog nooit gekoppeld", anders zoek je in de verkeerde hoek.
+  const [reden, setReden] = useState<string | null>(null);
   const [tab, setTab] = useState<"inbox" | "cosignatie">("inbox");
   const [messages, setMessages] = useState<EmailSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,7 +59,7 @@ export default function GmailWidget() {
   useEffect(() => {
     fetch("/api/admin/gmail/status")
       .then((r) => r.json())
-      .then((d) => setConnected(d.connected));
+      .then((d) => { setConnected(d.connected); setReden(d.reden ?? null); });
   }, []);
 
   const laadBerichten = useCallback(async () => {
@@ -129,10 +132,12 @@ export default function GmailWidget() {
           <AlertCircle size={28} style={{ color: "rgba(0,19,55,0.15)" }} />
           <div>
             <p className="text-sm font-semibold mb-1" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-              Gmail nog niet gekoppeld
+              {reden === "verlopen" ? "Gmail-koppeling verlopen" : "Gmail nog niet gekoppeld"}
             </p>
-            <p className="text-xs mb-5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-              Koppel info@jgmobility.nl om mails te lezen en te beantwoorden vanuit het dashboard
+            <p className="text-xs mb-5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)", lineHeight: 1.65 }}>
+              {reden === "verlopen"
+                ? "Google heeft het token ingetrokken. Staat je OAuth-scherm nog op “Testing”, dan gebeurt dit elke 7 dagen — zet het op Internal of In production om dat te stoppen."
+                : "Koppel info@jgmobility.nl om mails te lezen en te beantwoorden vanuit het dashboard"}
             </p>
           </div>
           <a
@@ -140,7 +145,7 @@ export default function GmailWidget() {
             className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold tracking-wide transition-all hover:opacity-90"
             style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
           >
-            <Mail size={13} /> Koppel Gmail
+            <Mail size={13} /> {reden === "verlopen" ? "Opnieuw koppelen" : "Koppel Gmail"}
           </a>
           <div
             className="text-left w-full mt-2 p-4"

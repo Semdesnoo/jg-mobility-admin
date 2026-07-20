@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { saveAuto, getNextId, generateSlug, ensureUniqueSlug, getAutoById } from "@/lib/autos-db";
 import { revalidateWebsite } from "@/lib/revalidate";
+import { syncDossierMetAuto } from "@/lib/dossiers-db";
 import type { Auto } from "@/lib/autos";
 
 type Optie = { categorie: string; items: string[] };
@@ -93,6 +94,9 @@ export async function POST(request: NextRequest) {
     };
 
     await saveAuto(auto);
+    // Calculator loopt mee: nieuwe auto krijgt een dossier, verkochte auto's
+    // gaan naar het archief. Faalt stil — mag het opslaan nooit blokkeren.
+    await syncDossierMetAuto(auto);
     await revalidateWebsite();
     return Response.json({ ok: true, auto });
   } catch (err) {

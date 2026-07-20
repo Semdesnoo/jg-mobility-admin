@@ -129,28 +129,73 @@ export async function GET() {
     const langstInVoorraad = [...voorraadStandtijden].sort((a, b) => b.dagen - a.dagen).slice(0, 6);
     const standtijdDataCount = standtijdVerkocht.length + voorraadStandtijden.length;
 
+    // ── Standtijd-verdeling (histogram) van verkochte auto's ──
+    // Vertelt hoe snel voorraad doorstroomt: veel in de linkerbakken = snelle omloop.
+    const BAKKEN = [
+      { label: "0-30", min: 0, max: 30 },
+      { label: "30-60", min: 30, max: 60 },
+      { label: "60-90", min: 60, max: 90 },
+      { label: "90+", min: 90, max: Infinity },
+    ];
+    const standtijdVerdeling = BAKKEN.map((b) => ({
+      label: b.label,
+      verkocht: standtijdVerkocht.filter((d) => d >= b.min && d < b.max).length,
+      voorraad: voorraadStandtijden.filter((x) => x.dagen >= b.min && x.dagen < b.max).length,
+    }));
+
     // ── Per merk ──
-    const merkMap = new Map<string, { voorraad: number; verkocht: number; standtijden: number[] }>();
+    // Twee losse standtijd-reeksen: `standtijden` = huidige voorraad (hoe lang staat
+    // het er nu), `verkochtStandtijden` = doorlooptijd van wat écht verkocht is.
+    // Die tweede is de bruikbare maat voor inkoopbeslissingen.
+    const merkMap = new Map<
+      string,
+      { naam: string; voorraad: number; verkocht: number; standtijden: number[]; verkochtStandtijden: number[]; voorraadwaarde: number; verkoopprijzen: number[] }
+    >();
+    // "BMW" en "Bmw" zijn hetzelfde merk — groepeer op hoofdletterloze sleutel,
+    // anders splitst de analyse en lijkt elk merk half zo groot als het is.
     const ensure = (m: string) => {
-      const key = m || "Onbekend";
-      if (!merkMap.has(key)) merkMap.set(key, { voorraad: 0, verkocht: 0, standtijden: [] });
-      return merkMap.get(key)!;
+      const naam = (m || "Onbekend").trim();
+      const key = naam.toUpperCase();
+      if (!merkMap.has(key)) {
+        merkMap.set(key, { naam, voorraad: 0, verkocht: 0, standtijden: [], verkochtStandtijden: [], voorraadwaarde: 0, verkoopprijzen: [] });
+      }
+      const e = merkMap.get(key)!;
+      // Toon de variant met de meeste hoofdletters (BMW leest beter dan Bmw).
+      const hoofdletters = (s: string) => s.replace(/[^A-Z]/g, "").length;
+      if (hoofdletters(naam) > hoofdletters(e.naam)) e.naam = naam;
+      return e;
     };
     for (const a of beschikbaar) {
       const e = ensure(a.merk || "Onbekend");
       e.voorraad++;
+      e.voorraadwaarde += Number(a.prijs) || 0;
       if (a.toegevoegd_op) {
         const dg = dagenTussen(a.toegevoegd_op, nu);
         if (dg != null) e.standtijden.push(dg);
       }
     }
-    for (const a of verkocht) ensure(a.merk || "Onbekend").verkocht++;
-    const perMerk = [...merkMap.entries()]
-      .map(([merk, e]) => ({
-        merk,
+    for (const a of verkocht) {
+      const e = ensure(a.merk || "Onbekend");
+      e.verkocht++;
+      if (Number(a.prijs) > 0) e.verkoopprijzen.push(Number(a.prijs));
+      if (a.toegevoegd_op && a.verkocht_op) {
+        const tot = parseDatum(a.verkocht_op);
+        if (tot) {
+          const dg = dagenTussen(a.toegevoegd_op, tot);
+          if (dg != null) e.verkochtStandtijden.push(dg);
+        }
+      }
+    }
+    const perMerk = [...merkMap.values()]
+      .map((e) => ({
+        merk: e.naam,
         voorraad: e.voorraad,
         verkocht: e.verkocht,
         gemStandtijd: gemiddelde(e.standtijden),
+        gemStandtijdVerkocht: gemiddelde(e.verkochtStandtijden),
+        verkochtMetStandtijd: e.verkochtStandtijden.length,
+        voorraadwaarde: e.voorraadwaarde,
+        gemVerkoopprijs: gemiddelde(e.verkoopprijzen),
       }))
       .sort((a, b) => b.voorraad + b.verkocht - (a.voorraad + a.verkocht));
 
@@ -182,6 +227,7 @@ export async function GET() {
       gemStandtijdVerkocht,
       gemStandtijdVoorraad,
       standtijdDataCount,
+      standtijdVerdeling,
       langstInVoorraad,
       perMerk,
       leadsPerStatus,

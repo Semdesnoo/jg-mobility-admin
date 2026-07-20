@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   LayoutDashboard,
-  Mail,
   Car,
   Handshake,
   Share2,
@@ -18,7 +18,6 @@ import {
   Users,
   Calendar,
   TrendingDown,
-  Target,
   BarChart2,
   Search,
   Pencil,
@@ -26,18 +25,27 @@ import {
   CheckCircle2,
   Package,
   Wallet,
+  AlertTriangle,
+  Clock,
+  ImageOff,
+  TrendingUp,
+  Cpu,
+  Bell,
+  Banknote,
 } from "lucide-react";
-import GmailWidget from "./GmailWidget";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
 import AfsprakenContent from "./AfsprakenContent";
 import InkoopContent from "./InkoopContent";
-import LeadsContent from "./LeadsContent";
 import StatistiekenContent from "./StatistiekenContent";
 import MoliboxPage from "./MoliboxPage";
 import CosignatieContent from "./CosignatieContent";
+import MerkAnalyseContent from "./MerkAnalyseContent";
+import BoekhoudingContent from "./BoekhoudingContent";
+import InkoopFacturenContent from "./InkoopFacturenContent";
+import SocialContent from "./SocialContent";
 
-type Tab = "dashboard" | "email" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "leads" | "statistieken" | "molibox";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox";
 
 type Auto = {
   id: number;
@@ -51,6 +59,10 @@ type Auto = {
   verkocht: boolean;
   gereserveerd?: boolean;
   fotos: string[];
+  apk?: string;              // "MM-JJJJ" of "Onbekend"
+  kenteken?: string;
+  toegevoegd_op?: string;    // ISO — basis voor de standtijd
+  verkocht_op?: string;
 };
 
 type KostenRegel = { label: string; bedrag: string };
@@ -63,6 +75,8 @@ type Dossier = {
   verkoopprijs: number;
   kosten: KostenRegel[];
   aangemaakt: string;
+  auto_id?: number | null;
+  gearchiveerd?: boolean;
 };
 
 type IconProps = { size?: number; style?: React.CSSProperties; className?: string };
@@ -70,44 +84,48 @@ type IconProps = { size?: number; style?: React.CSSProperties; className?: strin
 type NavItem = { id: Tab; label: string; icon: React.ComponentType<IconProps> };
 
 // Menu gegroepeerd onder kopjes (zoals een dashboard met secties).
-const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+// `icon` wordt gebruikt voor het vakje van de groep op het hub-startscherm.
+const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: NavItem[] }[] = [
   {
     title: "Dashboard",
+    icon: LayoutDashboard,
     items: [
       { id: "dashboard",    label: "Dashboard",       icon: LayoutDashboard },
       { id: "statistieken", label: "Statistieken",    icon: BarChart2 },
+      { id: "merkanalyse",  label: "Standtijd & Merken", icon: Clock },
     ],
   },
   {
     title: "Auto",
+    icon: Car,
     items: [
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
       { id: "calculator", label: "Calculator",       icon: Calculator },
-      { id: "leads",      label: "Leads",            icon: Target },
       { id: "afspraken",  label: "Afspraken",        icon: Calendar },
       { id: "molibox",    label: "Molibox",          icon: LayoutGrid },
     ],
   },
   {
-    title: "Boekhouding",
+    title: "Socials",
+    icon: Share2,
     items: [
-      { id: "facturen", label: "Facturen", icon: FileText },
-      { id: "klanten",  label: "Klanten",  icon: Users },
+      { id: "social", label: "Social Media", icon: Share2 },
     ],
   },
   {
-    title: "Socials",
+    title: "Boekhouding",
+    icon: FileText,
     items: [
-      { id: "social", label: "Social Media", icon: Share2 },
-      { id: "email",  label: "Email",        icon: Mail },
+      { id: "boekhouding", label: "Boekhouding", icon: Banknote },
+      { id: "facturen", label: "Verkoopfacturen", icon: FileText },
+      { id: "inkoopfacturen", label: "Inkoopfacturen", icon: Wallet },
+      { id: "klanten",  label: "Klanten",  icon: Users },
     ],
   },
 ];
 
-// Platte lijst voor lookups (bv. de paginatitel bij de actieve tab).
-const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 function PageHeader({
   title,
@@ -192,65 +210,82 @@ function StatCard({
   );
 }
 
-function PlaceholderTab({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: React.ComponentType<IconProps>;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div>
-      <PageHeader title={title} />
-      <div className="p-4 md:p-8">
-        <div
-          className="flex flex-col items-center justify-center py-28"
-          style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-        >
-          <Icon size={40} style={{ color: "rgba(0,19,55,0.1)" }} />
-          <p
-            className="text-lg font-bold mt-5 mb-2"
-            style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
-          >
-            Binnenkort beschikbaar
-          </p>
-          <p
-            className="text-sm text-center max-w-md"
-            style={{
-              color: "rgba(0,19,55,0.45)",
-              fontFamily: "var(--font-inter)",
-              lineHeight: 1.7,
-            }}
-          >
-            {description}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+// ── Hulp: standtijd & aandachtspunten ──────────────────────────
+const MS_PER_DAG = 86_400_000;
+
+function standtijdDagen(auto: Auto): number | null {
+  if (!auto.toegevoegd_op) return null;
+  const d = new Date(auto.toegevoegd_op);
+  if (isNaN(d.getTime())) return null;
+  return Math.max(0, Math.round((Date.now() - d.getTime()) / MS_PER_DAG));
 }
 
-const NAV_META: Record<Tab, string> = {
-  dashboard:    "Overzicht & voorraadstatus",
-  email:        "Berichten & klantcontact",
-  voorraad:     "Beheer je auto's",
-  leads:        "Opvolgen & converteren",
-  klanten:      "CRM & contactbeheer",
-  afspraken:    "Proefritten & bezichtigingen",
-  inkoop:       "Taxaties & aankopen",
-  cosignatie:   "Aanvragen & deals",
-  facturen:     "Maak en beheer facturen",
-  calculator:   "Bereken marge per auto",
-  statistieken: "Omzet & prestaties",
-  social:       "Posts & marketing",
-  molibox:      "Externe tool",
-};
+// APK staat er in twee smaken in: "MM-JJJJ" (RDW-lookup) en "DD-MM-JJJJ" (handmatig
+// ingevuld). Geeft het aantal maanden tot verval terug, of null als het onbekend is.
+function maandenTotApk(apk: string | undefined): number | null {
+  if (!apk || apk === "Onbekend") return null;
+  const kort = apk.match(/^(\d{1,2})-(\d{4})$/);          // MM-JJJJ
+  const lang = apk.match(/^\d{1,2}-(\d{1,2})-(\d{4})$/);  // DD-MM-JJJJ
+  const m = kort ?? lang;
+  if (!m) return null;
+  const maand = parseInt(m[1]);
+  const jaar = parseInt(m[2]);
+  if (isNaN(maand) || isNaN(jaar) || maand < 1 || maand > 12) return null;
+  const nu = new Date();
+  return (jaar - nu.getFullYear()) * 12 + (maand - (nu.getMonth() + 1));
+}
+
+type Aandachtspunt = { auto: Auto; reden: string; kleur: string; icon: React.ComponentType<IconProps> };
+
+// Alles wat een auto in de weg staat om te verkopen, op één hoop.
+function verzamelAandachtspunten(beschikbaar: Auto[]): Aandachtspunt[] {
+  const punten: Aandachtspunt[] = [];
+  for (const a of beschikbaar) {
+    if (!a.fotos || a.fotos.length === 0) {
+      punten.push({ auto: a, reden: "Geen foto's", kleur: "#b91c1c", icon: ImageOff });
+    } else if (a.fotos.length < 5) {
+      punten.push({ auto: a, reden: `Maar ${a.fotos.length} foto's`, kleur: "#b45309", icon: ImageOff });
+    }
+    if (!a.prijs || a.prijs <= 0) {
+      punten.push({ auto: a, reden: "Geen prijs ingevuld", kleur: "#b91c1c", icon: Wallet });
+    }
+    const apkMaanden = maandenTotApk(a.apk);
+    if (apkMaanden != null && apkMaanden < 0) {
+      punten.push({ auto: a, reden: "APK verlopen", kleur: "#b91c1c", icon: AlertTriangle });
+    } else if (apkMaanden != null && apkMaanden <= 2) {
+      punten.push({ auto: a, reden: `APK verloopt over ${apkMaanden} mnd`, kleur: "#b45309", icon: AlertTriangle });
+    }
+    const dagen = standtijdDagen(a);
+    if (dagen != null && dagen >= 90) {
+      punten.push({ auto: a, reden: `${dagen} dagen in voorraad`, kleur: "#b45309", icon: Clock });
+    }
+  }
+  return punten;
+}
+
 
 export default function DashboardHub() {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [mobileHub, setMobileHub] = useState(true);
+  const [hubOpen, setHubOpen] = useState(true);
+  // Welke hub-groep is gekozen — de zijbalk toont alleen de items van deze groep.
+  // Terug naar de hub om een andere groep te openen.
+  const [groep, setGroep] = useState<string>(NAV_GROUPS[0].title);
+  const actieveGroep = NAV_GROUPS.find((g) => g.title === groep) ?? NAV_GROUPS[0];
+
+  const openGroep = (titel: string, eersteTab: Tab) => {
+    setGroep(titel);
+    setTab(eersteTab);
+    setHubOpen(false);
+  };
+
+  // Spring naar een tab én zet de zijbalk op de groep waar die tab in zit.
+  // Zonder dat laatste toont het menu een andere sectie dan de pagina die openstaat.
+  const gaNaarTab = (doel: Tab) => {
+    const groepVanTab = NAV_GROUPS.find((g) => g.items.some((i) => i.id === doel));
+    if (groepVanTab) setGroep(groepVanTab.title);
+    setTab(doel);
+    setHubOpen(false);
+  };
   const [autos, setAutos] = useState<Auto[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -288,9 +323,6 @@ export default function DashboardHub() {
 
   const beschikbaar = autos.filter((a) => !a.verkocht);
   const verkocht = autos.filter((a) => a.verkocht);
-  const gemPrijs = beschikbaar.length
-    ? Math.round(beschikbaar.reduce((s, a) => s + a.prijs, 0) / beschikbaar.length)
-    : 0;
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#f0f2f5" }}>
@@ -317,32 +349,45 @@ export default function DashboardHub() {
 
         {/* Navigatie */}
         <nav className="flex-1 py-3 overflow-y-auto">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.title} className="mb-1.5">
-              <p
-                className="px-5 pt-3 pb-1 text-[9px] font-semibold tracking-widest uppercase"
-                style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-inter)" }}
+          {/* Terug naar het hub-startscherm */}
+          <button
+            onClick={() => setHubOpen(true)}
+            className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-left transition-all hover:opacity-80"
+            style={{
+              fontFamily: "var(--font-inter)",
+              color: "rgba(255,255,255,0.55)",
+              backgroundColor: "rgba(255,255,255,0.05)",
+              borderLeft: "2px solid transparent",
+            }}
+          >
+            <LayoutGrid size={15} />
+            Hub
+          </button>
+          {/* Alleen de gekozen groep — via de hub wissel je van groep */}
+          <div className="mb-1.5">
+            <p
+              className="px-5 pt-3 pb-1 text-[9px] font-semibold tracking-widest uppercase"
+              style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-inter)" }}
+            >
+              {actieveGroep.title}
+            </p>
+            {actieveGroep.items.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-left transition-all"
+                style={{
+                  fontFamily: "var(--font-inter)",
+                  color: tab === id ? "#ffffff" : "rgba(255,255,255,0.42)",
+                  backgroundColor: tab === id ? "rgba(255,255,255,0.09)" : "transparent",
+                  borderLeft: `2px solid ${tab === id ? "#ffffff" : "transparent"}`,
+                }}
               >
-                {group.title}
-              </p>
-              {group.items.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-left transition-all"
-                  style={{
-                    fontFamily: "var(--font-inter)",
-                    color: tab === id ? "#ffffff" : "rgba(255,255,255,0.42)",
-                    backgroundColor: tab === id ? "rgba(255,255,255,0.09)" : "transparent",
-                    borderLeft: `2px solid ${tab === id ? "#ffffff" : "transparent"}`,
-                  }}
-                >
-                  <Icon size={15} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          ))}
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
+          </div>
         </nav>
 
         {/* Voettekst */}
@@ -380,21 +425,46 @@ export default function DashboardHub() {
 
       {/* ── Hoofdinhoud ── */}
       <main className="flex-1 overflow-y-auto">
-        {/* Mobiel: terug-balk */}
+        {/* Mobiel: terug naar de hub + de items van de gekozen groep
+            (op mobiel is er geen zijbalk, dus die items horen hier) */}
         <div
-          className={`md:hidden sticky top-0 z-20 flex items-center gap-3 px-4 h-13 ${mobileHub ? "hidden" : "flex"}`}
-          style={{ backgroundColor: "#001337", height: "52px" }}
+          className={`md:hidden sticky top-0 z-20 ${hubOpen ? "hidden" : "block"}`}
+          style={{ backgroundColor: "#001337" }}
         >
-          <button
-            onClick={() => setMobileHub(true)}
-            className="flex items-center gap-1.5 text-sm transition-all hover:opacity-70"
-            style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-inter)" }}
-          >
-            ← Menu
-          </button>
-          <span className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-inter)" }}>
-            {NAV.find((n) => n.id === tab)?.label}
-          </span>
+          <div className="flex items-center gap-3 px-4" style={{ height: "52px" }}>
+            <button
+              onClick={() => setHubOpen(true)}
+              className="flex items-center gap-1.5 text-sm transition-all hover:opacity-70"
+              style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-inter)" }}
+            >
+              ← Hub
+            </button>
+            <span className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-inter)" }}>
+              {actieveGroep.title}
+            </span>
+          </div>
+          {actieveGroep.items.length > 1 && (
+            <div
+              className="flex items-center gap-1 px-3 pb-2 overflow-x-auto"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: "8px" }}
+            >
+              {actieveGroep.items.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setTab(id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all"
+                  style={{
+                    fontFamily: "var(--font-inter)",
+                    color: tab === id ? "#001337" : "rgba(255,255,255,0.55)",
+                    backgroundColor: tab === id ? "#ffffff" : "rgba(255,255,255,0.07)",
+                  }}
+                >
+                  <Icon size={12} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {tab === "dashboard" && (
           <DashboardContent
@@ -403,11 +473,10 @@ export default function DashboardHub() {
             verkocht={verkocht}
             lastRefresh={lastRefresh}
             refresh={refresh}
+            onTab={gaNaarTab}
           />
         )}
-        {tab === "email" && <EmailContent />}
         {tab === "voorraad" && <VoorraadContent autos={autos} refresh={refresh} />}
-        {tab === "leads" && <LeadsContent />}
         {tab === "klanten" && <KlantenContent />}
         {tab === "afspraken" && <AfsprakenContent />}
         {tab === "inkoop" && <InkoopContent />}
@@ -415,86 +484,114 @@ export default function DashboardHub() {
         {tab === "facturen" && <FacturenContent />}
         {tab === "calculator" && <CalculatorContent />}
         {tab === "statistieken" && <StatistiekenContent />}
+        {tab === "merkanalyse" && <MerkAnalyseContent />}
+        {tab === "boekhouding" && <BoekhoudingContent />}
+        {tab === "inkoopfacturen" && <InkoopFacturenContent />}
         {tab === "molibox" && <MoliboxPage />}
-        {tab === "social" && (
-          <PlaceholderTab
-            icon={Share2}
-            title="Social Media"
-            description="Plan en beheer posts voor Instagram, Facebook en andere platforms. Koppeling via Mobilox of eigen integratie."
-          />
-        )}
+        {tab === "social" && <SocialContent />}
       </main>
 
-      {/* ── Mobiele hub (full-screen overlay) ── */}
-      {mobileHub && (
+      {/* ── Hub (full-screen startscherm, mobiel én desktop) ── */}
+      {hubOpen && (
         <div
-          className="md:hidden fixed inset-0 z-50 flex flex-col overflow-hidden"
-          style={{ backgroundColor: "#f0f2f5" }}
+          className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
+          style={{ backgroundColor: "#001337" }}
         >
-          {/* Header — compact */}
-          <div style={{ backgroundColor: "#001337" }} className="px-5 pt-8 pb-4 flex-shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-[9px] tracking-widest uppercase mb-0.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-inter)" }}>
-                  Beheer
-                </p>
-                <h1 className="text-xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
-                  JG Mobility
-                </h1>
-              </div>
+          {/* Bovenbalk — logo links, uitloggen rechts */}
+          <div className="flex-shrink-0 px-5 md:px-10 pt-7 md:pt-8 pb-4 flex items-center justify-between">
+            <div>
+              <p className="text-[9px] tracking-widest uppercase mb-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}>
+                Beheer
+              </p>
+              <h1 className="text-xl md:text-2xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
+                JG Mobility
+              </h1>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <MeldingenBel onGaNaar={gaNaarTab} />
               <form action="/api/admin/logout" method="POST">
                 <button
                   type="submit"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium"
-                  style={{ backgroundColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.55)", fontFamily: "var(--font-inter)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all hover:opacity-80"
+                  style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)", border: "1px solid rgba(255,255,255,0.1)" }}
                 >
                   <LogOut size={11} />
                   Uitloggen
                 </button>
               </form>
             </div>
-            {/* Snelle stats */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: "Beschikbaar", value: beschikbaar.length },
-                { label: "Verkocht", value: verkocht.length },
-                { label: "Totaal", value: autos.length },
-              ].map((s) => (
-                <div key={s.label} className="flex flex-col items-center justify-center py-2" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
-                  <p className="text-lg font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>{s.value}</p>
-                  <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>{s.label}</p>
-                </div>
-              ))}
-            </div>
           </div>
 
-          {/* Nav kaarten — gegroepeerd onder kopjes */}
-          <div className="flex-1 px-3 pt-3 pb-3 grid grid-cols-3 gap-2 content-start overflow-y-auto">
-            {NAV_GROUPS.map((group) => (
-              <Fragment key={group.title}>
-                <p className="col-span-3 text-[10px] font-bold uppercase tracking-wider mt-1 mb-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-                  {group.title}
-                </p>
-                {group.items.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => { setTab(id); setMobileHub(false); }}
-                    className="flex flex-col items-center justify-center py-3 px-1 text-center transition-all active:scale-95"
-                    style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-                  >
-                    <div
-                      className="flex items-center justify-center mb-1.5"
-                      style={{ width: "32px", height: "32px", backgroundColor: "rgba(0,19,55,0.05)" }}
+          {/* Midden — vakjes gecentreerd op het scherm */}
+          <div className="flex-1 flex items-center justify-center px-5 md:px-10 py-8">
+            <div className="w-full max-w-3xl">
+              <p
+                className="text-center text-[10px] md:text-[11px] tracking-widest uppercase mb-6 md:mb-8"
+                style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}
+              >
+                Waar wil je heen?
+              </p>
+
+              {/* Hoofdkopjes als vakjes — klik opent die sectie met het menu links */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
+                {NAV_GROUPS.map((group) => {
+                  const Icon = group.icon;
+                  return (
+                    <button
+                      key={group.title}
+                      onClick={() => openGroep(group.title, group.items[0].id)}
+                      className="group flex flex-col items-center justify-center gap-3 md:gap-4 py-7 md:py-9 px-3 transition-all active:scale-95 hover:-translate-y-1"
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                      }}
                     >
-                      <Icon size={15} style={{ color: "#001337" }} />
-                    </div>
-                    <p className="text-[11px] font-bold leading-tight" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                      {label}
+                      {/* Icoonvlak */}
+                      <div
+                        className="flex items-center justify-center transition-all"
+                        style={{
+                          width: 56,
+                          height: 56,
+                          backgroundColor: "rgba(255,255,255,0.08)",
+                          border: "1px solid rgba(255,255,255,0.14)",
+                        }}
+                      >
+                        <Icon size={26} style={{ color: "#ffffff" }} />
+                      </div>
+                      {/* Titel onder het icoon */}
+                      <p
+                        className="text-xs md:text-sm font-semibold leading-tight text-center text-white"
+                        style={{ fontFamily: "var(--font-inter)" }}
+                      >
+                        {group.title}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Snelle stats — slanke regel onder de vakjes */}
+              <div className="mt-8 md:mt-10 flex items-center justify-center">
+                {[
+                  { label: "Beschikbaar", value: beschikbaar.length },
+                  { label: "Verkocht", value: verkocht.length },
+                  { label: "Totaal", value: autos.length },
+                ].map((s, i) => (
+                  <div
+                    key={s.label}
+                    className="px-6 md:px-9 text-center"
+                    style={{ borderLeft: i === 0 ? "none" : "1px solid rgba(255,255,255,0.1)" }}
+                  >
+                    <p className="text-xl md:text-2xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
+                      {s.value}
                     </p>
-                  </button>
+                    <p className="text-[9px] md:text-[10px] tracking-wider uppercase mt-0.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-inter)" }}>
+                      {s.label}
+                    </p>
+                  </div>
                 ))}
-              </Fragment>
-            ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -509,43 +606,17 @@ function DashboardContent({
   verkocht,
   lastRefresh,
   refresh,
+  onTab,
 }: {
   autos: Auto[];
   beschikbaar: Auto[];
   verkocht: Auto[];
   lastRefresh: Date;
   refresh: () => void;
+  onTab: (t: Tab) => void;
 }) {
+  // Prijs- en statusbewerking zitten in VoorraadTabel — hier alleen het totaal.
   const totaalWaarde = beschikbaar.reduce((s, a) => s + a.prijs, 0);
-  const [prijsEdit, setPrijsEdit] = useState<{ id: number; waarde: string } | null>(null);
-  const [prijsBezig, setPrijsBezig] = useState(false);
-
-  const updatePrijs = async (id: number, prijs: number) => {
-    if (!Number.isFinite(prijs) || prijs <= 0) { alert("Vul een geldige prijs in (groter dan 0)."); return; }
-    setPrijsBezig(true);
-    try {
-      await fetch(`/api/admin/autos/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prijs }),
-      });
-      setPrijsEdit(null);
-      refresh();
-    } finally {
-      setPrijsBezig(false);
-    }
-  };
-
-  const updateStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
-    if (status === "gereserveerd" && !confirm("Wil je deze auto als Gereserveerd markeren?")) return;
-    if (status === "verkocht" && !confirm("Wil je deze auto als Verkocht markeren?")) return;
-    await fetch(`/api/admin/autos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    refresh();
-  };
 
   return (
     <div>
@@ -582,31 +653,22 @@ function DashboardContent({
           />
         </div>
 
-        {/* Mail (links) + Calculator (rechts) */}
+        {/* Snelle acties */}
+        <SnelleActies onTab={onTab} />
+
+        {/* Omzet & marge (links) + aandachtspunten (rechts) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-7 items-start">
-          <GmailWidget />
-          <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
-            <div
-              className="px-5 py-4 flex items-center gap-2.5"
-              style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}
-            >
-              <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
-                <Calculator size={14} style={{ color: "#001337" }} />
-              </div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                Marge Calculator
-              </h2>
-            </div>
-            <div className="p-4">
-              <CalculatorPanel />
-            </div>
-          </div>
+          <MaandWidget />
+          <AandachtWidget beschikbaar={beschikbaar} />
         </div>
+
+        {/* Claude Code verbruik */}
+        <ClaudeVerbruikWidget />
 
         {/* Kenteken check */}
         <KentekenWidget />
 
-        {/* Voorraad — volle breedte */}
+        {/* Voorraad — compacte tabel */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
@@ -614,9 +676,9 @@ function DashboardContent({
                 <Car size={14} style={{ color: "#001337" }} />
               </div>
               <h3 className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                Voorraad
+                Op voorraad
               </h3>
-              <span className="text-[11px] font-semibold px-2 py-0.5" style={{ backgroundColor: "rgba(0,19,55,0.05)", color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", borderRadius: 6 }}>{autos.length}</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5" style={{ backgroundColor: "rgba(0,19,55,0.05)", color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", borderRadius: 6 }}>{beschikbaar.length}</span>
             </div>
             <Link
               href="/admin/auto-toevoegen"
@@ -626,229 +688,927 @@ function DashboardContent({
               <Plus size={12} /> Nieuwe auto
             </Link>
           </div>
-          {autos.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center py-16"
-              style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-            >
-              <Car size={32} style={{ color: "rgba(0,19,55,0.1)" }} />
-              <p className="text-sm font-bold mt-4" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                Nog geen auto&apos;s
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {autos.map((auto) => {
-                const statusColors: Record<string, { bg: string; color: string }> = {
-                  beschikbaar: { bg: "#dcfce7", color: "#15803d" },
-                  gereserveerd: { bg: "#fef3c7", color: "#b45309" },
-                  verkocht: { bg: "#001337", color: "#ffffff" },
-                };
-                return (
-                  <div
-                    key={auto.id}
-                    className="flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 md:px-5 py-3.5"
-                    style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0 w-16 md:w-20 h-11 md:h-14 overflow-hidden" style={{ backgroundColor: "#001337" }}>
-                        {auto.fotos?.length > 0 ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={auto.fotos[0]} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-lg font-bold" style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-playfair)" }}>
-                              {auto.merk.slice(0, 2).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                          <Link href={`/admin/auto-bewerken/${auto.id}`} className="text-sm font-bold transition-all hover:underline" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                            {auto.merk} {auto.model}
-                          </Link>
-                          {auto.verkocht && (
-                            <span className="text-[9px] px-1.5 py-0.5 tracking-widest uppercase" style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
-                              Verkocht
-                            </span>
-                          )}
-                          {auto.gereserveerd && !auto.verkocht && (
-                            <span className="text-[9px] px-1.5 py-0.5 tracking-widest uppercase" style={{ backgroundColor: "#b45309", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
-                              Gereserveerd
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-                          {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
-                        </p>
-                      </div>
-                      <PrijsBewerk auto={auto} edit={prijsEdit} setEdit={setPrijsEdit} bezig={prijsBezig} onSave={updatePrijs} />
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
-                      {(["beschikbaar", "gereserveerd", "verkocht"] as const).map((s) => {
-                        const active = s === "verkocht" ? auto.verkocht : s === "gereserveerd" ? (auto.gereserveerd && !auto.verkocht) : (!auto.verkocht && !auto.gereserveerd);
-                        return (
-                          <button
-                            key={s}
-                            onClick={() => updateStatus(auto.id, s)}
-                            className="px-2 md:px-2.5 py-1 text-[10px] font-semibold tracking-wide uppercase transition-all hover:opacity-80"
-                            style={{
-                              backgroundColor: active ? statusColors[s].bg : "transparent",
-                              color: active ? statusColors[s].color : "rgba(0,19,55,0.3)",
-                              border: `1px solid ${active ? statusColors[s].color : "rgba(0,19,55,0.12)"}`,
-                              fontFamily: "var(--font-inter)",
-                            }}
-                          >
-                            {s === "beschikbaar" ? "Beschikbaar" : s === "gereserveerd" ? "Gereserveerd" : "Verkocht"}
-                          </button>
-                        );
-                      })}
-                      <Link
-                        href={`/admin/auto-bewerken/${auto.id}`}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90"
-                        style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
-                      >
-                        <Pencil size={11} /> Bewerken
-                      </Link>
-                      <a
-                        href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-70"
-                        style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-                      >
-                        Bekijk
-                      </a>
-                      <DeleteButton id={auto.id} naam={`${auto.merk} ${auto.model}`} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <VoorraadTabel autos={autos} refresh={refresh} compact alleenLezen toon="voorraad" />
         </div>
       </div>
     </div>
   );
 }
 
-// ── Email ───────────────────────────────────────────────────────
-function EmailContent() {
-  return (
-    <div>
-      <PageHeader
-        title="Email"
-        subtitle="info@jgmobility.nl"
-        action={
-          <a
-            href="https://mail.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-all hover:opacity-70"
-            style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-          >
-            <ExternalLink size={12} /> Open Gmail
-          </a>
-        }
-      />
-      <div className="p-4 md:p-8">
-        <GmailWidget />
-      </div>
-    </div>
-  );
+// ── Compacte voorraadtabel ──────────────────────────────────────
+type SorteerVeld = "auto" | "bouwjaar" | "km" | "prijs" | "standtijd";
+
+function statusVan(a: Auto): "beschikbaar" | "gereserveerd" | "verkocht" {
+  if (a.verkocht) return "verkocht";
+  if (a.gereserveerd) return "gereserveerd";
+  return "beschikbaar";
 }
 
-// ── Auto Voorraad ───────────────────────────────────────────────
-// Inline bewerkbare prijs: klik op de prijs → invoer → opslaan → meteen door naar de
-// website via de PATCH-route (die saveAuto + revalidateWebsite doet).
-function PrijsBewerk({ auto, edit, setEdit, bezig, onSave }: {
-  auto: Auto;
-  edit: { id: number; waarde: string } | null;
-  setEdit: (e: { id: number; waarde: string } | null) => void;
-  bezig: boolean;
-  onSave: (id: number, prijs: number) => void;
+const STATUS_STIJL: Record<string, { bg: string; color: string; label: string }> = {
+  beschikbaar:  { bg: "#dcfce7", color: "#15803d", label: "Beschikbaar" },
+  gereserveerd: { bg: "#fef3c7", color: "#b45309", label: "Gereserveerd" },
+  verkocht:     { bg: "#e0e7ff", color: "#3730a3", label: "Verkocht" },
+};
+
+// Korte labels: drie knoppen naast elkaar passen niet met de volledige woorden.
+const STATUS_KORT: Record<string, string> = {
+  beschikbaar: "Beschikb.",
+  gereserveerd: "Geres.",
+  verkocht: "Verkocht",
+};
+const STATUS_BREEDTE = 230;
+
+/** Sorteerbare kolomkop. Buiten de tabel gedefinieerd zodat React hem niet bij
+ *  elke render als nieuw componenttype ziet (dat remount de hele kop). */
+function SorteerKop({
+  veld, label, actief, oplopend, rechts = false, onClick,
+}: {
+  veld: SorteerVeld;
+  label: string;
+  actief: boolean;
+  oplopend: boolean;
+  rechts?: boolean;
+  onClick: (veld: SorteerVeld) => void;
 }) {
   return (
-    <div className="text-right flex-shrink-0 md:mr-2">
-      {edit && edit.id === auto.id ? (
-        <div className="flex items-center gap-1 justify-end">
-          <span className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>€</span>
-          <input
-            type="number"
-            autoFocus
-            value={edit.waarde}
-            onChange={(e) => setEdit({ id: auto.id, waarde: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSave(auto.id, Number(edit.waarde));
-              if (e.key === "Escape") setEdit(null);
-            }}
-            className="w-24 px-2 py-1 text-sm font-bold text-right outline-none"
-            style={{ border: "1px solid #001337", color: "#001337", fontFamily: "var(--font-inter)" }}
-          />
-          <button onClick={() => onSave(auto.id, Number(edit.waarde))} disabled={bezig} title="Opslaan"
-            className="px-2 py-1 text-xs font-bold transition-all hover:opacity-80 disabled:opacity-50"
-            style={{ backgroundColor: "#15803d", color: "#ffffff", fontFamily: "var(--font-inter)" }}>✓</button>
-          <button onClick={() => setEdit(null)} title="Annuleren"
-            className="px-2 py-1 text-xs font-bold transition-all hover:opacity-80"
-            style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#64748b", fontFamily: "var(--font-inter)" }}>✕</button>
-        </div>
-      ) : (
-        <button onClick={() => setEdit({ id: auto.id, waarde: String(auto.prijs) })} title="Klik om de prijs aan te passen"
-          className="flex items-center gap-1.5 ml-auto transition-all hover:opacity-70">
-          <Pencil size={11} style={{ color: "rgba(0,19,55,0.3)" }} />
-          <span className="text-sm md:text-base font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-            €{auto.prijs.toLocaleString("nl-NL")}
-          </span>
-        </button>
-      )}
-      <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
-        {auto.fotos?.length ?? 0} foto&apos;s
-      </p>
-    </div>
+    <button
+      onClick={() => onClick(veld)}
+      className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider transition-all hover:opacity-70 ${rechts ? "ml-auto" : ""}`}
+      style={{ color: actief ? "#001337" : "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}
+    >
+      {label}
+      {actief && <span style={{ fontSize: 8 }}>{oplopend ? "▲" : "▼"}</span>}
+    </button>
   );
 }
 
-function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => void }) {
-  const beschikbaar = autos.filter((a) => !a.verkocht);
-  const verkocht = autos.filter((a) => a.verkocht);
-  const [tab, setTab] = useState<"voorraad" | "verkocht">("voorraad");
-  const lijst = tab === "voorraad" ? beschikbaar : verkocht;
-  const [prijsEdit, setPrijsEdit] = useState<{ id: number; waarde: string } | null>(null);
-  const [prijsBezig, setPrijsBezig] = useState(false);
+function VoorraadTabel({
+  autos: alleAutos,
+  refresh,
+  compact = false,
+  alleenLezen = false,
+  toon = "voorraad",
+}: {
+  autos: Auto[];
+  refresh: () => void;
+  compact?: boolean;
+  /** Dashboard-modus: alleen kijken, niets aanpassen. */
+  alleenLezen?: boolean;
+  /** Welke map: wat er nu staat, of wat verkocht is. Nooit door elkaar. */
+  toon?: "voorraad" | "verkocht";
+}) {
+  // Gereserveerde auto's staan er fysiek nog, dus die vallen onder voorraad.
+  const autos = alleAutos.filter((a) => (toon === "verkocht" ? a.verkocht : !a.verkocht));
+  const [zoek, setZoek] = useState("");
+  const [sorteer, setSorteer] = useState<SorteerVeld>("standtijd");
+  const [oplopend, setOplopend] = useState(false);
+  // Alles bewerken loopt via de Bewerken-knop naar de bewerkpagina. Alleen de
+  // status kan hier direct om — dat is de handeling die je het vaakst doet.
+  const [statusBezig, setStatusBezig] = useState<number | null>(null);
 
-  const updatePrijs = async (id: number, prijs: number) => {
-    if (!Number.isFinite(prijs) || prijs <= 0) { alert("Vul een geldige prijs in (groter dan 0)."); return; }
-    setPrijsBezig(true);
+  const zetStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
+    if (status === "gereserveerd" && !confirm("Wil je deze auto als Gereserveerd markeren?")) return;
+    if (status === "verkocht" && !confirm("Wil je deze auto als Verkocht markeren?")) return;
+    setStatusBezig(id);
     try {
       await fetch(`/api/admin/autos/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prijs }),
+        body: JSON.stringify({ status }),
       });
-      setPrijsEdit(null);
       refresh();
     } finally {
-      setPrijsBezig(false);
+      setStatusBezig(null);
     }
   };
 
-  const updateStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
-    if (status === "gereserveerd" && !confirm("Wil je deze auto als Gereserveerd markeren?")) return;
-    if (status === "verkocht" && !confirm("Wil je deze auto als Verkocht markeren?")) return;
-    await fetch(`/api/admin/autos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    refresh();
+  const term = zoek.trim().toLowerCase();
+  const gefilterd = autos
+    .filter((a) =>
+      !term ||
+      `${a.merk} ${a.model} ${a.bouwjaar} ${a.brandstof} ${a.kenteken ?? ""}`.toLowerCase().includes(term)
+    );
+
+  const gesorteerd = [...gefilterd].sort((a, b) => {
+    const richting = oplopend ? 1 : -1;
+    switch (sorteer) {
+      case "auto":     return richting * `${a.merk} ${a.model}`.localeCompare(`${b.merk} ${b.model}`);
+      case "bouwjaar": return richting * (a.bouwjaar - b.bouwjaar);
+      case "km":       return richting * (a.km - b.km);
+      case "prijs":    return richting * (a.prijs - b.prijs);
+      case "standtijd": return richting * ((standtijdDagen(a) ?? -1) - (standtijdDagen(b) ?? -1));
+    }
+  });
+
+  const lijst = compact ? gesorteerd.slice(0, 8) : gesorteerd;
+
+  const sorteerOp = (veld: SorteerVeld) => {
+    if (sorteer === veld) setOplopend((o) => !o);
+    else { setSorteer(veld); setOplopend(false); }
   };
+
+  return (
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+      {/* Zoeken + filteren — op het dashboard overbodig, daar is het een overzicht */}
+      <div
+        className={`px-4 py-3 flex-col md:flex-row md:items-center gap-3 ${compact ? "hidden" : "flex"}`}
+        style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Search size={13} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} />
+          <input
+            value={zoek}
+            onChange={(e) => setZoek(e.target.value)}
+            placeholder="Zoek op merk, model, jaar of kenteken..."
+            className="flex-1 min-w-0 text-sm outline-none bg-transparent"
+            style={{ color: "#001337", fontFamily: "var(--font-inter)" }}
+          />
+        </div>
+        <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+          {gefilterd.length} van {autos.length}
+        </span>
+      </div>
+
+      {/* Kolomkoppen — alleen op desktop, mobiel wordt het een lijst */}
+      <div
+        className="hidden md:flex items-center gap-3 px-4 py-2"
+        style={{ borderBottom: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fafbfc" }}
+      >
+        <div style={{ width: 48 }} />
+        <div className="flex-1 min-w-0"><SorteerKop veld="auto" label="Auto" actief={sorteer === "auto"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 60 }}><SorteerKop veld="bouwjaar" label="Jaar" actief={sorteer === "bouwjaar"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 90 }}><SorteerKop veld="km" label="Km" actief={sorteer === "km"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 80 }}><SorteerKop veld="standtijd" label="Standtijd" actief={sorteer === "standtijd"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 100 }} className="flex"><SorteerKop veld="prijs" label="Prijs" actief={sorteer === "prijs"} oplopend={oplopend} onClick={sorteerOp} rechts /></div>
+        <div style={{ width: STATUS_BREEDTE }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Status</p>
+        </div>
+        {!alleenLezen && <div style={{ width: 200 }} />}
+      </div>
+
+      {/* Rijen */}
+      {lijst.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Car size={32} style={{ color: "rgba(0,19,55,0.1)" }} />
+          <p className="text-sm font-bold mt-3" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+            {autos.length === 0 ? "Nog geen auto's" : "Geen auto's gevonden"}
+          </p>
+          {term && (
+            <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+              Probeer een andere zoekterm
+            </p>
+          )}
+        </div>
+      ) : (
+        lijst.map((auto) => {
+          const st = statusVan(auto);
+          const dagen = standtijdDagen(auto);
+          const lang = dagen != null && dagen >= 90;
+          return (
+            <div
+              key={auto.id}
+              className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-2.5 transition-all hover:bg-slate-50"
+              style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}
+            >
+              {/* Foto */}
+              <div className="flex items-center gap-3 md:contents">
+                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: 48, height: 34, backgroundColor: "#001337" }}>
+                  {auto.fotos?.length > 0 ? (
+                    <Image src={auto.fotos[0]} alt="" fill sizes="48px" className="object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageOff size={12} style={{ color: "rgba(255,255,255,0.3)" }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Naam — platte tekst; bewerken loopt via de knop rechts */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold block truncate" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                    {auto.merk} {auto.model}
+                  </p>
+                  <p className="md:hidden text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                    {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
+                  </p>
+                </div>
+              </div>
+
+              {/* Kolommen — desktop */}
+              <p className="hidden md:block text-xs" style={{ width: 60, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+                {auto.bouwjaar}
+              </p>
+              <p className="hidden md:block text-xs" style={{ width: 90, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+                {auto.km.toLocaleString("nl-NL")}
+              </p>
+              <p
+                className="hidden md:block text-xs font-semibold"
+                style={{ width: 80, color: lang ? "#b45309" : "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}
+              >
+                {dagen != null ? `${dagen} dgn` : "—"}
+              </p>
+
+              {/* Prijs */}
+              <p className="hidden md:block text-sm font-bold text-right" style={{ width: 100, color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                €{auto.prijs.toLocaleString("nl-NL")}
+              </p>
+
+              {/* Status — klikbaar: dit is de handeling die het vaakst nodig is */}
+              <div style={{ width: STATUS_BREEDTE }} className="hidden md:flex items-center gap-1">
+                {alleenLezen ? (
+                  <span
+                    className="inline-block px-2 py-1 text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ fontFamily: "var(--font-inter)", backgroundColor: STATUS_STIJL[st].bg, color: STATUS_STIJL[st].color }}
+                  >
+                    {STATUS_STIJL[st].label}
+                  </span>
+                ) : (
+                  (["beschikbaar", "gereserveerd", "verkocht"] as const).map((s) => {
+                    const actief = st === s;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => !actief && zetStatus(auto.id, s)}
+                        disabled={statusBezig === auto.id}
+                        title={`Markeer als ${STATUS_STIJL[s].label}`}
+                        className="px-2 py-1 text-[9px] font-bold uppercase tracking-wide transition-all hover:opacity-80 disabled:opacity-40"
+                        style={{
+                          fontFamily: "var(--font-inter)",
+                          backgroundColor: actief ? STATUS_STIJL[s].bg : "transparent",
+                          color: actief ? STATUS_STIJL[s].color : "rgba(0,19,55,0.3)",
+                          border: `1px solid ${actief ? STATUS_STIJL[s].color : "rgba(0,19,55,0.12)"}`,
+                          cursor: actief ? "default" : "pointer",
+                        }}
+                      >
+                        {STATUS_KORT[s]}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Mobiel: prijs + status op één regel */}
+              <div className="md:hidden flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                  €{auto.prijs.toLocaleString("nl-NL")}
+                </span>
+                {alleenLezen ? (
+                  <span
+                    className="px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                    style={{ backgroundColor: STATUS_STIJL[st].bg, color: STATUS_STIJL[st].color, fontFamily: "var(--font-inter)" }}
+                  >
+                    {STATUS_STIJL[st].label}
+                  </span>
+                ) : (
+                  (["beschikbaar", "gereserveerd", "verkocht"] as const).map((s) => {
+                    const actief = st === s;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => !actief && zetStatus(auto.id, s)}
+                        disabled={statusBezig === auto.id}
+                        className="px-2 py-1 text-[9px] font-bold uppercase transition-all disabled:opacity-40"
+                        style={{
+                          fontFamily: "var(--font-inter)",
+                          backgroundColor: actief ? STATUS_STIJL[s].bg : "transparent",
+                          color: actief ? STATUS_STIJL[s].color : "rgba(0,19,55,0.3)",
+                          border: `1px solid ${actief ? STATUS_STIJL[s].color : "rgba(0,19,55,0.12)"}`,
+                        }}
+                      >
+                        {STATUS_KORT[s]}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Acties — één bewerkknop, die naar de bewerkpagina gaat */}
+              {!alleenLezen && (
+                <div className="flex items-center gap-1.5 flex-wrap md:flex-nowrap md:justify-end" style={{ minWidth: 200 }}>
+                  <Link
+                    href={`/admin/auto-bewerken/${auto.id}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-90"
+                    style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                  >
+                    <Pencil size={11} /> Bewerken
+                  </Link>
+                  <a
+                    href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:opacity-70"
+                    style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+                  >
+                    Bekijk
+                  </a>
+                  <DeleteButton id={auto.id} naam={`${auto.merk} ${auto.model}`} />
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
+
+      {compact && (
+        <p className="px-4 py-2.5 text-[11px] text-center" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+          {gesorteerd.length > lijst.length
+            ? `Nog ${gesorteerd.length - lijst.length} auto's — aanpassen doe je in de Auto Voorraad tab`
+            : "Aanpassen doe je in de Auto Voorraad tab"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Kaartje met kop ─────────────────────────────────────────────
+function Paneel({
+  titel,
+  icon: Icon,
+  actie,
+  children,
+}: {
+  titel: string;
+  icon: React.ComponentType<IconProps>;
+  actie?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+      <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+        <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
+          <Icon size={14} style={{ color: "#001337" }} />
+        </div>
+        <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>{titel}</h2>
+        {actie && <div className="ml-auto">{actie}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Snelle acties ───────────────────────────────────────────────
+function SnelleActies({ onTab }: { onTab: (t: Tab) => void }) {
+  const knoppen: { label: string; icon: React.ComponentType<IconProps>; actie: () => void; href?: string }[] = [
+    { label: "Nieuwe auto", icon: Plus, actie: () => {}, href: "/admin/auto-toevoegen" },
+    { label: "Nieuwe factuur", icon: FileText, actie: () => onTab("facturen") },
+    { label: "Nieuwe taxatie", icon: TrendingDown, actie: () => onTab("inkoop") },
+    { label: "Nieuwe klant", icon: Users, actie: () => onTab("klanten") },
+    { label: "Nieuwe afspraak", icon: Calendar, actie: () => onTab("afspraken") },
+    { label: "Marge berekenen", icon: Calculator, actie: () => onTab("calculator") },
+  ];
+
+  const stijl = {
+    backgroundColor: "#ffffff",
+    border: "1px solid rgba(0,19,55,0.07)",
+    boxShadow: "0 1px 3px rgba(0,19,55,0.05)",
+    fontFamily: "var(--font-inter)",
+    color: "#001337",
+  };
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      {knoppen.map(({ label, icon: Icon, actie, href }) =>
+        href ? (
+          <Link
+            key={label}
+            href={href}
+            className="flex items-center gap-2.5 px-4 py-3 text-xs font-semibold transition-all hover:-translate-y-0.5"
+            style={stijl}
+          >
+            <Icon size={14} style={{ color: "#1d4ed8" }} />
+            {label}
+          </Link>
+        ) : (
+          <button
+            key={label}
+            onClick={actie}
+            className="flex items-center gap-2.5 px-4 py-3 text-xs font-semibold text-left transition-all hover:-translate-y-0.5"
+            style={stijl}
+          >
+            <Icon size={14} style={{ color: "#1d4ed8" }} />
+            {label}
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+// ── Omzet & marge deze maand ────────────────────────────────────
+type Stats = {
+  verkochtDezeMaand: number;
+  omzetDezeMaand: number;
+  omzetPerMaand: Record<string, number>;
+  verkopenPerMaand: Record<string, number>;
+  gemStandtijdVoorraad: number | null;
+  gemStandtijdVerkocht: number | null;
+};
+
+// Eén regel in het maandoverzicht. Delta = verschil met vorige maand in procenten.
+function MaandRegel({ label, waarde, delta }: { label: string; waarde: string; delta: number | null }) {
+  return (
+    <div className="flex items-baseline justify-between py-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}>
+      <p className="text-xs" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>{label}</p>
+      <div className="flex items-baseline gap-2">
+        <p className="text-base font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>{waarde}</p>
+        {delta != null && (
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5"
+            style={{
+              fontFamily: "var(--font-inter)",
+              backgroundColor: delta >= 0 ? "#dcfce7" : "#fee2e2",
+              color: delta >= 0 ? "#15803d" : "#b91c1c",
+            }}
+          >
+            {delta >= 0 ? "+" : ""}{delta}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MaandWidget() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [dossiers, setDossiers] = useState<Dossier[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/statistieken").then((r) => (r.ok ? r.json() : null)).then(setStats).catch(() => {});
+    fetch("/api/admin/dossiers").then((r) => (r.ok ? r.json() : [])).then(setDossiers).catch(() => {});
+  }, []);
+
+  // Zelfde marge-formule als de calculator: margeregeling vs. 21% BTW.
+  const winstVan = (d: Dossier): number => {
+    const kostprijs = d.inkoop + d.kosten.reduce((s, k) => s + (parseFloat(k.bedrag) || 0), 0);
+    if (d.verkoopprijs <= 0) return 0;
+    if (d.btw_type === "marge") {
+      const m = d.verkoopprijs - kostprijs;
+      return m > 0 ? Math.round((m - (m * 21) / 121) * 100) / 100 : m;
+    }
+    return Math.round((Math.round((d.verkoopprijs / 1.21) * 100) / 100 - kostprijs) * 100) / 100;
+  };
+
+  const nu = new Date();
+  const maandKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const vorige = new Date(nu.getFullYear(), nu.getMonth() - 1, 1);
+
+  const omzetVorig = stats?.omzetPerMaand?.[maandKey(vorige)] ?? 0;
+  const verkochtVorig = stats?.verkopenPerMaand?.[maandKey(vorige)] ?? 0;
+  const omzet = stats?.omzetDezeMaand ?? 0;
+  const aantal = stats?.verkochtDezeMaand ?? 0;
+
+  const totaleMarge = dossiers.reduce((s, d) => s + winstVan(d), 0);
+  const gemMarge = dossiers.length ? Math.round(totaleMarge / dossiers.length) : 0;
+
+  const euro = (n: number) => `€${Math.round(n).toLocaleString("nl-NL")}`;
+
+  // Verschil t.o.v. vorige maand, als percentage. Null als vorige maand leeg was.
+  const verschil = (nieuw: number, oud: number): number | null =>
+    oud > 0 ? Math.round(((nieuw - oud) / oud) * 100) : null;
+
+  const omzetVerschil = verschil(omzet, omzetVorig);
+  const aantalVerschil = verschil(aantal, verkochtVorig);
+
+  const maandNaam = nu.toLocaleDateString("nl-NL", { month: "long" });
+
+  return (
+    <Paneel titel={`Deze maand — ${maandNaam}`} icon={TrendingUp}>
+      <div className="px-5 py-2">
+        <MaandRegel label="Omzet (betaalde facturen)" waarde={euro(omzet)} delta={omzetVerschil} />
+        <MaandRegel label="Auto's verkocht" waarde={String(aantal)} delta={aantalVerschil} />
+        <MaandRegel
+          label="Gem. standtijd voorraad"
+          waarde={stats?.gemStandtijdVoorraad != null ? `${stats.gemStandtijdVoorraad} dgn` : "—"}
+          delta={null}
+        />
+        <MaandRegel
+          label={`Gem. marge (${dossiers.length} dossier${dossiers.length === 1 ? "" : "s"})`}
+          waarde={dossiers.length ? euro(gemMarge) : "—"}
+          delta={null}
+        />
+      </div>
+      {!stats && (
+        <p className="px-5 pb-4 text-[11px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+          Cijfers laden...
+        </p>
+      )}
+    </Paneel>
+  );
+}
+
+// ── Meldingen ───────────────────────────────────────────────────
+type Melding = {
+  id: string;
+  soort: "afspraak" | "auto" | "cosignatie" | "factuur";
+  titel: string;
+  detail: string;
+  urgent: boolean;
+  tab: string;
+};
+
+const MELDING_ICOON: Record<Melding["soort"], React.ComponentType<IconProps>> = {
+  afspraak: Calendar,
+  auto: Car,
+  cosignatie: Handshake,
+  factuur: FileText,
+};
+
+/** Belletje rechtsboven in de hub. Toont afspraken die eraan komen, auto's die
+ *  aandacht vragen, nieuwe cosignaties en openstaande facturen. */
+function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{ totaal: number; urgent: number; meldingen: Melding[] } | null>(null);
+  const paneel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const laad = () =>
+      fetch("/api/admin/meldingen")
+        .then((r) => (r.ok ? r.json() : null))
+        .then(setData)
+        .catch(() => {});
+    laad();
+    // Elke 2 minuten bijwerken — vaker heeft geen zin voor afspraken en facturen.
+    const t = setInterval(laad, 120_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Klik buiten het paneel sluit het.
+  useEffect(() => {
+    if (!open) return;
+    const sluit = (e: MouseEvent) => {
+      if (paneel.current && !paneel.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", sluit);
+    return () => document.removeEventListener("mousedown", sluit);
+  }, [open]);
+
+  const aantal = data?.totaal ?? 0;
+  const urgent = data?.urgent ?? 0;
+
+  return (
+    <div className="relative" ref={paneel}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label={`Meldingen${aantal > 0 ? ` (${aantal})` : ""}`}
+        className="relative flex items-center justify-center transition-all hover:opacity-80"
+        style={{
+          width: 38,
+          height: 38,
+          backgroundColor: "rgba(255,255,255,0.08)",
+          border: "1px solid rgba(255,255,255,0.12)",
+        }}
+      >
+        <Bell size={16} style={{ color: "rgba(255,255,255,0.75)" }} />
+        {aantal > 0 && (
+          <span
+            className="absolute flex items-center justify-center text-[10px] font-bold"
+            style={{
+              top: -7,
+              right: -7,
+              minWidth: 19,
+              height: 19,
+              padding: "0 5px",
+              borderRadius: 99,
+              backgroundColor: urgent > 0 ? "#dc2626" : "#b45309",
+              color: "#ffffff",
+              fontFamily: "var(--font-inter)",
+              border: "2px solid #001337",
+            }}
+          >
+            {aantal > 99 ? "99+" : aantal}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 z-50 overflow-hidden"
+          style={{
+            top: 46,
+            width: 340,
+            maxHeight: 420,
+            backgroundColor: "#ffffff",
+            border: "1px solid rgba(0,19,55,0.12)",
+            boxShadow: "0 12px 32px rgba(0,19,55,0.22)",
+          }}
+        >
+          <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+            <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+              Meldingen
+            </p>
+            {aantal > 0 && (
+              <span className="text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                {urgent > 0 ? `${urgent} urgent` : `${aantal} open`}
+              </span>
+            )}
+          </div>
+
+          <div style={{ maxHeight: 360, overflowY: "auto" }}>
+            {!data ? (
+              <p className="px-4 py-6 text-center text-[11px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+                Laden...
+              </p>
+            ) : aantal === 0 ? (
+              <div className="flex flex-col items-center justify-center py-9 px-4">
+                <CheckCircle2 size={26} style={{ color: "#bbf7d0" }} />
+                <p className="text-sm font-bold mt-2.5" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                  Niets te doen
+                </p>
+                <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                  Geen afspraken vandaag of morgen, geen openstaande facturen of aanvragen.
+                </p>
+              </div>
+            ) : (
+              data.meldingen.map((m) => {
+                const Icon = MELDING_ICOON[m.soort];
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => { onGaNaar(m.tab as Tab); setOpen(false); }}
+                    className="w-full flex items-start gap-3 px-4 py-2.5 text-left transition-all hover:bg-slate-50"
+                    style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}
+                  >
+                    <div
+                      className="flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{
+                        width: 26,
+                        height: 26,
+                        backgroundColor: m.urgent ? "#fee2e2" : "rgba(0,19,55,0.05)",
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Icon size={13} style={{ color: m.urgent ? "#b91c1c" : "rgba(0,19,55,0.5)" }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                        {m.titel}
+                      </p>
+                      <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                        {m.detail}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Claude Code verbruik ────────────────────────────────────────
+type ClaudeVerbruik = {
+  valuta?: string;
+  totaalUSD?: number;
+  prognoseUSD?: number;
+  perDag?: { datum: string; usd: number }[];
+  perModel?: { model: string; usd: number }[];
+  tokens?: { invoer: number; uitvoer: number; cache: number };
+  periode?: { van: string; tot: string };
+  error?: string;
+  ontbrekendeSleutel?: boolean;
+};
+
+function ClaudeVerbruikWidget() {
+  const [data, setData] = useState<ClaudeVerbruik | null>(null);
+  const [laden, setLaden] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/admin/claude-usage")
+      .then((r) => r.json())
+      .then(setData)
+      .catch((e) => setData({ error: String(e) }))
+      .finally(() => setLaden(false));
+  }, []);
+
+  const usd = (n: number) =>
+    `$${n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const kort = (n: number) =>
+    n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}k` : String(n);
+
+  const perDag = data?.perDag ?? [];
+  const maxDag = Math.max(...perDag.map((d) => d.usd), 0.01);
+
+  return (
+    <Paneel titel="Claude Code verbruik" icon={Cpu}>
+      <div className="p-5">
+        {laden && (
+          <p className="text-[11px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+            Verbruik laden...
+          </p>
+        )}
+
+        {!laden && data?.ontbrekendeSleutel && (
+          <div className="flex items-start gap-2.5 px-3 py-2.5" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
+            <AlertTriangle size={13} style={{ color: "#b45309", flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <p className="text-[11px] font-semibold" style={{ color: "#b45309", fontFamily: "var(--font-inter)" }}>
+                Nog niet gekoppeld
+              </p>
+              <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                Zet <code>ANTHROPIC_ADMIN_KEY</code> in de omgevingsvariabelen. Die maak je aan in de
+                Anthropic Console onder Settings → Admin keys.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!laden && data?.error && !data.ontbrekendeSleutel && (
+          <p className="text-[11px]" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
+            {data.error}
+          </p>
+        )}
+
+        {!laden && data?.totaalUSD != null && (
+          <>
+            {/* Kerncijfer */}
+            <div className="flex items-end justify-between mb-1">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                  Verbruikt deze maand
+                </p>
+                <p className="text-3xl font-bold leading-none" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                  {usd(data.totaalUSD)}
+                </p>
+              </div>
+              {data.prognoseUSD != null && data.prognoseUSD > 0 && (
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                    Verwacht hele maand
+                  </p>
+                  <p className="text-base font-bold" style={{ color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-playfair)" }}>
+                    {usd(data.prognoseUSD)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Verloop per dag — sequentiële blauwe balken */}
+            {perDag.length > 0 && (
+              <div className="mt-5">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                  Per dag
+                </p>
+                <div className="flex items-end gap-[3px]" style={{ height: 56 }}>
+                  {perDag.map((d) => (
+                    <div
+                      key={d.datum}
+                      title={`${d.datum} — ${usd(d.usd)}`}
+                      className="flex-1 transition-all hover:opacity-70"
+                      style={{
+                        height: `${Math.max((d.usd / maxDag) * 100, d.usd > 0 ? 4 : 1)}%`,
+                        backgroundColor: d.usd > 0 ? "#1d4ed8" : "rgba(0,19,55,0.08)",
+                        borderTopLeftRadius: 3,
+                        borderTopRightRadius: 3,
+                        minHeight: 2,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between mt-1.5">
+                  <span className="text-[9px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+                    {data.periode?.van}
+                  </span>
+                  <span className="text-[9px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+                    {data.periode?.tot}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Tokens */}
+            {data.tokens && (
+              <div className="grid grid-cols-3 gap-2 mt-5">
+                {[
+                  { label: "Invoer", waarde: data.tokens.invoer },
+                  { label: "Uitvoer", waarde: data.tokens.uitvoer },
+                  { label: "Cache", waarde: data.tokens.cache },
+                ].map((t) => (
+                  <div key={t.label} className="px-3 py-2" style={{ backgroundColor: "#f8fafc" }}>
+                    <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                      {kort(t.waarde)}
+                    </p>
+                    <p className="text-[9px] uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                      {t.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Per model */}
+            {data.perModel && data.perModel.length > 0 && (
+              <div className="mt-5">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                  Per model
+                </p>
+                {data.perModel.slice(0, 5).map((m) => (
+                  <div key={m.model} className="flex items-baseline justify-between gap-3 py-1" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}>
+                    <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+                      {m.model}
+                    </p>
+                    <p className="text-[11px] font-semibold flex-shrink-0" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                      {usd(m.usd)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-[10px] mt-4" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+              Bedragen in USD, zoals Anthropic factureert. Je resterende tegoed is niet via de API
+              op te vragen — dat staat alleen in de Console onder Billing.
+            </p>
+          </>
+        )}
+      </div>
+    </Paneel>
+  );
+}
+
+// ── Aandachtspunten ─────────────────────────────────────────────
+function AandachtWidget({ beschikbaar }: { beschikbaar: Auto[] }) {
+  const punten = verzamelAandachtspunten(beschikbaar);
+
+  return (
+    <Paneel
+      titel="Vraagt aandacht"
+      icon={AlertTriangle}
+      actie={
+        <span
+          className="text-[11px] font-semibold px-2 py-0.5"
+          style={{
+            fontFamily: "var(--font-inter)",
+            backgroundColor: punten.length ? "#fef3c7" : "#dcfce7",
+            color: punten.length ? "#b45309" : "#15803d",
+          }}
+        >
+          {punten.length}
+        </span>
+      }
+    >
+      {punten.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10">
+          <CheckCircle2 size={28} style={{ color: "#bbf7d0" }} />
+          <p className="text-sm font-bold mt-3" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+            Alles op orde
+          </p>
+          <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+            Geen auto&apos;s die actie nodig hebben
+          </p>
+        </div>
+      ) : (
+        <div className="max-h-72 overflow-y-auto">
+          {punten.map((p, i) => {
+            const Icon = p.icon;
+            return (
+              <Link
+                key={`${p.auto.id}-${i}`}
+                href={`/admin/auto-bewerken/${p.auto.id}`}
+                className="flex items-center gap-3 px-5 py-2.5 transition-all hover:bg-slate-50"
+                style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}
+              >
+                <Icon size={14} style={{ color: p.kleur, flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                    {p.auto.merk} {p.auto.model}
+                  </p>
+                </div>
+                <p className="text-[11px] font-semibold flex-shrink-0" style={{ color: p.kleur, fontFamily: "var(--font-inter)" }}>
+                  {p.reden}
+                </p>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </Paneel>
+  );
+}
+
+
+// Eén pagina, twee gescheiden lijsten. De schakelaar bovenaan bepaalt welke je
+// ziet — voorraad en verkocht lopen nooit door elkaar heen.
+function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => void }) {
+  const [toon, setToon] = useState<"voorraad" | "verkocht">("voorraad");
+
+  const opVoorraad = autos.filter((a) => !a.verkocht);
+  const verkocht = autos.filter((a) => a.verkocht);
+  const gereserveerd = opVoorraad.filter((a) => a.gereserveerd);
+
+  const subtitel =
+    toon === "voorraad"
+      ? gereserveerd.length > 0
+        ? `${opVoorraad.length} op voorraad · waarvan ${gereserveerd.length} gereserveerd`
+        : `${opVoorraad.length} op voorraad`
+      : `${verkocht.length} verkocht · archief`;
 
   return (
     <div>
       <PageHeader
         title="Auto Voorraad"
-        subtitle={`${beschikbaar.length} beschikbaar · ${verkocht.length} verkocht`}
+        subtitle={subtitel}
         action={
           <Link
             href="/admin/auto-toevoegen"
@@ -863,157 +1623,45 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
           </Link>
         }
       />
+
       <div className="p-4 md:p-8">
-        {/* Tabbladen: scheidt de actieve voorraad van de verkochte auto's */}
-        <div className="flex items-center gap-1 mb-5 flex-wrap">
+        {/* Schakelaar tussen de twee lijsten */}
+        <div className="flex items-center gap-1 mb-5">
           {([
-            { key: "voorraad", label: "Voorraad", aantal: beschikbaar.length },
-            { key: "verkocht", label: "Verkocht", aantal: verkocht.length },
-          ] as const).map((t) => {
-            const active = tab === t.key;
+            { key: "voorraad", label: "Op voorraad", aantal: opVoorraad.length, icon: Car },
+            { key: "verkocht", label: "Verkocht", aantal: verkocht.length, icon: CheckCircle2 },
+          ] as const).map((w) => {
+            const actief = toon === w.key;
+            const Icon = w.icon;
             return (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className="px-4 py-2 text-sm font-semibold transition-all hover:opacity-80"
+                key={w.key}
+                onClick={() => setToon(w.key)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all hover:opacity-80"
                 style={{
-                  backgroundColor: active ? "#001337" : "transparent",
-                  color: active ? "#ffffff" : "rgba(0,19,55,0.45)",
-                  border: `1px solid ${active ? "#001337" : "rgba(0,19,55,0.12)"}`,
                   fontFamily: "var(--font-inter)",
+                  backgroundColor: actief ? "#001337" : "#ffffff",
+                  color: actief ? "#ffffff" : "rgba(0,19,55,0.5)",
+                  border: `1px solid ${actief ? "#001337" : "rgba(0,19,55,0.12)"}`,
                 }}
               >
-                {t.label} ({t.aantal})
+                <Icon size={14} />
+                {w.label}
+                <span
+                  className="px-1.5 py-0.5 text-[10px] font-bold"
+                  style={{
+                    backgroundColor: actief ? "rgba(255,255,255,0.18)" : "rgba(0,19,55,0.06)",
+                    color: actief ? "#ffffff" : "rgba(0,19,55,0.5)",
+                  }}
+                >
+                  {w.aantal}
+                </span>
               </button>
             );
           })}
         </div>
-        {autos.length === 0 ? (
-          <div
-            className="flex flex-col items-center justify-center py-28"
-            style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-          >
-            <Car size={40} style={{ color: "rgba(0,19,55,0.1)" }} />
-            <p
-              className="text-lg font-bold mt-5 mb-2"
-              style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
-            >
-              Nog geen auto's toegevoegd
-            </p>
-            <Link
-              href="/admin/auto-toevoegen"
-              className="mt-2 flex items-center gap-2 px-6 py-3 text-sm font-semibold"
-              style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
-            >
-              <Plus size={13} /> Eerste auto toevoegen
-            </Link>
-          </div>
-        ) : lijst.length === 0 ? (
-          <div
-            className="flex flex-col items-center justify-center py-28"
-            style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-          >
-            <Car size={40} style={{ color: "rgba(0,19,55,0.1)" }} />
-            <p
-              className="text-lg font-bold mt-5"
-              style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
-            >
-              {tab === "voorraad" ? "Geen auto's in de voorraad" : "Nog geen verkochte auto's"}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {lijst.map((auto) => {
-              const statusColors: Record<string, { bg: string; color: string }> = {
-                beschikbaar: { bg: "#dcfce7", color: "#15803d" },
-                gereserveerd: { bg: "#fef3c7", color: "#b45309" },
-                verkocht: { bg: "#001337", color: "#ffffff" },
-              };
-              return (
-                <div
-                  key={auto.id}
-                  className="flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 md:px-5 py-3.5"
-                  style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
-                >
-                  {/* Bovenste rij: foto + info + prijs */}
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className="flex-shrink-0 w-16 md:w-20 h-11 md:h-14 overflow-hidden"
-                      style={{ backgroundColor: "#001337" }}
-                    >
-                      {auto.fotos?.length > 0 ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={auto.fotos[0]} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <span className="text-lg font-bold" style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-playfair)" }}>
-                            {auto.merk.slice(0, 2).toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                        <Link href={`/admin/auto-bewerken/${auto.id}`} className="text-sm font-bold transition-all hover:underline" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                          {auto.merk} {auto.model}
-                        </Link>
-                        {auto.verkocht && (
-                          <span className="text-[9px] px-1.5 py-0.5 tracking-widest uppercase" style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>Verkocht</span>
-                        )}
-                        {auto.gereserveerd && !auto.verkocht && (
-                          <span className="text-[9px] px-1.5 py-0.5 tracking-widest uppercase" style={{ backgroundColor: "#b45309", color: "#ffffff", fontFamily: "var(--font-inter)" }}>Gereserveerd</span>
-                        )}
-                      </div>
-                      <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-                        {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
-                      </p>
-                    </div>
-                    {/* Prijs — bewerkbaar, altijd rechts in bovenste rij */}
-                    <PrijsBewerk auto={auto} edit={prijsEdit} setEdit={setPrijsEdit} bezig={prijsBezig} onSave={updatePrijs} />
-                  </div>
-                  {/* Onderste rij: knoppen */}
-                  <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
-                    {(["beschikbaar", "gereserveerd", "verkocht"] as const).map((s) => {
-                      const active = s === "verkocht" ? auto.verkocht : s === "gereserveerd" ? (auto.gereserveerd && !auto.verkocht) : (!auto.verkocht && !auto.gereserveerd);
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => updateStatus(auto.id, s)}
-                          className="px-2 md:px-2.5 py-1 text-[10px] font-semibold tracking-wide uppercase transition-all hover:opacity-80"
-                          style={{
-                            backgroundColor: active ? statusColors[s].bg : "transparent",
-                            color: active ? statusColors[s].color : "rgba(0,19,55,0.3)",
-                            border: `1px solid ${active ? statusColors[s].color : "rgba(0,19,55,0.12)"}`,
-                            fontFamily: "var(--font-inter)",
-                          }}
-                        >
-                          {s === "beschikbaar" ? "Beschikbaar" : s === "gereserveerd" ? "Gereserveerd" : "Verkocht"}
-                        </button>
-                      );
-                    })}
-                    <Link
-                      href={`/admin/auto-bewerken/${auto.id}`}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90"
-                      style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
-                    >
-                      <Pencil size={11} /> Bewerken
-                    </Link>
-                    <a
-                      href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-70"
-                      style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-                    >
-                      Bekijk
-                    </a>
-                    <DeleteButton id={auto.id} naam={`${auto.merk} ${auto.model}`} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+
+        <VoorraadTabel autos={autos} refresh={refresh} toon={toon} />
       </div>
     </div>
   );
@@ -1431,6 +2079,28 @@ function FacturenContent() {
     setNieuwsteFactuur((prev) => (prev && prev.id === id ? { ...prev, [veld]: iso } : prev));
   };
 
+  /** Geeft een geblokkeerde mail weer vrij. Bewust een aparte, expliciete
+   *  handeling: zo is dubbel versturen nooit een ongeluk, maar wel mogelijk
+   *  als een mail echt niet is aangekomen. */
+  const draaiVerzendingTerug = async (
+    f: Factuur,
+    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
+  ) => {
+    const wat = veld === "factuurmail_verstuurd_op" ? "factuurmail" : "bedankmail";
+    if (!confirm(
+      `Verzending van de ${wat} terugdraaien?\n\n` +
+      `De registratie wordt gewist zodat je hem opnieuw kunt versturen. ` +
+      `De klant heeft de eerder verstuurde mail nog steeds ontvangen.`
+    )) return;
+    await fetch(`/api/admin/facturen/${f.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [veld]: "" }),
+    });
+    setFacturen((prev) => prev.map((x) => (x.id === f.id ? { ...x, [veld]: "" } : x)));
+    setNieuwsteFactuur((prev) => (prev && prev.id === f.id ? { ...prev, [veld]: "" } : prev));
+  };
+
   const verwijder = async (id: string) => {
     if (!confirm("Factuur definitief verwijderen?")) return;
     await fetch(`/api/admin/facturen/${id}`, { method: "DELETE" });
@@ -1537,10 +2207,16 @@ function FacturenContent() {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
-    if (f.factuurmail_verstuurd_op && !confirm(
-      `Deze factuurmail is al verstuurd op ${formatVerstuurd(f.factuurmail_verstuurd_op)}.\n\n` +
-      `Weet je zeker dat je hem nóg een keer wilt versturen?`
-    )) return;
+    // Harde blokkade: een klant twee keer dezelfde factuur sturen is een fout die
+    // je niet wilt kúnnen maken. Opnieuw sturen kan alleen na expliciet vrijgeven.
+    if (f.factuurmail_verstuurd_op) {
+      alert(
+        `Deze factuurmail is al verstuurd op ${formatVerstuurd(f.factuurmail_verstuurd_op)}.\n\n` +
+        `Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je ` +
+        `zeker weet dat de klant hem niet heeft ontvangen.`
+      );
+      return;
+    }
     setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
@@ -1576,10 +2252,14 @@ function FacturenContent() {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
     }
-    if (f.bedankmail_verstuurd_op && !confirm(
-      `Deze bedankmail is al verstuurd op ${formatVerstuurd(f.bedankmail_verstuurd_op)}.\n\n` +
-      `Weet je zeker dat je hem nóg een keer wilt versturen?`
-    )) return;
+    if (f.bedankmail_verstuurd_op) {
+      alert(
+        `Deze bedankmail is al verstuurd op ${formatVerstuurd(f.bedankmail_verstuurd_op)}.\n\n` +
+        `Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je ` +
+        `zeker weet dat de klant hem niet heeft ontvangen.`
+      );
+      return;
+    }
     setBedankStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
@@ -2389,15 +3069,22 @@ function FacturenContent() {
                           </div>
                           {(f.factuurmail_verstuurd_op || f.bedankmail_verstuurd_op) && (
                             <div className="mt-3 flex flex-col gap-1">
-                              {f.factuurmail_verstuurd_op && (
-                                <p className="text-[11px] font-medium" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
-                                  ✓ Factuurmail verstuurd op {formatVerstuurd(f.factuurmail_verstuurd_op)}
-                                </p>
-                              )}
-                              {f.bedankmail_verstuurd_op && (
-                                <p className="text-[11px] font-medium" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
-                                  ✓ Bedankmail verstuurd op {formatVerstuurd(f.bedankmail_verstuurd_op)}
-                                </p>
+                              {([
+                                { veld: "factuurmail_verstuurd_op", label: "Factuurmail" },
+                                { veld: "bedankmail_verstuurd_op", label: "Bedankmail" },
+                              ] as const).map(({ veld, label }) =>
+                                f[veld] ? (
+                                  <p key={veld} className="text-[11px] font-medium flex items-center gap-2 flex-wrap" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
+                                    ✓ {label} verstuurd op {formatVerstuurd(f[veld])}
+                                    <button
+                                      onClick={() => draaiVerzendingTerug(f, veld)}
+                                      className="underline transition-all hover:opacity-70"
+                                      style={{ color: "rgba(0,19,55,0.4)" }}
+                                    >
+                                      Verzending terugdraaien
+                                    </button>
+                                  </p>
+                                ) : null
                               )}
                             </div>
                           )}
@@ -2428,74 +3115,6 @@ const STANDAARD_KOSTEN: KostenRegel[] = [
 ];
 
 // Dashboard-widget: compact dossier overzicht
-function CalculatorPanel() {
-  const [dossiers, setDossiers] = useState<Dossier[]>([]);
-
-  useEffect(() => {
-    fetch("/api/admin/dossiers")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setDossiers);
-  }, []);
-
-  const fmtK = (v: number) => v.toLocaleString("nl-NL", { maximumFractionDigits: 0 });
-
-  const calcWinst = (d: Dossier): number | null => {
-    const k = d.inkoop + d.kosten.reduce((s, kk) => s + (parseFloat(kk.bedrag) || 0), 0);
-    if (d.verkoopprijs <= 0) return null;
-    if (d.btw_type === "marge") {
-      const m = d.verkoopprijs - k;
-      return m > 0 ? Math.round((m - (m * 21) / 121) * 100) / 100 : m;
-    }
-    const ex = Math.round((d.verkoopprijs / 1.21) * 100) / 100;
-    return Math.round((ex - k) * 100) / 100;
-  };
-
-  if (dossiers.length === 0) {
-    return (
-      <div className="py-6 text-center">
-        <p className="text-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-          Nog geen dossiers — open de Calculator tab om te starten.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {dossiers.map((d) => {
-        const w = calcWinst(d);
-        return (
-          <div
-            key={d.id}
-            className="flex items-center justify-between px-4 py-3"
-            style={{ border: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fafbfc" }}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold truncate" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                {d.auto_naam || "Naamloos"}
-              </p>
-              <p className="text-[10px] mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-                {d.inkoop > 0 ? ("Inkoop: €" + fmtK(d.inkoop)) : "Inkoop: —"}
-                {" · "}
-                {d.btw_type === "marge" ? "Marge" : "21% BTW"}
-              </p>
-            </div>
-            <div className="flex-shrink-0 text-right ml-3">
-              {w !== null ? (
-                <p className="text-sm font-bold" style={{ color: w > 0 ? "#15803d" : w < 0 ? "#b91c1c" : "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
-                  {w > 0 ? "+" : ""}
-                  {"€" + fmtK(Math.abs(w))}
-                </p>
-              ) : (
-                <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.3)", fontFamily: "var(--font-inter)" }}>Geen verkoop</p>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Interne helpers voor de calculators ─────────────────────────
 function useCalculatorLogic(inkoopprijs: string, btwType: "marge" | "21", verkoopprijs: string, kosten: KostenRegel[]) {
@@ -2540,6 +3159,10 @@ function CalculatorContent() {
   const [mobileView, setMobileView] = useState<"lijst" | "detail">("lijst");
   const [opgeslagen, setOpgeslagen] = useState(false);
   const [periode, setPeriode] = useState<"alles" | "week" | "maand" | "kwartaal" | "jaar">("alles");
+  const [dossierZoek, setDossierZoek] = useState("");
+  // Verkochte auto's schuiven automatisch naar het archief; standaard toon je
+  // wat er nog loopt, want daar stuur je op.
+  const [dossierWeergave, setDossierWeergave] = useState<"lopend" | "archief" | "alle">("lopend");
 
   // Local edit state for the active dossier
   const [autoNaam, setAutoNaam] = useState("");
@@ -2648,8 +3271,11 @@ function CalculatorContent() {
     return Math.round((ex - k) * 100) / 100;
   };
 
-  // Periode filter
+  const dossierTerm = dossierZoek.trim().toLowerCase();
   const gefilterdeDossiers = dossiers.filter((d) => {
+    if (dossierTerm && !d.auto_naam.toLowerCase().includes(dossierTerm)) return false;
+    if (dossierWeergave === "lopend" && d.gearchiveerd) return false;
+    if (dossierWeergave === "archief" && !d.gearchiveerd) return false;
     if (periode === "alles") return true;
     const aangemaaktDatum = new Date(d.aangemaakt);
     const nu = new Date();
@@ -2818,8 +3444,49 @@ function CalculatorContent() {
         {/* ── Zijbalk: dossier lijst ── */}
         <aside
           className={`${mobileView === "detail" ? "hidden md:flex" : "flex"} flex-col flex-shrink-0`}
-          style={{ width: "220px", borderRight: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8f9fb" }}
+          style={{ width: "290px", borderRight: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8f9fb" }}
         >
+          {/* Zoeken + lopend/archief — bij tientallen dossiers is scrollen geen doen */}
+          <div className="px-3 py-2.5 flex flex-col gap-2" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fff" }}>
+            <div className="flex items-center gap-2">
+              <Search size={12} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} />
+              <input
+                value={dossierZoek}
+                onChange={(e) => setDossierZoek(e.target.value)}
+                placeholder="Zoek auto..."
+                className="flex-1 min-w-0 text-[12px] outline-none bg-transparent"
+                style={{ color: "#001337", fontFamily: "var(--font-inter)" }}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              {([
+                { key: "lopend", label: "Lopend" },
+                { key: "archief", label: "Archief" },
+                { key: "alle", label: "Alle" },
+              ] as const).map((w) => {
+                const actiefFilter = dossierWeergave === w.key;
+                const aantal = dossiers.filter((d) =>
+                  w.key === "alle" ? true : w.key === "archief" ? d.gearchiveerd : !d.gearchiveerd
+                ).length;
+                return (
+                  <button
+                    key={w.key}
+                    onClick={() => setDossierWeergave(w.key)}
+                    className="flex-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-all hover:opacity-80"
+                    style={{
+                      fontFamily: "var(--font-inter)",
+                      backgroundColor: actiefFilter ? "#001337" : "transparent",
+                      color: actiefFilter ? "#fff" : "rgba(0,19,55,0.4)",
+                      border: `1px solid ${actiefFilter ? "#001337" : "rgba(0,19,55,0.12)"}`,
+                    }}
+                  >
+                    {w.label} {aantal}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Nieuw dossier formulier */}
           {toonNieuw && (
             <div className="px-3 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fff" }}>
@@ -2933,7 +3600,7 @@ function CalculatorContent() {
 
               <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
                 {/* Invoer */}
-                <div className="flex-1 flex flex-col gap-4 lg:max-w-[480px]">
+                <div className="flex flex-col gap-4 lg:flex-[3] min-w-0">
                   {/* Auto naam */}
                   <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
                     <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
@@ -3130,10 +3797,52 @@ function CalculatorContent() {
 }
 
 // ── Kenteken Check Widget ────────────────────────────────────────
+// Volledige RDW-respons (zie app/api/admin/rdw-lookup/route.ts)
+type RdwResultaat = {
+  kenteken: string; merk: string; model: string; bouwjaar: number | null;
+  kleur: string; brandstof: string; bodytype: string; apk: string;
+  vermogen: string; cilinderinhoud: string; aantalDeuren: string; aantalCilinders: string;
+  catalogusprijs: number;
+  voertuigsoort: string; handelsbenaming: string; variant: string; uitvoering: string;
+  typegoedkeuring: string; inrichting: string; tweedeKleur: string;
+  aantalZitplaatsen: string; aantalWielen: string;
+  apkVervaldatum: string; datumEersteToelatingNL: string; datumTenaamstelling: string;
+  eersteToelatingNederland: string;
+  wamVerzekerd: boolean; tenaamstellenMogelijk: boolean; geexporteerd: boolean; taxiVerleden: boolean;
+  tellerstandoordeel: string; tellerLogisch: boolean; jaarLaatsteTellerstand: string;
+  openstaandeTerugroepactie: boolean; aantalTerugroepacties: number; aantalGebreken: number;
+  brutoBpm: number | null; zuinigheidsclassificatie: string;
+  massaLedig: number | null; massaRijklaar: number | null; maxMassa: number | null;
+  trekgewichtGeremd: number | null; trekgewichtOngeremd: number | null;
+  lengte: number | null; breedte: number | null; hoogte: number | null; wielbasis: number | null;
+  topsnelheid: number | null; europeseCategorie: string; carrosserie: string;
+  co2Uitstoot: number | null; emissiecode: string;
+};
+
+// Groen = goed nieuws, rood = let op. Zo zie je in één blik of een auto schoon is.
+function Signaal({ ok, goedTekst, foutTekst }: { ok: boolean; goedTekst: string; foutTekst: string }) {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-2"
+      style={{
+        backgroundColor: ok ? "#f0fdf4" : "#fef2f2",
+        border: `1px solid ${ok ? "#bbf7d0" : "#fecaca"}`,
+      }}
+    >
+      {ok
+        ? <CheckCircle2 size={13} style={{ color: "#15803d", flexShrink: 0 }} />
+        : <AlertTriangle size={13} style={{ color: "#b91c1c", flexShrink: 0 }} />}
+      <p className="text-[11px] font-semibold" style={{ color: ok ? "#15803d" : "#b91c1c", fontFamily: "var(--font-inter)" }}>
+        {ok ? goedTekst : foutTekst}
+      </p>
+    </div>
+  );
+}
+
 function KentekenWidget() {
   const [kenteken, setKenteken] = useState("");
   const [laden, setLaden] = useState(false);
-  const [resultaat, setResultaat] = useState<Record<string, string> | null>(null);
+  const [resultaat, setResultaat] = useState<RdwResultaat | null>(null);
   const [fout, setFout] = useState<string | null>(null);
 
   const zoek = async () => {
@@ -3141,29 +3850,79 @@ function KentekenWidget() {
     setLaden(true);
     setResultaat(null);
     setFout(null);
-    const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(kenteken.trim())}`);
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(kenteken.trim())}`);
       const data = await res.json();
-      if (data && Object.keys(data).length > 0) setResultaat(data);
-      else setFout("Kenteken niet gevonden");
-    } else {
+      if (res.ok && data?.merk) setResultaat(data as RdwResultaat);
+      else setFout(data?.error ?? "Kenteken niet gevonden");
+    } catch {
       setFout("Fout bij ophalen RDW-data");
+    } finally {
+      setLaden(false);
     }
-    setLaden(false);
   };
 
-  const velden: [string, string][] = resultaat ? [
-    ["Merk", resultaat.merk],
-    ["Handelsbenaming", resultaat.handelsbenaming],
-    ["1e toelating", resultaat.datum_eerste_toelating?.slice(0, 4)],
-    ["Brandstof", resultaat.brandstof_omschrijving],
-    ["Kleur", resultaat.eerste_kleur],
-    ["Carrosserie", resultaat.inrichting],
-    ["Cilinderinhoud", resultaat.cilinderinhoud ? `${resultaat.cilinderinhoud} cc` : ""],
-    ["Vermogen", resultaat.nettomaximumvermogen ? `${resultaat.nettomaximumvermogen} kW` : ""],
-    ["CO2", resultaat.co2_uitstoot_gecombineerd ? `${resultaat.co2_uitstoot_gecombineerd} g/km` : ""],
-    ["APK vervaldatum", resultaat.vervaldatum_apk],
-  ].filter(([, v]) => v) as [string, string][] : [];
+  const r = resultaat;
+  const euro = (n: number | null | undefined) =>
+    n != null && n > 0 ? `€${n.toLocaleString("nl-NL")}` : "";
+
+  // Gegroepeerd zoals een kentekencheck: identiteit, techniek, maten, milieu.
+  const groepen: { titel: string; velden: [string, string][] }[] = r ? [
+    {
+      titel: "Voertuig",
+      velden: [
+        ["Merk", r.merk],
+        ["Model", r.model],
+        ["Uitvoering", r.variant],
+        ["Voertuigsoort", r.voertuigsoort],
+        ["Carrosserie", r.carrosserie || r.inrichting],
+        ["Kleur", [r.kleur, r.tweedeKleur].filter(Boolean).join(" / ")],
+        ["Zitplaatsen", r.aantalZitplaatsen],
+        ["Deuren", String(r.aantalDeuren ?? "")],
+      ],
+    },
+    {
+      titel: "Techniek",
+      velden: [
+        ["Brandstof", r.brandstof],
+        ["Vermogen", r.vermogen],
+        ["Cilinderinhoud", r.cilinderinhoud ? `${r.cilinderinhoud} L` : ""],
+        ["Cilinders", String(r.aantalCilinders ?? "")],
+        ["Topsnelheid", r.topsnelheid ? `${r.topsnelheid} km/u` : ""],
+        ["Energielabel", r.zuinigheidsclassificatie],
+        ["CO₂", r.co2Uitstoot ? `${r.co2Uitstoot} g/km` : ""],
+        ["Emissieklasse", r.emissiecode],
+      ],
+    },
+    {
+      titel: "Datums & status",
+      velden: [
+        ["1e toelating", r.datumEersteToelatingNL],
+        ["1e toelating NL", r.eersteToelatingNederland],
+        ["Op naam sinds", r.datumTenaamstelling],
+        ["APK geldig tot", r.apkVervaldatum],
+        ["Tellerstand", r.tellerstandoordeel],
+        ["Laatste telleraflezing", r.jaarLaatsteTellerstand],
+        ["Catalogusprijs", euro(r.catalogusprijs)],
+        ["Bruto BPM", euro(r.brutoBpm)],
+      ],
+    },
+    {
+      titel: "Massa & maten",
+      velden: [
+        ["Massa ledig", r.massaLedig ? `${r.massaLedig} kg` : ""],
+        ["Massa rijklaar", r.massaRijklaar ? `${r.massaRijklaar} kg` : ""],
+        ["Max. massa", r.maxMassa ? `${r.maxMassa} kg` : ""],
+        ["Trekgewicht geremd", r.trekgewichtGeremd ? `${r.trekgewichtGeremd} kg` : ""],
+        ["Trekgewicht ongeremd", r.trekgewichtOngeremd ? `${r.trekgewichtOngeremd} kg` : ""],
+        ["Lengte × breedte", r.lengte && r.breedte ? `${r.lengte} × ${r.breedte} cm` : ""],
+        ["Hoogte", r.hoogte ? `${r.hoogte} cm` : ""],
+        ["Wielbasis", r.wielbasis ? `${r.wielbasis} cm` : ""],
+      ],
+    },
+  ].map((g) => ({ titel: g.titel, velden: g.velden.filter(([, v]) => v) as [string, string][] }))
+    .filter((g) => g.velden.length > 0)
+    : [];
 
   return (
     <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
@@ -3172,9 +3931,12 @@ function KentekenWidget() {
           <Search size={14} style={{ color: "#001337" }} />
         </div>
         <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Kenteken Check</h2>
+        <span className="text-[10px] ml-auto" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+          Bron: RDW open data
+        </span>
       </div>
       <div className="p-4">
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-2 mb-4">
           <input
             type="text"
             value={kenteken}
@@ -3188,22 +3950,75 @@ function KentekenWidget() {
             type="button"
             onClick={zoek}
             disabled={laden}
-            className="px-4 py-2 text-sm font-semibold transition-all hover:opacity-80 disabled:opacity-50"
+            className="px-5 py-2 text-sm font-semibold transition-all hover:opacity-80 disabled:opacity-50"
             style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
           >
-            {laden ? "..." : "Zoek"}
+            {laden ? "Zoeken..." : "Zoek"}
           </button>
         </div>
-        {fout && <p className="text-xs" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>{fout}</p>}
-        {velden.length > 0 && (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-            {velden.map(([l, v]) => (
-              <div key={l} className="flex items-baseline gap-1.5">
-                <p className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", minWidth: 90 }}>{l}</p>
-                <p className="text-xs font-semibold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>{v}</p>
+
+        {fout && (
+          <p className="text-xs" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>{fout}</p>
+        )}
+
+        {r && (
+          <>
+            {/* Kop met kenteken */}
+            <div className="flex items-center gap-3 mb-4 pb-4" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+              <span
+                className="px-3 py-1.5 text-sm font-bold tracking-wider"
+                style={{ backgroundColor: "#facc15", color: "#001337", fontFamily: "var(--font-inter)", border: "1px solid #001337" }}
+              >
+                {r.kenteken}
+              </span>
+              <div>
+                <p className="text-base font-bold leading-tight" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                  {r.merk} {r.model}
+                </p>
+                <p className="text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                  {[r.bouwjaar, r.brandstof, r.vermogen].filter(Boolean).join(" · ")}
+                </p>
               </div>
-            ))}
-          </div>
+            </div>
+
+            {/* Signalen — de dingen waar je bij inkoop op let */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
+              <Signaal ok={r.tellerLogisch} goedTekst="Tellerstand logisch" foutTekst={r.tellerstandoordeel || "Tellerstand onlogisch"} />
+              <Signaal ok={!r.openstaandeTerugroepactie} goedTekst="Geen terugroepactie" foutTekst="Openstaande terugroepactie" />
+              <Signaal ok={r.wamVerzekerd} goedTekst="WAM verzekerd" foutTekst="Niet WAM verzekerd" />
+              <Signaal ok={r.tenaamstellenMogelijk} goedTekst="Tenaamstellen mogelijk" foutTekst="Tenaamstellen geblokkeerd" />
+              <Signaal ok={!r.taxiVerleden} goedTekst="Geen taxiverleden" foutTekst="Taxiverleden" />
+              <Signaal ok={!r.geexporteerd} goedTekst="Niet geëxporteerd" foutTekst="Geëxporteerd" />
+            </div>
+
+            {r.aantalGebreken > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 mb-4" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
+                <AlertTriangle size={13} style={{ color: "#b45309", flexShrink: 0 }} />
+                <p className="text-[11px] font-semibold" style={{ color: "#b45309", fontFamily: "var(--font-inter)" }}>
+                  {r.aantalGebreken} geconstateerd gebrek{r.aantalGebreken === 1 ? "" : "en"} bij eerdere keuring
+                </p>
+              </div>
+            )}
+
+            {/* Alle gegevens, gegroepeerd */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+              {groepen.map((g) => (
+                <div key={g.titel}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                    {g.titel}
+                  </p>
+                  <div className="flex flex-col">
+                    {g.velden.map(([l, v]) => (
+                      <div key={l} className="flex items-baseline justify-between gap-3 py-1" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}>
+                        <p className="text-[11px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>{l}</p>
+                        <p className="text-[11px] font-semibold text-right" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>{v}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -35,11 +35,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return Response.json(factuur);
   }
 
+  // De verstuurd-velden mogen expliciet op "" gezet worden ("Verzending
+  // terugdraaien"). COALESCE laat undefined ongemoeid, maar "" komt er wél
+  // doorheen — zonder deze twee regels zou terugdraaien stil mislukken.
   await sql`
     UPDATE facturen SET
       status = COALESCE(${body.status ?? null}, status),
       notitie = COALESCE(${body.notitie ?? null}, notitie),
-      factuur_nr = COALESCE(${body.factuur_nr ?? null}, factuur_nr)
+      factuur_nr = COALESCE(${body.factuur_nr ?? null}, factuur_nr),
+      factuurmail_verstuurd_op = COALESCE(${body.factuurmail_verstuurd_op ?? null}, factuurmail_verstuurd_op),
+      bedankmail_verstuurd_op = COALESCE(${body.bedankmail_verstuurd_op ?? null}, bedankmail_verstuurd_op)
     WHERE id = ${id}
   `;
   return Response.json({ ok: true });

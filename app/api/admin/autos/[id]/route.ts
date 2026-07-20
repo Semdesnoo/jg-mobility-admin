@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getAutoById, saveAuto } from "@/lib/autos-db";
 import { revalidateWebsite } from "@/lib/revalidate";
+import { syncDossierMetAuto } from "@/lib/dossiers-db";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,6 +30,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   await saveAuto(auto);
+  // Status gewijzigd? Het calculatordossier verhuist mee van lopend naar archief.
+  await syncDossierMetAuto(auto);
   await revalidateWebsite();
   return Response.json({ ok: true });
 }

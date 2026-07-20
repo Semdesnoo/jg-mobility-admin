@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { X, Plus, ArrowLeft, Search, Upload, Sparkles } from "lucide-react";
 import type { Auto } from "@/lib/autos";
 
@@ -546,7 +547,7 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
               <p className="text-xs mt-3 mb-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
                 Sleep foto&apos;s om de volgorde te wijzigen — de eerste foto wordt de hoofdfoto
               </p>
-              <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
                 {fotos.map((item, i) => {
                   const src = item.kind === "bestaand" ? item.url : item.preview;
                   return (
@@ -569,8 +570,19 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
                         outlineOffset: "2px",
                       }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={src} alt="" className="w-full h-full object-cover pointer-events-none" />
+                      {item.kind === "bestaand" ? (
+                        <Image
+                          src={src}
+                          alt=""
+                          fill
+                          sizes="(max-width: 768px) 25vw, 12vw"
+                          className="object-cover pointer-events-none"
+                        />
+                      ) : (
+                        // Nieuwe foto = lokale data-URL preview; al instant, niet via de optimizer.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={src} alt="" className="w-full h-full object-cover pointer-events-none" />
+                      )}
                       <button
                         type="button"
                         onClick={() => verwijderFoto(i)}
