@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Package,
   Wallet,
+  Mail,
   AlertTriangle,
   Clock,
   ImageOff,
@@ -44,8 +45,9 @@ import MerkAnalyseContent from "./MerkAnalyseContent";
 import BoekhoudingContent from "./BoekhoudingContent";
 import InkoopFacturenContent from "./InkoopFacturenContent";
 import SocialContent from "./SocialContent";
+import GmailWidget from "./GmailWidget";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email";
 
 type Auto = {
   id: number;
@@ -102,7 +104,6 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
-      { id: "calculator", label: "Calculator",       icon: Calculator },
       { id: "afspraken",  label: "Afspraken",        icon: Calendar },
       { id: "molibox",    label: "Molibox",          icon: LayoutGrid },
     ],
@@ -121,7 +122,9 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "boekhouding", label: "Boekhouding", icon: Banknote },
       { id: "facturen", label: "Verkoopfacturen", icon: FileText },
       { id: "inkoopfacturen", label: "Inkoopfacturen", icon: Wallet },
-      { id: "klanten",  label: "Klanten",  icon: Users },
+      { id: "klanten",    label: "Klanten",          icon: Users },
+      { id: "calculator", label: "Marge Calculator", icon: Calculator },
+      { id: "email",      label: "E-mail",           icon: Mail },
     ],
   },
 ];
@@ -489,6 +492,14 @@ export default function DashboardHub() {
         {tab === "inkoopfacturen" && <InkoopFacturenContent />}
         {tab === "molibox" && <MoliboxPage />}
         {tab === "social" && <SocialContent />}
+        {tab === "email" && (
+          <div>
+            <PageHeader title="E-mail" subtitle="Postvak van info@jgmobility.nl" />
+            <div className="p-4 md:p-8">
+              <GmailWidget />
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ── Hub (full-screen startscherm, mobiel én desktop) ── */}
