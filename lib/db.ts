@@ -143,6 +143,28 @@ export async function initDB() {
       aangemaakt TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  // Archief van gegenereerde social-teksten. De invoer_hash dekt alle autovelden
+  // die de tekst beïnvloeden plus de extra aanwijzing: verandert er niets, dan
+  // komt de tekst uit dit archief in plaats van opnieuw bij het model.
+  await sql`
+    CREATE TABLE IF NOT EXISTS social_teksten (
+      id TEXT PRIMARY KEY,
+      auto_id INTEGER,
+      auto_naam TEXT DEFAULT '',
+      invoer_hash TEXT NOT NULL,
+      extra TEXT DEFAULT '',
+      intro TEXT DEFAULT '',
+      advertentie TEXT DEFAULT '',
+      instagram TEXT DEFAULT '',
+      hashtags TEXT DEFAULT '',
+      model TEXT DEFAULT '',
+      tokens_in INTEGER DEFAULT 0,
+      tokens_uit INTEGER DEFAULT 0,
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS social_teksten_hash_idx ON social_teksten (invoer_hash, aangemaakt DESC)`.catch(() => null);
+  await sql`CREATE INDEX IF NOT EXISTS social_teksten_auto_idx ON social_teksten (auto_id, aangemaakt DESC)`.catch(() => null);
   await sql`
     CREATE TABLE IF NOT EXISTS auto_kosten (
       id TEXT PRIMARY KEY,

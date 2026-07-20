@@ -761,7 +761,8 @@ function VoorraadTabel({
   const autos = alleAutos.filter((a) => (toon === "verkocht" ? a.verkocht : !a.verkocht));
   const [zoek, setZoek] = useState("");
   const [sorteer, setSorteer] = useState<SorteerVeld>("standtijd");
-  const [oplopend, setOplopend] = useState(false);
+  // Oplopende standtijd = kortst op voorraad bovenaan, oftewel de nieuwste auto's eerst.
+  const [oplopend, setOplopend] = useState(true);
   // Alles bewerken loopt via de Bewerken-knop naar de bewerkpagina. Alleen de
   // status kan hier direct om — dat is de handeling die je het vaakst doet.
   const [statusBezig, setStatusBezig] = useState<number | null>(null);
@@ -796,7 +797,16 @@ function VoorraadTabel({
       case "bouwjaar": return richting * (a.bouwjaar - b.bouwjaar);
       case "km":       return richting * (a.km - b.km);
       case "prijs":    return richting * (a.prijs - b.prijs);
-      case "standtijd": return richting * ((standtijdDagen(a) ?? -1) - (standtijdDagen(b) ?? -1));
+      case "standtijd": {
+        const da = standtijdDagen(a);
+        const db = standtijdDagen(b);
+        // Onbekende standtijd zakt altijd naar beneden — een auto zonder
+        // toevoegdatum is niet "de nieuwste", die weten we simpelweg niet.
+        if (da === null && db === null) return 0;
+        if (da === null) return 1;
+        if (db === null) return -1;
+        return richting * (da - db);
+      }
     }
   });
 

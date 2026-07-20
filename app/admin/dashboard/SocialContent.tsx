@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Share2, Sparkles, Copy, Check, AlertTriangle, Car, Search } from "lucide-react";
+import { Share2, Sparkles, Copy, Check, AlertTriangle, Car, Search, Archive, RefreshCw } from "lucide-react";
 
 type Auto = {
   id: number; merk: string; model: string; versie?: string; bouwjaar: number;
@@ -15,12 +15,20 @@ type Auto = {
 type Resultaat = {
   intro?: string; advertentie?: string; instagram?: string; hashtags?: string;
   error?: string; ontbrekendeSleutel?: boolean;
+  /** true = kwam uit het archief, dus zonder tokens te verbruiken. */
+  uitArchief?: boolean;
+  aangemaakt?: string;
+  introIngekort?: boolean;
+  verbruik?: { invoer: number; uitvoer: number };
 };
+
+/** Marktplaats kapt de introductietekst af op 130 tekens. */
+const INTRO_MAX = 130;
 
 const BLAUW = "#1d4ed8";
 
 /** Tekstvak met kopieerknop — de knop is het hele punt van deze pagina. */
-function TekstVak({ titel, tekst, hint }: { titel: string; tekst: string; hint?: string }) {
+function TekstVak({ titel, tekst, hint, limiet }: { titel: string; tekst: string; hint?: string; limiet?: number }) {
   const [gekopieerd, setGekopieerd] = useState(false);
 
   const kopieer = async () => {
@@ -40,6 +48,19 @@ function TekstVak({ titel, tekst, hint }: { titel: string; tekst: string; hint?:
           <h3 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>{titel}</h3>
           {hint && <p className="text-[11px] mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{hint}</p>}
         </div>
+        {limiet && (
+          <span
+            className="text-[11px] font-semibold flex-shrink-0 px-2 py-1"
+            style={{
+              fontFamily: "var(--font-inter)",
+              color: tekst.length > limiet ? "#b91c1c" : "#15803d",
+              backgroundColor: tekst.length > limiet ? "#fee2e2" : "#dcfce7",
+            }}
+            title={`Marktplaats staat maximaal ${limiet} tekens toe`}
+          >
+            {tekst.length} / {limiet}
+          </span>
+        )}
         <button
           onClick={kopieer}
           className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all hover:opacity-85"
@@ -84,7 +105,8 @@ export default function SocialContent() {
       `${a.merk} ${a.model} ${a.versie ?? ""} ${a.bouwjaar} ${a.brandstof}`.toLowerCase().includes(term)
   );
 
-  const genereer = async () => {
+  // opnieuw=true slaat het archief over en laat het model echt opnieuw schrijven.
+  const genereer = async (opnieuw = false) => {
     if (!gekozen && !extra.trim()) return;
     setBezig(true);
     setResultaat(null);
@@ -92,7 +114,7 @@ export default function SocialContent() {
       const res = await fetch("/api/admin/social-tekst", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(gekozen ?? {}), extra }),
+        body: JSON.stringify({ ...(gekozen ?? {}), extra, opnieuw }),
       });
       setResultaat(await res.json());
     } catch (e) {
@@ -214,7 +236,7 @@ export default function SocialContent() {
           />
           <div className="flex items-center gap-3 flex-wrap">
             <button
-              onClick={genereer}
+              onClick={() => genereer(false)}
               disabled={bezig || (!gekozen && !extra.trim())}
               className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
@@ -260,10 +282,65 @@ export default function SocialContent() {
 
         {resultaat?.advertentie && (
           <div className="flex flex-col gap-5">
+
+            {/* Waar komt deze tekst vandaan — archief (gratis) of vers geschreven */}
+            <div
+              className="flex items-center gap-3 px-4 py-3 flex-wrap"
+              style={{
+                backgroundColor: resultaat.uitArchief ? "#eef4ff" : "#f0fdf4",
+                border: `1px solid ${resultaat.uitArchief ? "rgba(29,78,216,0.25)" : "rgba(21,128,61,0.25)"}`,
+              }}
+            >
+              {resultaat.uitArchief ? (
+                <Archive size={15} style={{ color: BLAUW, flexShrink: 0 }} />
+              ) : (
+                <Sparkles size={15} style={{ color: "#15803d", flexShrink: 0 }} />
+              )}
+              <div className="min-w-0 flex-1">
+                <p
+                  className="text-[12px] font-bold"
+                  style={{ color: resultaat.uitArchief ? BLAUW : "#15803d", fontFamily: "var(--font-inter)" }}
+                >
+                  {resultaat.uitArchief ? "Uit het archief — geen tokens verbruikt" : "Nieuw geschreven en opgeslagen in het archief"}
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                  {resultaat.aangemaakt
+                    ? `Gegenereerd op ${new Date(resultaat.aangemaakt).toLocaleString("nl-NL", { dateStyle: "medium", timeStyle: "short" })}`
+                    : ""}
+                  {resultaat.verbruik && !resultaat.uitArchief
+                    ? ` · ${resultaat.verbruik.invoer + resultaat.verbruik.uitvoer} tokens`
+                    : ""}
+                  {resultaat.uitArchief
+                    ? " · wijzig je de auto of de aanwijzing, dan schrijft hij vanzelf een nieuwe tekst"
+                    : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => genereer(true)}
+                disabled={bezig}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all hover:opacity-85 disabled:opacity-40"
+                style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+                title="Negeert het archief en laat het model een nieuwe versie schrijven — dit kost tokens"
+              >
+                <RefreshCw size={11} className={bezig ? "animate-spin" : ""} />
+                Opnieuw schrijven
+              </button>
+            </div>
+
+            {resultaat.introIngekort && (
+              <p
+                className="text-[11px] px-4 py-2.5"
+                style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", color: "#b45309", fontFamily: "var(--font-inter)" }}
+              >
+                De introductietekst was langer dan {INTRO_MAX} tekens en is netjes ingekort tot de laatste hele zin die past.
+              </p>
+            )}
+
             <TekstVak
               titel="Marktplaats — introductietekst"
               tekst={resultaat.intro ?? ""}
-              hint="De korte tekst boven je advertentie"
+              hint={`De korte tekst boven je advertentie — maximaal ${INTRO_MAX} tekens`}
+              limiet={INTRO_MAX}
             />
             <TekstVak
               titel="Marktplaats — advertentietekst"
