@@ -1987,8 +1987,8 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   <div style="font-size:9pt;color:#475569;line-height:1.85;border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:12px">
     ${betaald
       ? `Deze factuur is volledig voldaan. Hartelijk dank voor uw betaling en het vertrouwen in JG Mobility &mdash; wij wensen u heel veel rijplezier!${margeNote}`
-      : `Vriendelijk verzoeken wij je bovengenoemd bedrag direct na het ontvangen van de factuur ${f.betaalwijze === "bank" ? "over te maken op IBAN rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "per contant te voldoen"}.
-    <br>Zolang het bedrag niet binnen is kunt u het voertuig niet komen ophalen en/of laten bezorgen door ons. Verzeker het voertuig voordat je gaat rijden!
+      : `Vriendelijk verzoeken wij u bovengenoemd bedrag direct na het ontvangen van de factuur ${f.betaalwijze === "bank" ? "over te maken op IBAN rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "per contant te voldoen"}.
+    <br>Zolang het bedrag niet binnen is kunt u het voertuig niet komen ophalen en/of laten bezorgen door ons. Verzeker het voertuig voordat u gaat rijden!
     <br>Factuur uitgereikt door JG MOBILITY.${margeNote}`}
   </div>
 
