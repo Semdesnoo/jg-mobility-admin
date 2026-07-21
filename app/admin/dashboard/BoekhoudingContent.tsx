@@ -27,6 +27,12 @@ type Debiteur = {
   dagenOver: number | null; status: string;
 };
 
+type Crediteur = {
+  id: string; factuurnummer: string; leverancier: string; categorie: string;
+  omschrijving: string; bedrag: number; datum: string; vervaldatum: string;
+  dagenOver: number | null;
+};
+
 type Boekhouding = {
   perKwartaal: Kwartaal[];
   resultaat: {
@@ -36,6 +42,9 @@ type Boekhouding = {
   debiteuren: Debiteur[];
   debiteurenTotaal: number;
   debiteurenTeLaat: number;
+  crediteuren: Crediteur[];
+  crediteurenTotaal: number;
+  crediteurenTeLaat: number;
   voorraadInkoop: number;
   zonderInkoop: Herstelpunt[];
   afgeleideKoppelingen: Herstelpunt[];
@@ -151,9 +160,9 @@ export default function BoekhoudingContent({ onNavigeer }: {
                 }}
               >
                 {b.label}
-                {b.key === "debiteuren" && (data?.debiteurenTeLaat ?? 0) > 0 && (
+                {b.key === "debiteuren" && ((data?.debiteurenTeLaat ?? 0) + (data?.crediteurenTeLaat ?? 0)) > 0 && (
                   <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold" style={{ backgroundColor: "#fee2e2", color: ROOD }}>
-                    {data!.debiteurenTeLaat}
+                    {(data?.debiteurenTeLaat ?? 0) + (data?.crediteurenTeLaat ?? 0)}
                   </span>
                 )}
               </button>
@@ -336,64 +345,128 @@ export default function BoekhoudingContent({ onNavigeer }: {
               </Kaart>
             )}
 
-            {/* ══ Debiteuren ══ */}
+            {/* ══ Openstaand: te ontvangen (verkoop) + te betalen (inkoop) ══ */}
             {blad === "debiteuren" && (
-              <Kaart
-                titel="Openstaande facturen"
-                icon={Wallet}
-                toelichting="Facturen die nog niet op betaald staan, met de oudste bovenaan."
-              >
-                {data.debiteuren.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <Wallet size={26} style={{ color: "rgba(0,19,55,0.12)" }} />
-                    <p className="text-sm font-bold mt-3" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                      Alles is betaald
-                    </p>
-                    <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-                      Geen openstaande facturen
-                    </p>
-                  </div>
-                ) : (
-                  data.debiteuren.map((d) => {
-                    const teLaat = (d.dagenOver ?? 0) > 0;
-                    return (
-                      <div key={d.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                            {d.factuur_nr} — {d.klant || "geen naam"}
-                          </p>
-                          <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-                            {[d.auto, `factuurdatum ${d.datum}`, d.vervaldatum ? `vervalt ${d.vervaldatum}` : ""].filter(Boolean).join(" · ")}
+              <>
+                {/* Samenvatting — geld dat binnenkomt vs. geld dat de deur uit moet */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { label: "Te ontvangen", sub: `${data.debiteuren.length} verkoopfactu${data.debiteuren.length === 1 ? "ur" : "ren"}`, bedrag: data.debiteurenTotaal, teLaat: data.debiteurenTeLaat, kleur: GROEN },
+                    { label: "Te betalen", sub: `${data.crediteuren.length} inkoopfactu${data.crediteuren.length === 1 ? "ur" : "ren"}`, bedrag: data.crediteurenTotaal, teLaat: data.crediteurenTeLaat, kleur: ROOD },
+                  ].map((c) => (
+                    <div key={c.label} className="p-5" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderLeft: `3px solid ${c.kleur}` }}>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>{c.label}</p>
+                        {c.teLaat > 0 && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold flex-shrink-0" style={{ backgroundColor: "#fee2e2", color: ROOD }}>{c.teLaat} te laat</span>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold leading-none" style={{ fontFamily: "var(--font-playfair)", color: c.kleur }}>{euro(c.bedrag)}</p>
+                      <p className="text-[11px] mt-1.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{c.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Te ontvangen — verkoopfacturen (debiteuren) */}
+                <Kaart
+                  titel="Te ontvangen — verkoopfacturen"
+                  icon={Wallet}
+                  toelichting="Verkoopfacturen die de klant nog niet betaald heeft; meest te laat bovenaan."
+                >
+                  {data.debiteuren.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10">
+                      <Wallet size={24} style={{ color: "rgba(0,19,55,0.12)" }} />
+                      <p className="text-sm font-bold mt-2.5" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Alles ontvangen</p>
+                      <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Geen openstaande verkoopfacturen</p>
+                    </div>
+                  ) : (
+                    data.debiteuren.map((d) => {
+                      const teLaat = (d.dagenOver ?? 0) > 0;
+                      return (
+                        <div key={d.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                              {d.factuur_nr} — {d.klant || "geen naam"}
+                            </p>
+                            <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                              {[d.auto, `factuurdatum ${d.datum}`, d.vervaldatum ? `vervalt ${d.vervaldatum}` : ""].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                          {d.dagenOver != null && (
+                            <span
+                              className="px-2 py-1 text-[10px] font-bold flex-shrink-0"
+                              style={{ backgroundColor: teLaat ? "#fee2e2" : "#f1f5f9", color: teLaat ? ROOD : "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}
+                            >
+                              {teLaat ? `${d.dagenOver} dagen te laat` : `nog ${Math.abs(d.dagenOver)} dagen`}
+                            </span>
+                          )}
+                          <p className="text-base font-bold flex-shrink-0" style={{ color: GROEN, fontFamily: "var(--font-playfair)", fontVariantNumeric: "tabular-nums" }}>
+                            {euro(d.bedrag)}
                           </p>
                         </div>
-                        {d.dagenOver != null && (
-                          <span
-                            className="px-2 py-1 text-[10px] font-bold flex-shrink-0"
-                            style={{
-                              backgroundColor: teLaat ? "#fee2e2" : "#f1f5f9",
-                              color: teLaat ? ROOD : "rgba(0,19,55,0.5)",
-                              fontFamily: "var(--font-inter)",
-                            }}
-                          >
-                            {teLaat ? `${d.dagenOver} dagen te laat` : `nog ${Math.abs(d.dagenOver)} dagen`}
-                          </span>
-                        )}
-                        <p className="text-base font-bold flex-shrink-0" style={{ color: "#001337", fontFamily: "var(--font-playfair)", fontVariantNumeric: "tabular-nums" }}>
-                          {euro(d.bedrag)}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-                {data.debiteuren.length > 0 && (
-                  <div className="px-5 py-3.5 flex items-baseline justify-between" style={{ borderTop: "1px solid rgba(0,19,55,0.12)" }}>
-                    <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>Totaal openstaand</p>
-                    <p className="text-lg font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)", fontVariantNumeric: "tabular-nums" }}>
-                      {euro(data.debiteurenTotaal)}
-                    </p>
-                  </div>
-                )}
-              </Kaart>
+                      );
+                    })
+                  )}
+                  {data.debiteuren.length > 0 && (
+                    <div className="px-5 py-3.5 flex items-baseline justify-between" style={{ borderTop: "1px solid rgba(0,19,55,0.12)" }}>
+                      <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>Totaal te ontvangen</p>
+                      <p className="text-lg font-bold" style={{ color: GROEN, fontFamily: "var(--font-playfair)", fontVariantNumeric: "tabular-nums" }}>
+                        {euro(data.debiteurenTotaal)}
+                      </p>
+                    </div>
+                  )}
+                </Kaart>
+
+                {/* Te betalen — inkoopfacturen (crediteuren) */}
+                <Kaart
+                  titel="Te betalen — inkoopfacturen"
+                  icon={Receipt}
+                  toelichting="Inkoopfacturen die JG Mobility nog moet betalen; meest te laat bovenaan."
+                >
+                  {data.crediteuren.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10">
+                      <Receipt size={24} style={{ color: "rgba(0,19,55,0.12)" }} />
+                      <p className="text-sm font-bold mt-2.5" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Alles betaald</p>
+                      <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Geen openstaande inkoopfacturen</p>
+                    </div>
+                  ) : (
+                    data.crediteuren.map((c) => {
+                      const teLaat = (c.dagenOver ?? 0) > 0;
+                      return (
+                        <div key={c.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                              {c.leverancier || "onbekende leverancier"}{c.factuurnummer ? ` — ${c.factuurnummer}` : ""}
+                            </p>
+                            <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                              {[c.categorie, c.omschrijving, `factuurdatum ${c.datum}`, c.vervaldatum ? `vervalt ${c.vervaldatum}` : ""].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                          {c.dagenOver != null && (
+                            <span
+                              className="px-2 py-1 text-[10px] font-bold flex-shrink-0"
+                              style={{ backgroundColor: teLaat ? "#fee2e2" : "#f1f5f9", color: teLaat ? ROOD : "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}
+                            >
+                              {teLaat ? `${c.dagenOver} dagen te laat` : `nog ${Math.abs(c.dagenOver)} dagen`}
+                            </span>
+                          )}
+                          <p className="text-base font-bold flex-shrink-0" style={{ color: ROOD, fontFamily: "var(--font-playfair)", fontVariantNumeric: "tabular-nums" }}>
+                            {euro(c.bedrag)}
+                          </p>
+                        </div>
+                      );
+                    })
+                  )}
+                  {data.crediteuren.length > 0 && (
+                    <div className="px-5 py-3.5 flex items-baseline justify-between" style={{ borderTop: "1px solid rgba(0,19,55,0.12)" }}>
+                      <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>Totaal te betalen</p>
+                      <p className="text-lg font-bold" style={{ color: ROOD, fontFamily: "var(--font-playfair)", fontVariantNumeric: "tabular-nums" }}>
+                        {euro(data.crediteurenTotaal)}
+                      </p>
+                    </div>
+                  )}
+                </Kaart>
+              </>
             )}
           </div>
         )}

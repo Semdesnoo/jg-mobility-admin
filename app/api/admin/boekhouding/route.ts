@@ -1,6 +1,7 @@
 import sql from "@/lib/db";
 import { getDossiers } from "@/lib/dossiers-db";
 import { getAutos } from "@/lib/autos-db";
+import { getInkoopFacturen } from "@/lib/inkoopfacturen-db";
 
 export const dynamic = "force-dynamic";
 
@@ -65,10 +66,11 @@ function brutoBedrag(f: Factuur): number {
 const rond = (n: number) => Math.round(n * 100) / 100;
 
 export async function GET() {
-  const [facturenRows, dossiers, autos] = await Promise.all([
+  const [facturenRows, dossiers, autos, inkoopFacturen] = await Promise.all([
     sql`SELECT * FROM facturen`.catch(() => []),
     getDossiers().catch(() => []),
     getAutos().catch(() => []),
+    getInkoopFacturen().catch(() => []),
   ]);
   const facturen = facturenRows as unknown as Factuur[];
 
@@ -235,6 +237,31 @@ export async function GET() {
   const openstaandTotaal = rond(debiteuren.reduce((s, d) => s + d.bedrag, 0));
   const teLaat = debiteuren.filter((d) => (d.dagenOver ?? 0) > 0);
 
+  // ── Crediteuren: inkoopfacturen die JG Mobility nog moet betalen ──
+  // Zelfde vorm en logica als debiteuren (oudste/meest te laat bovenaan), maar
+  // dan de andere kant op: geld dat de deur uit moet.
+  const crediteuren = inkoopFacturen
+    .filter((f) => String(f.status ?? "").toLowerCase() !== "betaald")
+    .map((f) => {
+      const verval = parseDatum(f.vervaldatum);
+      const dagenOver = verval ? Math.round((vandaag.getTime() - verval.getTime()) / 86_400_000) : null;
+      return {
+        id: f.id,
+        factuurnummer: f.factuurnummer,
+        leverancier: f.leverancier,
+        categorie: f.categorie,
+        omschrijving: f.omschrijving,
+        bedrag: rond(Number(f.bedrag_incl) || 0),
+        datum: f.datum,
+        vervaldatum: f.vervaldatum,
+        dagenOver,
+      };
+    })
+    .sort((a, b) => (b.dagenOver ?? -9999) - (a.dagenOver ?? -9999));
+
+  const crediteurenTotaal = rond(crediteuren.reduce((s, c) => s + c.bedrag, 0));
+  const crediteurenTeLaat = crediteuren.filter((c) => (c.dagenOver ?? 0) > 0);
+
   // ── Resultaat ──
   const brutowinst = rond(omzetTotaal - inkoopTotaal);
   const nettowinst = rond(brutowinst - kostenTotaal - btwTotaal);
@@ -257,6 +284,9 @@ export async function GET() {
     debiteuren,
     debiteurenTotaal: openstaandTotaal,
     debiteurenTeLaat: teLaat.length,
+    crediteuren,
+    crediteurenTotaal,
+    crediteurenTeLaat: crediteurenTeLaat.length,
     voorraadInkoop: rond(voorraadInkoop),
     // Facturen waarvan de marge-BTW niet berekend kon worden — met het doel
     // (dossier/auto) zodat de knop in de UI er rechtstreeks heen kan springen.
