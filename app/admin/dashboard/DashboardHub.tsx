@@ -1884,10 +1884,10 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
 </head>
 <body>
 
-<!-- HEADER: logo met ingebakken achtergrond -->
-<div style="width:100%;background-color:#001337;text-align:center;line-height:0;padding:10px 0">
+<!-- HEADER: transparant logo op de blauwe balk (balk wordt geforceerd geprint via print-color-adjust) -->
+<div style="width:100%;background-color:#001337;text-align:center;line-height:0;padding:14px 0">
   <img src="${logoSrc}" alt="JG Mobility"
-       style="height:85px;object-fit:contain;display:inline-block">
+       style="height:80px;object-fit:contain;display:inline-block">
 </div>
 
 <!-- BODY -->
@@ -1987,8 +1987,8 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
   <div style="font-size:9pt;color:#475569;line-height:1.85;border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:12px">
     ${betaald
       ? `Deze factuur is volledig voldaan. Hartelijk dank voor uw betaling en het vertrouwen in JG Mobility &mdash; wij wensen u heel veel rijplezier!${margeNote}`
-      : `Wij vragen u vriendelijk het bedrag van €${fmtBedrag(eindtotaal)} ${f.vervaldatum ? `voor ${f.vervaldatum}` : "binnen 30 dagen na ontvangst"} over te maken
-    ${f.betaalwijze === "bank" ? "op rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "te voldoen per contant"}.
+      : `Vriendelijk verzoeken wij je bovengenoemd bedrag direct na het ontvangen van de factuur ${f.betaalwijze === "bank" ? "over te maken op IBAN rekening NL94 ABNA 0154171638 onder vermelding van factuurnummer <strong>" + f.factuur_nr + "</strong>" : "per contant te voldoen"}.
+    <br>Zolang het bedrag niet binnen is kunnen wij de bedrijfswagen niet komen bezorgen en/of ophalen. Verzeker het voertuig voordat je gaat rijden!
     <br>Factuur uitgereikt door JG MOBILITY.${margeNote}`}
   </div>
 
@@ -2184,7 +2184,11 @@ function FacturenContent() {
 
   const haalLogoSrc = async (): Promise<string> => {
     try {
-      const res = await fetch(encodeURI("/JG Mobility.png"));
+      // Transparante versie (wit logo, geen ingebakken achtergrond). Zo staat het
+      // logo direct op de blauwe balk in plaats van als los blauw vakje — dat
+      // vakje viel op bij het printen, waar de balkkleur en de ingebakken
+      // logo-achtergrond net niet gelijk uitkwamen.
+      const res = await fetch(encodeURI("/JG Mobility Transparant.png"));
       if (!res.ok) return "";
       const blob = await res.blob();
       return await new Promise<string>((resolve) => {
