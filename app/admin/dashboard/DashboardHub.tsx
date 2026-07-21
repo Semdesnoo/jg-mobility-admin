@@ -2017,6 +2017,7 @@ type VerkoopAuto = {
   kleur?: string;
   kenteken?: string;
   verkocht?: boolean;
+  verkocht_op?: string; // ISO-datum; bepaalt de volgorde (laatst verkocht bovenaan)
   fotos?: string[];
 };
 
@@ -2648,9 +2649,22 @@ function FacturenContent() {
               verkoopprijs worden ingevuld. Scheelt overtypen of AI-vragen. */}
           {(() => {
             const zoek = autoZoek.trim().toLowerCase();
-            const gesorteerd = [...autos].sort((a, b) =>
-              (Number(!!b.verkocht) - Number(!!a.verkocht)) || (b.id - a.id)
-            );
+            // Volgorde: verkochte auto's eerst, en daarbinnen de laatst verkochte
+            // bovenaan (op verkoopdatum). Auto's zonder verkoopdatum en niet-verkochte
+            // vallen terug op nieuwste-id. verkocht_op is een ISO-datum.
+            const verkoopTijd = (a: VerkoopAuto) => {
+              if (!a.verkocht_op) return 0;
+              const t = new Date(a.verkocht_op).getTime();
+              return Number.isNaN(t) ? 0 : t;
+            };
+            const gesorteerd = [...autos].sort((a, b) => {
+              const av = a.verkocht ? 1 : 0;
+              const bv = b.verkocht ? 1 : 0;
+              if (av !== bv) return bv - av;              // verkocht eerst
+              const at = verkoopTijd(a), bt = verkoopTijd(b);
+              if (at !== bt) return bt - at;              // laatst verkocht bovenaan
+              return b.id - a.id;                          // gelijk → nieuwste toegevoegd
+            });
             const zichtbaar = zoek
               ? gesorteerd.filter((a) =>
                   `${a.merk ?? ""} ${a.model ?? ""} ${a.kenteken ?? ""}`.toLowerCase().includes(zoek)
