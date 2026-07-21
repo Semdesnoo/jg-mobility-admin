@@ -2032,6 +2032,15 @@ type Bevestiging = {
   actie: () => void | Promise<void>;
 };
 
+// Een informatieve melding (vervangt de kale browser-alert). `toon` bepaalt de
+// kleur en het icoon; er is één "Sluiten"-knop. (Losstaand van het `Melding`-type
+// van de meldingenbel hierboven — vandaar de eigen naam.)
+type InfoMelding = {
+  titel: string;
+  tekst: string;
+  toon: "info" | "waarschuwing" | "fout";
+};
+
 function FacturenContent() {
   const [facturen, setFacturen] = useState<Factuur[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2058,6 +2067,8 @@ function FacturenContent() {
   const [autoZoek, setAutoZoek] = useState("");
   // De openstaande bevestigingspopup (of null als er geen vraag open staat).
   const [bevestig, setBevestig] = useState<Bevestiging | null>(null);
+  // Een openstaande informatieve melding (vervangt de browser-alert).
+  const [melding, setMelding] = useState<InfoMelding | null>(null);
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -2223,16 +2234,24 @@ function FacturenContent() {
   /** Geeft een geblokkeerde mail weer vrij. Bewust een aparte, expliciete
    *  handeling: zo is dubbel versturen nooit een ongeluk, maar wel mogelijk
    *  als een mail echt niet is aangekomen. */
-  const draaiVerzendingTerug = async (
+  const draaiVerzendingTerug = (
     f: Factuur,
     veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
   ) => {
     const wat = veld === "factuurmail_verstuurd_op" ? "factuurmail" : "bedankmail";
-    if (!confirm(
-      `Verzending van de ${wat} terugdraaien?\n\n` +
-      `De registratie wordt gewist zodat je hem opnieuw kunt versturen. ` +
-      `De klant heeft de eerder verstuurde mail nog steeds ontvangen.`
-    )) return;
+    setBevestig({
+      titel: `Verzending van de ${wat} terugdraaien?`,
+      tekst: `De registratie wordt gewist zodat je hem opnieuw kunt versturen. De klant heeft de eerder verstuurde mail nog steeds ontvangen.`,
+      bevestigLabel: "Ja, terugdraaien",
+      kleur: "#b45309",
+      actie: () => doeDraaiVerzendingTerug(f, veld),
+    });
+  };
+
+  const doeDraaiVerzendingTerug = async (
+    f: Factuur,
+    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
+  ) => {
     await fetch(`/api/admin/facturen/${f.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -2242,8 +2261,17 @@ function FacturenContent() {
     setNieuwsteFactuur((prev) => (prev && prev.id === f.id ? { ...prev, [veld]: "" } : prev));
   };
 
-  const verwijder = async (id: string) => {
-    if (!confirm("Factuur definitief verwijderen?")) return;
+  const verwijder = (id: string) => {
+    setBevestig({
+      titel: "Factuur definitief verwijderen?",
+      tekst: "Deze factuur wordt permanent verwijderd. Dit kan niet ongedaan worden gemaakt.",
+      bevestigLabel: "Ja, verwijderen",
+      kleur: "#b91c1c",
+      actie: () => doeVerwijder(id),
+    });
+  };
+
+  const doeVerwijder = async (id: string) => {
     await fetch(`/api/admin/facturen/${id}`, { method: "DELETE" });
     setFacturen((prev) => prev.filter((f) => f.id !== id));
     if (openId === id) setOpenId(null);
@@ -2342,7 +2370,7 @@ function FacturenContent() {
       setTimeout(() => setDownloadStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
     } catch (err) {
       setDownloadStatus((prev) => ({ ...prev, [f.id]: "fout" }));
-      alert(`Opslaan mislukt: ${String(err)}`);
+      setMelding({ titel: "Opslaan mislukt", tekst: `De PDF kon niet worden opgeslagen: ${String(err)}`, toon: "fout" });
       setTimeout(() => setDownloadStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
     }
   };
@@ -2352,17 +2380,17 @@ function FacturenContent() {
   // gaat de mail écht de deur uit via doeVerstuurMail.
   const verstuurMail = (f: Factuur) => {
     if (!f.klant_email) {
-      alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
+      setMelding({ titel: "Geen e-mailadres", tekst: "Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.", toon: "waarschuwing" });
       return;
     }
     // Harde blokkade: een klant twee keer dezelfde factuur sturen is een fout die
     // je niet wilt kúnnen maken. Opnieuw sturen kan alleen na expliciet vrijgeven.
     if (f.factuurmail_verstuurd_op) {
-      alert(
-        `Deze factuurmail is al verstuurd op ${formatVerstuurd(f.factuurmail_verstuurd_op)}.\n\n` +
-        `Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je ` +
-        `zeker weet dat de klant hem niet heeft ontvangen.`
-      );
+      setMelding({
+        titel: "Factuurmail al verstuurd",
+        tekst: `Deze factuurmail is al verstuurd op ${formatVerstuurd(f.factuurmail_verstuurd_op)}. Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je zeker weet dat de klant hem niet heeft ontvangen.`,
+        toon: "waarschuwing",
+      });
       return;
     }
     setBevestig({
@@ -2399,7 +2427,7 @@ function FacturenContent() {
       }
     } catch (err) {
       setMailStatus((prev) => ({ ...prev, [f.id]: "fout" }));
-      alert(`Versturen mislukt: ${String(err)}`);
+      setMelding({ titel: "Versturen mislukt", tekst: `De factuurmail kon niet worden verstuurd: ${String(err)}`, toon: "fout" });
       setTimeout(() => setMailStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
     }
   };
@@ -2409,15 +2437,15 @@ function FacturenContent() {
   // vandaar dezelfde "weet je het zeker?"-popup vóór het versturen.
   const verstuurBedankmail = (f: Factuur) => {
     if (!f.klant_email) {
-      alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
+      setMelding({ titel: "Geen e-mailadres", tekst: "Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.", toon: "waarschuwing" });
       return;
     }
     if (f.bedankmail_verstuurd_op) {
-      alert(
-        `Deze bedankmail is al verstuurd op ${formatVerstuurd(f.bedankmail_verstuurd_op)}.\n\n` +
-        `Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je ` +
-        `zeker weet dat de klant hem niet heeft ontvangen.`
-      );
+      setMelding({
+        titel: "Bedankmail al verstuurd",
+        tekst: `Deze bedankmail is al verstuurd op ${formatVerstuurd(f.bedankmail_verstuurd_op)}. Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je zeker weet dat de klant hem niet heeft ontvangen.`,
+        toon: "waarschuwing",
+      });
       return;
     }
     setBevestig({
@@ -2454,7 +2482,7 @@ function FacturenContent() {
       }
     } catch (err) {
       setBedankStatus((prev) => ({ ...prev, [f.id]: "fout" }));
-      alert(`Versturen mislukt: ${String(err)}`);
+      setMelding({ titel: "Versturen mislukt", tekst: `De bedankmail kon niet worden verstuurd: ${String(err)}`, toon: "fout" });
       setTimeout(() => setBedankStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
     }
   };
@@ -2497,7 +2525,7 @@ function FacturenContent() {
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch (err) {
-      alert(`Excel-export mislukt: ${String(err instanceof Error ? err.message : err)}`);
+      setMelding({ titel: "Export mislukt", tekst: `De Excel-export is mislukt: ${String(err instanceof Error ? err.message : err)}`, toon: "fout" });
     } finally {
       setExportBezig(false);
     }
@@ -2594,6 +2622,110 @@ function FacturenContent() {
     color: "rgba(0,19,55,0.4)",
     fontFamily: "var(--font-inter)",
   };
+
+  // Kleur per meldingstoon. Eén plek zodat icoon en accent altijd bij elkaar passen.
+  const meldingKleur = melding
+    ? melding.toon === "fout" ? "#b91c1c" : melding.toon === "waarschuwing" ? "#b45309" : "#1d4ed8"
+    : "#1d4ed8";
+
+  // Beide popups samen als één fragment, zodat ze in élke weergave (nieuw, archief,
+  // lijst) meerenderen. Het zijn fixed overlays, dus ze verschijnen altijd bovenop.
+  const modals = (
+    <>
+      {/* "Weet je het zeker?"-bevestiging (mailen, verwijderen, terugdraaien). */}
+      {bevestig && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,19,55,0.45)" }}
+          onClick={() => { if (!bevestig.bezig) setBevestig(null); }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ backgroundColor: "#ffffff", width: "100%", maxWidth: "440px", border: "1px solid rgba(0,19,55,0.1)", boxShadow: "0 24px 60px rgba(0,19,55,0.28)" }}
+          >
+            <div className="px-6 pt-6 pb-3 flex items-start gap-3">
+              <span
+                className="flex items-center justify-center"
+                style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: `${bevestig.kleur}18`, flexShrink: 0 }}
+              >
+                <Mail size={18} style={{ color: bevestig.kleur }} />
+              </span>
+              <p className="text-base font-bold mt-1" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                {bevestig.titel}
+              </p>
+            </div>
+            <div className="px-6 pb-5">
+              <p className="text-sm" style={{ color: "rgba(0,19,55,0.7)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                {bevestig.tekst}
+              </p>
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-2" style={{ borderTop: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
+              <button
+                onClick={() => setBevestig(null)}
+                disabled={bevestig.bezig}
+                className="px-4 py-2 text-sm font-semibold transition-all hover:opacity-70 disabled:opacity-50"
+                style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={async () => {
+                  const actie = bevestig.actie;
+                  setBevestig((b) => (b ? { ...b, bezig: true } : b));
+                  try { await actie(); } finally { setBevestig(null); }
+                }}
+                disabled={bevestig.bezig}
+                className="px-5 py-2 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-70"
+                style={{ backgroundColor: bevestig.kleur, color: "#ffffff", fontFamily: "var(--font-inter)" }}
+              >
+                {bevestig.bezig ? "Bezig…" : bevestig.bevestigLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Informatieve melding (vervangt de browser-alert): één "Sluiten"-knop. */}
+      {melding && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,19,55,0.45)" }}
+          onClick={() => setMelding(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ backgroundColor: "#ffffff", width: "100%", maxWidth: "440px", border: "1px solid rgba(0,19,55,0.1)", boxShadow: "0 24px 60px rgba(0,19,55,0.28)" }}
+          >
+            <div className="px-6 pt-6 pb-3 flex items-start gap-3">
+              <span
+                className="flex items-center justify-center"
+                style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: `${meldingKleur}18`, flexShrink: 0 }}
+              >
+                <AlertTriangle size={18} style={{ color: meldingKleur }} />
+              </span>
+              <p className="text-base font-bold mt-1" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                {melding.titel}
+              </p>
+            </div>
+            <div className="px-6 pb-5">
+              <p className="text-sm" style={{ color: "rgba(0,19,55,0.7)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                {melding.tekst}
+              </p>
+            </div>
+            <div className="px-6 py-4 flex justify-end" style={{ borderTop: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
+              <button
+                onClick={() => setMelding(null)}
+                className="px-5 py-2 text-sm font-semibold transition-all hover:opacity-90"
+                style={{ backgroundColor: meldingKleur, color: "#ffffff", fontFamily: "var(--font-inter)" }}
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   // ── Nieuwe factuur ──────────────────────────────────────────
   if (view === "nieuw") {
@@ -2901,6 +3033,7 @@ function FacturenContent() {
             {saving ? "Opslaan..." : bewerkFactuur ? "Wijzigingen opslaan" : "Factuur aanmaken & afdrukken"}
           </button>
         </div>
+        {modals}
       </div>
     );
   }
@@ -3089,6 +3222,7 @@ function FacturenContent() {
             </>
           )}
         </div>
+        {modals}
       </div>
     );
   }
@@ -3404,59 +3538,7 @@ function FacturenContent() {
         )}
       </div>
 
-      {/* "Weet je het zeker?"-popup vóór het versturen van een mail. Eén modal
-          voor zowel de factuur- als de bedankmail; de inhoud komt uit `bevestig`. */}
-      {bevestig && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: "rgba(0,19,55,0.45)" }}
-          onClick={() => { if (!bevestig.bezig) setBevestig(null); }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ backgroundColor: "#ffffff", width: "100%", maxWidth: "440px", border: "1px solid rgba(0,19,55,0.1)", boxShadow: "0 24px 60px rgba(0,19,55,0.28)" }}
-          >
-            <div className="px-6 pt-6 pb-3 flex items-start gap-3">
-              <span
-                className="flex items-center justify-center"
-                style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: `${bevestig.kleur}18`, flexShrink: 0 }}
-              >
-                <Mail size={18} style={{ color: bevestig.kleur }} />
-              </span>
-              <p className="text-base font-bold mt-1" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                {bevestig.titel}
-              </p>
-            </div>
-            <div className="px-6 pb-5">
-              <p className="text-sm" style={{ color: "rgba(0,19,55,0.7)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
-                {bevestig.tekst}
-              </p>
-            </div>
-            <div className="px-6 py-4 flex justify-end gap-2" style={{ borderTop: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
-              <button
-                onClick={() => setBevestig(null)}
-                disabled={bevestig.bezig}
-                className="px-4 py-2 text-sm font-semibold transition-all hover:opacity-70 disabled:opacity-50"
-                style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-              >
-                Annuleren
-              </button>
-              <button
-                onClick={async () => {
-                  const actie = bevestig.actie;
-                  setBevestig((b) => (b ? { ...b, bezig: true } : b));
-                  try { await actie(); } finally { setBevestig(null); }
-                }}
-                disabled={bevestig.bezig}
-                className="px-5 py-2 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-70"
-                style={{ backgroundColor: bevestig.kleur, color: "#ffffff", fontFamily: "var(--font-inter)" }}
-              >
-                {bevestig.bezig ? "Bezig…" : bevestig.bevestigLabel}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {modals}
     </div>
   );
 }
