@@ -2135,7 +2135,7 @@ function FacturenContent() {
 
   // Vult de voertuiggegevens en de verkoopprijs met één klik uit een auto in de
   // voorraad — scheelt overtypen (of het aan de AI vragen). Het VIN zit niet in de
-  // voorraad, dus dat vul je zelf in; daarom is dat veld ook verplicht gemaakt.
+  // voorraad, dus dat vul je zelf in; daar staat een rode "vergeet dit niet"-hint bij.
   const kiesAuto = (a: VerkoopAuto) => {
     setAutoKeuze(a.id);
     setForm((prev) => ({
@@ -2153,12 +2153,8 @@ function FacturenContent() {
 
   const sla = async () => {
     setFout(null);
-    // Het VIN (chassisnummer) is verplicht: zonder is de factuur juridisch
-    // onvolledig. Blokkeer het opslaan meteen, nog vóór de netwerkcall.
-    if (!form.auto_vin.trim()) {
-      setFout("Het VIN-nummer is verplicht. Vul het VIN (chassisnummer) van het voertuig in voordat je de factuur opslaat.");
-      return;
-    }
+    // Het VIN is niet hard verplicht — soms hoeft het niet. Wel staat er een rode
+    // "vergeet dit niet"-herinnering bij het veld, maar opslaan blokkeren we niet.
     setSaving(true);
     try {
       const actieveRegels = regels.filter((r) => r.omschrijving && Number(r.prijs) > 0);
@@ -2682,7 +2678,7 @@ function FacturenContent() {
                 </div>
                 <div className="px-5 pt-3">
                   <p className="text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)", lineHeight: 1.5 }}>
-                    Klik op de auto die je hebt verkocht — merk, model, bouwjaar, kenteken, km, kleur en prijs worden automatisch ingevuld. Het VIN vul je zelf in (verplicht).
+                    Klik op de auto die je hebt verkocht — merk, model, bouwjaar, kenteken, km, kleur en prijs worden automatisch ingevuld. Het VIN vul je zelf in (vergeet dit niet).
                   </p>
                 </div>
                 <div className="p-3 md:p-4 flex flex-col gap-2" style={{ maxHeight: "280px", overflowY: "auto" }}>
@@ -2770,20 +2766,24 @@ function FacturenContent() {
               </div>
               <div className="p-4 md:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {velden.map(({ label, field, col }) => {
-                  const verplicht = field === "auto_vin";
-                  const leeg = verplicht && !form.auto_vin.trim();
+                  const vinVeld = field === "auto_vin";
+                  const vinLeeg = vinVeld && !form.auto_vin.trim();
                   return (
                     <div key={field} style={{ gridColumn: col ? `span ${col}` : undefined }}>
                       <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>
                         {label}
-                        {verplicht && <span style={{ color: "#b91c1c" }}> * verplicht</span>}
+                        {vinVeld && (
+                          <span style={{ color: "#b91c1c", textTransform: "none", fontWeight: 600 }} className="ml-1">
+                            — Let op: vergeet dit niet in te voeren
+                          </span>
+                        )}
                       </label>
                       <input
                         type="text"
                         {...inp(field)}
-                        placeholder={verplicht ? "Chassisnummer (17 tekens) — verplicht" : undefined}
+                        placeholder={vinVeld ? "Chassisnummer (17 tekens)" : undefined}
                         className="w-full px-3 py-2 text-sm outline-none"
-                        style={leeg ? { ...veldStijl, border: "1px solid #fca5a5", backgroundColor: "#fff5f5" } : veldStijl}
+                        style={vinLeeg ? { ...veldStijl, border: "1px solid #fca5a5", backgroundColor: "#fff5f5" } : veldStijl}
                       />
                     </div>
                   );
