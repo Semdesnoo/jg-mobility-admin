@@ -33,6 +33,7 @@ import {
   Cpu,
   Bell,
   Banknote,
+  ChevronRight,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -1307,40 +1308,64 @@ function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
 
       {open && (
         <div
-          className="absolute right-0 z-50 overflow-hidden"
+          className="absolute right-0 z-50 flex flex-col overflow-hidden"
           style={{
             top: 46,
-            width: 340,
-            maxHeight: 420,
+            width: 384,
+            // Overschrijft de globale `* { max-width: 100% }` uit globals.css, die
+            // de dropdown anders inperkt tot de breedte van het 38px belletje.
+            maxWidth: "calc(100vw - 24px)",
+            maxHeight: "min(70vh, 520px)",
             backgroundColor: "#ffffff",
             border: "1px solid rgba(0,19,55,0.12)",
-            boxShadow: "0 12px 32px rgba(0,19,55,0.22)",
+            borderRadius: 12,
+            boxShadow: "0 18px 44px rgba(0,19,55,0.28)",
           }}
         >
-          <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+          {/* Kop */}
+          <div
+            className="px-4 py-3 flex items-center gap-2.5 flex-shrink-0"
+            style={{ borderBottom: "1px solid rgba(0,19,55,0.08)", backgroundColor: "rgba(0,19,55,0.02)" }}
+          >
+            <Bell size={15} style={{ color: "#001337", flexShrink: 0 }} />
             <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
               Meldingen
             </p>
             {aantal > 0 && (
-              <span className="text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+              <span
+                className="ml-auto inline-flex items-center px-2 py-0.5 text-[10px] font-bold whitespace-nowrap"
+                style={{
+                  backgroundColor: urgent > 0 ? "#fee2e2" : "rgba(0,19,55,0.06)",
+                  color: urgent > 0 ? "#b91c1c" : "rgba(0,19,55,0.5)",
+                  fontFamily: "var(--font-inter)",
+                  borderRadius: 99,
+                }}
+              >
                 {urgent > 0 ? `${urgent} urgent` : `${aantal} open`}
               </span>
             )}
           </div>
 
-          <div style={{ maxHeight: 360, overflowY: "auto" }}>
+          {/* Lijst — scrollt binnen de popup, niet het hele venster */}
+          <div className="overflow-y-auto" style={{ flex: 1 }}>
             {!data ? (
-              <p className="px-4 py-6 text-center text-[11px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
-                Laden...
-              </p>
+              <div className="flex items-center justify-center gap-2 py-8">
+                <span
+                  className="inline-block rounded-full animate-spin"
+                  style={{ width: 15, height: 15, border: "2px solid rgba(0,19,55,0.12)", borderTopColor: "#001337" }}
+                />
+                <span className="text-[11px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                  Laden…
+                </span>
+              </div>
             ) : aantal === 0 ? (
-              <div className="flex flex-col items-center justify-center py-9 px-4">
-                <CheckCircle2 size={26} style={{ color: "#bbf7d0" }} />
-                <p className="text-sm font-bold mt-2.5" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+              <div className="flex flex-col items-center justify-center py-10 px-6">
+                <CheckCircle2 size={30} style={{ color: "#86efac" }} />
+                <p className="text-sm font-bold mt-3" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
                   Niets te doen
                 </p>
-                <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
-                  Geen afspraken vandaag of morgen, geen openstaande facturen of aanvragen.
+                <p className="text-[11px] mt-1 text-center max-w-[260px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                  Geen afspraken vandaag of morgen, geen openstaande facturen of nieuwe aanvragen.
                 </p>
               </div>
             ) : (
@@ -1350,28 +1375,51 @@ function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
                   <button
                     key={m.id}
                     onClick={() => { onGaNaar(m.tab as Tab); setOpen(false); }}
-                    className="w-full flex items-start gap-3 px-4 py-2.5 text-left transition-all hover:bg-slate-50"
+                    className="group relative w-full flex items-start gap-3 pl-4 pr-3 py-3 text-left transition-all hover:bg-slate-50"
                     style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}
                   >
+                    {/* Rode accentbalk maakt urgente meldingen meteen herkenbaar */}
+                    {m.urgent && (
+                      <span className="absolute left-0 top-0 bottom-0" style={{ width: 3, backgroundColor: "#dc2626" }} />
+                    )}
                     <div
                       className="flex items-center justify-center flex-shrink-0 mt-0.5"
                       style={{
-                        width: 26,
-                        height: 26,
+                        width: 30,
+                        height: 30,
                         backgroundColor: m.urgent ? "#fee2e2" : "rgba(0,19,55,0.05)",
-                        borderRadius: 6,
+                        borderRadius: 8,
                       }}
                     >
-                      <Icon size={13} style={{ color: m.urgent ? "#b91c1c" : "rgba(0,19,55,0.5)" }} />
+                      <Icon size={14} style={{ color: m.urgent ? "#b91c1c" : "rgba(0,19,55,0.5)" }} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                      <p
+                        className="text-[12.5px] font-bold"
+                        style={{ color: "#001337", fontFamily: "var(--font-inter)", lineHeight: 1.35 }}
+                      >
                         {m.titel}
                       </p>
-                      <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                      <p
+                        className="text-[11px] mt-0.5"
+                        style={{
+                          color: "rgba(0,19,55,0.5)",
+                          fontFamily: "var(--font-inter)",
+                          lineHeight: 1.45,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
                         {m.detail}
                       </p>
                     </div>
+                    <ChevronRight
+                      size={15}
+                      className="transition-transform group-hover:translate-x-0.5"
+                      style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0, marginTop: 8 }}
+                    />
                   </button>
                 );
               })
