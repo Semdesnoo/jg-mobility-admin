@@ -46,6 +46,13 @@ of bestelbevestiging met een totaalbedrag).
   staat. Een offerte, een aanmaning zonder bedrag, een nieuwsbrief, reclame, een
   pakbon of een puur informatieve statusmail is GEEN factuur → false en laat de
   rest leeg.
+- BELANGRIJK: dit is voor INKOOP-facturen (crediteuren) — wat JG Mobility aan een
+  ander moet betalen. Is JG Mobility zélf de afzender/verkoper van de factuur
+  (dus een factuur die JG heeft uitgeschreven aan een klant), dan is dat een
+  VERKOOPfactuur → is_factuur = false. De leverancier is altijd een ander bedrijf
+  dan JG Mobility. Een door JG doorgestuurde factuur van een echte leverancier
+  (bijv. een garage of de KvK) is wél een inkoopfactuur; gebruik dan die
+  leverancier, niet JG Mobility.
 
 Gok nooit. Kun je iets niet met zekerheid aflezen, laat het leeg (0 bij bedragen)
 en noem het in "onzeker". Een verkeerd bedrag is erger dan een leeg veld.`;
@@ -346,6 +353,18 @@ export async function POST() {
       }
 
       const leverancier = String(uit.leverancier ?? "") || afzender;
+
+      // ── Eigen verkoopfacturen weren ───────────────────────────────
+      // Een inkoopfactuur heeft per definitie een externe leverancier. Is JG
+      // Mobility zélf de leverancier, dan is het een uitgaande verkoopfactuur
+      // (die JG naar zichzelf of een klant stuurde) en hoort hij niet bij "nog te
+      // betalen". Dit is het vangnet; de prompt vraagt het model dit ook al te
+      // herkennen. Doorgestuurde facturen van een échte crediteur (afzender is
+      // JG, maar leverancier is bijv. Burax of de KvK) blijven gewoon staan.
+      if (normaliseerLeverancier(leverancier) === "jg mobility") {
+        await slaOver("eigen verkoopfactuur van JG Mobility — geen inkoop");
+        continue;
+      }
 
       // ── Dubbel voorkomen ──────────────────────────────────────────
       // Zelfde leverancier + bedrag betekent vrijwel zeker dezelfde factuur,
