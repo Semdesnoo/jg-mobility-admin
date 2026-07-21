@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Banknote, Receipt, AlertTriangle, Info, Wallet, ArrowRight } from "lucide-react";
+import { Banknote, Receipt, AlertTriangle, Info, Wallet, ArrowRight, ArrowLeftRight } from "lucide-react";
 
 /** Waar een waarschuwing je heen kan brengen om het recht te zetten. */
 type Herstelpunt = {
@@ -21,6 +21,12 @@ type Kwartaal = {
   margeGrondslag: number; aantal: number; zonderInkoop: string[];
 };
 
+type InUit = {
+  sleutel: string; label: string; jaar: number; kwartaal: number;
+  inkomsten: number; inkomstenAantal: number;
+  uitgaven: number; uitgavenAantal: number; saldo: number;
+};
+
 type Debiteur = {
   id: string; factuur_nr: string; klant: string; auto: string;
   bedrag: number; datum: string; vervaldatum: string;
@@ -35,6 +41,7 @@ type Crediteur = {
 
 type Boekhouding = {
   perKwartaal: Kwartaal[];
+  inUit: InUit[];
   resultaat: {
     omzet: number; inkoopwaarde: number; kosten: number;
     brutowinst: number; btwAfdracht: number; nettowinst: number;
@@ -107,7 +114,7 @@ function Regel({ label, bedrag, teken = "", zwaar = false, kleur }: {
   );
 }
 
-type Blad = "resultaat" | "btw" | "debiteuren";
+type Blad = "resultaat" | "btw" | "inuit" | "debiteuren";
 
 export default function BoekhoudingContent({ onNavigeer }: {
   onNavigeer?: (tab: DashTab, focus?: { dossierId?: number; autoId?: number }) => void;
@@ -132,6 +139,7 @@ export default function BoekhoudingContent({ onNavigeer }: {
   const BLADEN: { key: Blad; label: string }[] = [
     { key: "resultaat", label: "Resultaat" },
     { key: "btw", label: "BTW per kwartaal" },
+    { key: "inuit", label: "In & uit" },
     { key: "debiteuren", label: "Openstaand" },
   ];
 
@@ -341,6 +349,56 @@ export default function BoekhoudingContent({ onNavigeer }: {
                 <p className="px-5 py-3.5 text-[11px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.65, borderTop: "1px solid rgba(0,19,55,0.07)" }}>
                   Dit is een hulpmiddel om je aangifte voor te bereiden, geen aangifte zelf. Controleer de
                   bedragen met je boekhouder voordat je indient.
+                </p>
+              </Kaart>
+            )}
+
+            {/* ══ Geld in & uit per kwartaal (om naast de bank te leggen) ══ */}
+            {blad === "inuit" && (
+              <Kaart
+                titel="Geld in & uit per kwartaal"
+                icon={ArrowLeftRight}
+                toelichting="Erbij = gefactureerde verkoop, eraf = gefactureerde inkoop, per kwartaal. Op factuurdatum (niet betaaldatum), dus de timing kan iets van je bank afwijken — het gaat erom of er iets ontbreekt."
+              >
+                {data.inUit.length === 0 ? (
+                  <p className="px-5 py-10 text-center text-sm" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+                    Nog geen facturen
+                  </p>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse", minWidth: 560 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1.5px solid rgba(0,19,55,0.12)" }}>
+                          {["Periode", "Erbij (verkoop)", "Eraf (inkoop)", "Saldo"].map((h, i) => (
+                            <th key={h} className="px-4 py-2.5" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(0,19,55,0.45)", textAlign: i === 0 ? "left" : "right", whiteSpace: "nowrap" }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.inUit.map((k, i) => (
+                          <tr key={k.sleutel} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                            <td className="px-4 py-3 text-sm font-semibold" style={{ color: "#001337", whiteSpace: "nowrap" }}>{k.label}</td>
+                            <td className="px-4 py-3 text-right" style={{ whiteSpace: "nowrap" }}>
+                              <span className="text-sm font-semibold" style={{ color: GROEN, fontVariantNumeric: "tabular-nums" }}>+ {euro(k.inkomsten)}</span>
+                              <span className="block text-[10px]" style={{ color: "rgba(0,19,55,0.4)" }}>{k.inkomstenAantal} factu{k.inkomstenAantal === 1 ? "ur" : "ren"}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right" style={{ whiteSpace: "nowrap" }}>
+                              <span className="text-sm font-semibold" style={{ color: ROOD, fontVariantNumeric: "tabular-nums" }}>− {euro(k.uitgaven)}</span>
+                              <span className="block text-[10px]" style={{ color: "rgba(0,19,55,0.4)" }}>{k.uitgavenAantal} factu{k.uitgavenAantal === 1 ? "ur" : "ren"}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: k.saldo >= 0 ? GROEN : ROOD, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                              {k.saldo >= 0 ? "+ " : "− "}{euro(Math.abs(k.saldo))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="px-5 py-3.5 text-[11px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.65, borderTop: "1px solid rgba(0,19,55,0.07)" }}>
+                  Leg dit per kwartaal naast de af- en bijschriften van je bank. Klopt <strong>erbij</strong> niet met je bijschriften, dan mist er waarschijnlijk een verkoopfactuur; klopt <strong>eraf</strong> niet, dan mist er een inkoopfactuur.
                 </p>
               </Kaart>
             )}

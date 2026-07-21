@@ -212,6 +212,47 @@ export async function GET() {
     .map((k) => ({ ...k, omzet: rond(k.omzet), btwHoog: rond(k.btwHoog), btwMarge: rond(k.btwMarge), btwTotaal: rond(k.btwHoog + k.btwMarge), margeGrondslag: rond(k.margeGrondslag) }))
     .sort((a, b) => b.jaar - a.jaar || b.kwartaal - a.kwartaal);
 
+  // ── Geld in & uit per kwartaal ──
+  // Bedoeld om naast je bankafschriften te leggen: erbij = wat je met
+  // verkoopfacturen hebt gefactureerd, eraf = wat je met inkoopfacturen bent
+  // gefactureerd. Op factuurdatum (niet betaaldatum), dus de timing kan iets
+  // afwijken van de bank — het gaat om of er iets ontbreekt, niet om de cent.
+  type InUit = {
+    sleutel: string; label: string; jaar: number; kwartaal: number;
+    inkomsten: number; inkomstenAantal: number;
+    uitgaven: number; uitgavenAantal: number; saldo: number;
+  };
+  const inUitMap = new Map<string, InUit>();
+  const inUitBucket = (datum: Date): InUit => {
+    const jaar = datum.getFullYear();
+    const kw = Math.floor(datum.getMonth() / 3) + 1;
+    const sleutel = `${jaar}-K${kw}`;
+    if (!inUitMap.has(sleutel)) {
+      inUitMap.set(sleutel, {
+        sleutel, label: `${jaar} · Q${kw}`, jaar, kwartaal: kw,
+        inkomsten: 0, inkomstenAantal: 0, uitgaven: 0, uitgavenAantal: 0, saldo: 0,
+      });
+    }
+    return inUitMap.get(sleutel)!;
+  };
+  for (const f of facturen) {
+    const d = parseDatum(f.datum);
+    if (!d) continue;
+    const b = inUitBucket(d);
+    b.inkomsten += brutoBedrag(f);
+    b.inkomstenAantal += 1;
+  }
+  for (const f of inkoopFacturen) {
+    const d = parseDatum(f.datum);
+    if (!d) continue;
+    const b = inUitBucket(d);
+    b.uitgaven += Number(f.bedrag_incl) || 0;
+    b.uitgavenAantal += 1;
+  }
+  const inUit = [...inUitMap.values()]
+    .map((x) => ({ ...x, inkomsten: rond(x.inkomsten), uitgaven: rond(x.uitgaven), saldo: rond(x.inkomsten - x.uitgaven) }))
+    .sort((a, b) => b.jaar - a.jaar || b.kwartaal - a.kwartaal);
+
   // ── Debiteuren: wat staat er nog open ──
   const nu = new Date();
   const vandaag = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
@@ -273,6 +314,7 @@ export async function GET() {
 
   return Response.json({
     perKwartaal,
+    inUit,
     resultaat: {
       omzet: rond(omzetTotaal),
       inkoopwaarde: rond(inkoopTotaal),
