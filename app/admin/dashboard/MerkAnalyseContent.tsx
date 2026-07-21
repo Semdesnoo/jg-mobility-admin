@@ -53,7 +53,7 @@ function Kaart({
 }) {
   return (
     <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
-      <div className="px-5 py-4" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+      <div className="px-4 py-4 sm:px-5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
         <div className="flex items-center gap-2.5">
           {Icon && (
             <div className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, backgroundColor: "rgba(29,78,216,0.1)", borderRadius: 7 }}>
@@ -68,7 +68,7 @@ function Kaart({
           </p>
         )}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </div>
   );
 }
@@ -185,7 +185,7 @@ export default function MerkAnalyseContent() {
                       </span>
                     ))}
                   </div>
-                  <div className="flex items-end gap-4" style={{ height: 150 }}>
+                  <div className="flex items-end gap-1.5 sm:gap-4" style={{ height: 150 }}>
                     {verdeling.map((b) => (
                       <div key={b.label} className="flex-1 flex flex-col items-center gap-2">
                         <div className="w-full flex items-end justify-center gap-1" style={{ height: 120 }}>
@@ -248,8 +248,8 @@ export default function MerkAnalyseContent() {
                   {gesorteerd.map((m, i) => {
                     const d = m.gemStandtijdVerkocht ?? 0;
                     return (
-                      <div key={m.merk} className="flex items-center gap-3">
-                        <span className="text-sm font-semibold flex-shrink-0 truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)", width: 130 }}>
+                      <div key={m.merk} className="flex items-center gap-2 sm:gap-3">
+                        <span className="text-xs sm:text-sm font-semibold flex-shrink-0 truncate w-20 sm:w-[130px]" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                           {m.merk}
                         </span>
                         <div className="flex-1 h-6 relative" style={{ backgroundColor: "rgba(0,19,55,0.04)" }}>
@@ -263,10 +263,10 @@ export default function MerkAnalyseContent() {
                             }}
                           />
                         </div>
-                        <span className="text-sm font-bold flex-shrink-0 text-right" style={{ color: "#001337", fontFamily: "var(--font-inter)", width: 70 }}>
+                        <span className="text-xs sm:text-sm font-bold flex-shrink-0 text-right w-12 sm:w-[70px]" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                           {d} dgn
                         </span>
-                        <span className="text-[11px] flex-shrink-0 text-right" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 90 }}>
+                        <span className="text-[11px] flex-shrink-0 text-right w-14 sm:w-[90px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
                           {m.verkochtMetStandtijd} verkocht
                         </span>
                       </div>
@@ -295,7 +295,7 @@ export default function MerkAnalyseContent() {
               toelichting="De ruwe cijfers per merk. Doorlooptijd is leidend voor de inkoopbeslissing: hoe korter, hoe minder lang je geld vaststaat."
             >
               <div style={{ overflowX: "auto" }}>
-                <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse" }}>
+                <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse", minWidth: 680 }}>
                   <thead>
                     <tr style={{ borderBottom: "1.5px solid rgba(0,19,55,0.12)" }}>
                       {["Merk", "Voorraad", "Verkocht", "Doorlooptijd", "Staat nu", "Gem. prijs", "Voorraadwaarde"].map((h, i) => (
@@ -353,14 +353,14 @@ export default function MerkAnalyseContent() {
                   {stats.langstInVoorraad.map((a, i) => {
                     const max = stats.langstInVoorraad[0].dagen || 1;
                     return (
-                      <div key={`${a.merk}-${a.model}-${i}`} className="flex items-center gap-3">
-                        <span className="text-sm font-semibold flex-shrink-0 truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)", width: 190 }}>
+                      <div key={`${a.merk}-${a.model}-${i}`} className="flex items-center gap-2 sm:gap-3">
+                        <span className="text-xs sm:text-sm font-semibold flex-shrink-0 truncate w-28 sm:w-[190px]" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                           {a.merk} {a.model}
                         </span>
                         <div className="flex-1 h-2.5" style={{ backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 99 }}>
                           <div className="h-full" style={{ width: `${Math.max((a.dagen / max) * 100, 4)}%`, backgroundColor: standtijdKleur(a.dagen), borderRadius: 99 }} />
                         </div>
-                        <span className="text-sm font-bold flex-shrink-0 text-right" style={{ color: standtijdKleur(a.dagen), fontFamily: "var(--font-inter)", width: 80 }}>
+                        <span className="text-xs sm:text-sm font-bold flex-shrink-0 text-right w-16 sm:w-[80px]" style={{ color: standtijdKleur(a.dagen), fontFamily: "var(--font-inter)" }}>
                           {dagen(a.dagen)}
                         </span>
                       </div>

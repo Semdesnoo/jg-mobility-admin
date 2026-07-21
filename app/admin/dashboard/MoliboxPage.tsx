@@ -21,7 +21,7 @@ export default function MoliboxPage() {
 
       <div className="p-4 md:p-8">
         <div
-          className="flex flex-col items-center justify-center text-center py-16 px-6"
+          className="flex flex-col items-center justify-center text-center py-12 px-5 sm:py-16 sm:px-6"
           style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}
         >
           <div
@@ -30,7 +30,7 @@ export default function MoliboxPage() {
           >
             <LayoutGrid size={28} style={{ color: "#ffffff" }} />
           </div>
-          <h3 className="text-2xl font-bold mb-2" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+          <h3 className="text-xl sm:text-2xl font-bold mb-2" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
             Molibox
           </h3>
           <p className="text-sm mb-7 max-w-md" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
@@ -41,7 +41,7 @@ export default function MoliboxPage() {
             href={MOLIBOX_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-7 py-3.5 text-sm font-semibold transition-all hover:opacity-90"
+            className="flex items-center justify-center gap-2 w-full max-w-xs px-7 py-3 text-sm font-semibold transition-all hover:opacity-90"
             style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
           >
             Open Molibox <ExternalLink size={15} />

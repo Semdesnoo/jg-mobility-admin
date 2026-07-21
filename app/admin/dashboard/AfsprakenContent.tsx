@@ -205,21 +205,21 @@ export default function AfsprakenContent() {
   return (
     <div>
       <div
-        className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-10"
+        className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between gap-3 sticky top-0 z-10"
         style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
       >
-        <div>
-          <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Afspraken</h2>
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Afspraken</h2>
           <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
             {afspraken.filter(a => a.status === "gepland").length} gepland{geplandVandaag > 0 ? ` · ${geplandVandaag} vandaag` : ""}
           </p>
         </div>
         <button
           onClick={() => setToonNieuw((v) => !v)}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
+          className="flex items-center gap-2 px-3.5 sm:px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90 flex-shrink-0 whitespace-nowrap"
           style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
         >
-          <Plus size={14} /> Nieuwe afspraak
+          <Plus size={14} /> <span className="hidden sm:inline">Nieuwe afspraak</span><span className="sm:hidden">Nieuw</span>
         </button>
       </div>
 
@@ -261,7 +261,7 @@ export default function AfsprakenContent() {
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Tijd</label>
                 <input type="time" value={form.tijd} onChange={(e) => setForm((p) => ({ ...p, tijd: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
                 {/* Halfuurblokken binnen openingstijden: sneller dan het tijdwieltje. */}
-                <div className="grid grid-cols-6 gap-1 mt-1.5">
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1 mt-1.5">
                   {TIJDBLOKKEN.map((t) => {
                     const gekozen = form.tijd === t;
                     return (
@@ -301,11 +301,11 @@ export default function AfsprakenContent() {
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>E-mail</label>
                 <input type="text" value={form.klant_email} onChange={(e) => setForm((p) => ({ ...p, klant_email: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
               </div>
-              <div style={{ gridColumn: "span 2" }}>
+              <div className="sm:col-span-2">
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Auto</label>
                 <input type="text" value={form.auto_naam} placeholder="bijv. BMW 3-serie 2021" onChange={(e) => setForm((p) => ({ ...p, auto_naam: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
               </div>
-              <div style={{ gridColumn: "span 2" }}>
+              <div className="sm:col-span-2">
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Notitie</label>
                 <textarea value={form.notitie} onChange={(e) => setForm((p) => ({ ...p, notitie: e.target.value }))} rows={2} className="w-full px-3 py-2 text-sm outline-none resize-none" style={{ ...S.veld, lineHeight: 1.6 }} />
               </div>
@@ -493,9 +493,9 @@ export default function AfsprakenContent() {
         {/* ── Dagpaneel: verschijnt als je op een datum klikt ── */}
         {!loading && weergave === "kalender" && gekozenDag && (
           <div ref={dagRef} className="mb-6" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
-            <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold capitalize truncate" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+            <div className="px-4 sm:px-5 py-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+              <div className="min-w-0 w-full sm:w-auto">
+                <h3 className="text-sm font-bold capitalize" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
                   {dagLabel(gekozenDag)}
                 </h3>
                 <p className="text-[11px] mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
@@ -504,7 +504,7 @@ export default function AfsprakenContent() {
                     : `${dagAfspraken.length} afspraak${dagAfspraken.length === 1 ? "" : "en"}`}
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                 <button
                   onClick={() => nieuweAfspraakOp(gekozenDag)}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold transition-all hover:opacity-90"
@@ -671,8 +671,8 @@ export default function AfsprakenContent() {
                           </div>
                           <p className="text-xs font-bold mb-1.5 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Notitie</p>
                           <textarea defaultValue={a.notitie} rows={3} onBlur={(e) => { if (e.target.value !== a.notitie) updateNotitie(a.id, e.target.value); }} placeholder="Interne notitie..." className="w-full px-3 py-2 text-xs outline-none resize-none" style={{ ...S.veld, lineHeight: 1.6 }} />
-                          <div className="flex items-center justify-between mt-3">
-                            <div className="flex gap-2">
+                          <div className="flex items-center justify-between gap-3 flex-wrap mt-3">
+                            <div className="flex gap-2 flex-wrap">
                               {a.klant_email && <a href={`mailto:${a.klant_email}`} className="px-4 py-2 text-xs font-semibold" style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>Mail</a>}
                               {a.klant_telefoon && <a href={`tel:${a.klant_telefoon}`} className="px-4 py-2 text-xs font-semibold" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>Bel</a>}
                             </div>

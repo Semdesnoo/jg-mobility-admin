@@ -142,12 +142,12 @@ function PageHeader({
 }) {
   return (
     <div
-      className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-10"
+      className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between relative md:sticky md:top-0 z-10"
       style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
     >
-      <div>
+      <div className="min-w-0">
         <h2
-          className="text-xl font-bold"
+          className="text-lg md:text-xl font-bold"
           style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
         >
           {title}
@@ -161,7 +161,11 @@ function PageHeader({
           </p>
         )}
       </div>
-      {action}
+      {action && (
+        <div className="flex items-center flex-wrap gap-2 w-full sm:w-auto">
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -3169,7 +3173,9 @@ function FacturenContent() {
                 </div>
               ) : (
                 <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", overflowX: "auto" }}>
-                  <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse" }}>
+                  {/* minWidth zodat de brede tabel op mobiel horizontaal scrollt i.p.v. te
+                      knijpen — de globale `* { max-width:100% }` zou 'm anders afkappen. */}
+                  <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse", minWidth: 820 }}>
                     <thead>
                       <tr style={{ borderBottom: "1.5px solid #001337" }}>
                         <th className="px-3 py-3" style={{ width: "34px" }}>
@@ -3281,14 +3287,14 @@ function FacturenContent() {
       />
       <div className="p-4 md:p-8">
         {nieuwsteFactuur && (
-          <div className="mb-5 flex items-center justify-between px-4 py-3" style={{ backgroundColor: "#dcfce7", border: "1px solid #86efac", fontFamily: "var(--font-inter)" }}>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3" style={{ backgroundColor: "#dcfce7", border: "1px solid #86efac", fontFamily: "var(--font-inter)" }}>
             <div>
               <p className="text-sm font-semibold" style={{ color: "#15803d" }}>
                 Factuur {nieuwsteFactuur.factuur_nr} aangemaakt
               </p>
               <p className="text-xs" style={{ color: "#166534" }}>Klik op Afdrukken om de PDF te openen.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => printFactuur(nieuwsteFactuur)}
                 className="px-4 py-2 text-xs font-semibold"
@@ -3901,8 +3907,8 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
       <div className="flex flex-1 overflow-hidden">
         {/* ── Zijbalk: dossier lijst ── */}
         <aside
-          className={`${mobileView === "detail" ? "hidden md:flex" : "flex"} flex-col flex-shrink-0`}
-          style={{ width: "290px", borderRight: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8f9fb" }}
+          className={`${mobileView === "detail" ? "hidden md:flex" : "flex"} flex-col flex-shrink-0 w-full md:w-[290px]`}
+          style={{ borderRight: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8f9fb" }}
         >
           {/* Zoeken + lopend/archief — bij tientallen dossiers is scrollen geen doen */}
           <div className="px-3 py-2.5 flex flex-col gap-2" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fff" }}>

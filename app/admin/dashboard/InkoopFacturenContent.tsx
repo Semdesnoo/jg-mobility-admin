@@ -280,14 +280,14 @@ export default function InkoopFacturenContent() {
 
   return (
     <div>
-      <div className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-10" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
+      <div className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
         <div>
           <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Inkoopfacturen</h2>
           <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
             Wat jij nog moet betalen — handmatig invoeren of laten uitlezen
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           <button
             onClick={scanEmail}
             disabled={scanBezig}
@@ -326,7 +326,7 @@ export default function InkoopFacturenContent() {
               {data?.openAantal ?? 0} openstaande factu{(data?.openAantal ?? 0) === 1 ? "ur" : "ren"}
             </p>
           </div>
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
             {[
               { label: "Te laat", waarde: euroKort(data?.teLaatTotaal ?? 0), sub: `${data?.teLaatAantal ?? 0} over de vervaldatum`, kleur: (data?.teLaatAantal ?? 0) > 0 ? ROOD : "#001337" },
               { label: "Vervalt deze week", waarde: String(data?.binnenkortAantal ?? 0), sub: "binnen 7 dagen", kleur: "#001337" },

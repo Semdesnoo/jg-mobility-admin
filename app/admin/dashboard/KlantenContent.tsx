@@ -84,7 +84,7 @@ export default function KlantenContent() {
     <div>
       {/* Header */}
       <div
-        className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-10"
+        className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10"
         style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
       >
         <div>
@@ -97,7 +97,7 @@ export default function KlantenContent() {
         </div>
         <button
           onClick={() => setToonNieuw((v) => !v)}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
+          className="flex-shrink-0 flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
           style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
         >
           <Plus size={14} /> Nieuwe klant
@@ -119,7 +119,7 @@ export default function KlantenContent() {
                 { label: "Adres", field: "adres" as const },
                 { label: "Stad", field: "stad" as const },
               ]).map(({ label, field, col }) => (
-                <div key={field} style={{ gridColumn: col ? `span ${col}` : undefined }}>
+                <div key={field} className={col ? "sm:col-span-2" : undefined}>
                   <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>{label}</label>
                   <input
                     type="text"
@@ -130,7 +130,7 @@ export default function KlantenContent() {
                   />
                 </div>
               ))}
-              <div style={{ gridColumn: "span 2" }}>
+              <div className="sm:col-span-2">
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Notitie</label>
                 <textarea
                   value={form.notitie}
@@ -141,7 +141,7 @@ export default function KlantenContent() {
                 />
               </div>
             </div>
-            <div className="px-5 pb-5 flex gap-2">
+            <div className="px-5 pb-5 flex flex-wrap gap-2">
               <button
                 onClick={maakAan}
                 disabled={saving || !form.naam.trim()}
@@ -198,7 +198,7 @@ export default function KlantenContent() {
                 <div key={k.id} style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
                   <button
                     onClick={() => setOpenId(isOpen ? null : k.id)}
-                    className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gray-50"
+                    className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 text-left transition-all hover:bg-gray-50"
                   >
                     <div
                       className="flex-shrink-0 flex items-center justify-center text-sm font-bold"
@@ -207,12 +207,12 @@ export default function KlantenContent() {
                       {k.naam.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>{k.naam}</p>
-                      <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                      <p className="text-sm font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>{k.naam}</p>
+                      <p className="text-xs truncate" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
                         {[k.email, k.telefoon, k.stad].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    <p className="text-[10px] flex-shrink-0 mr-2" style={{ color: "rgba(0,19,55,0.3)", fontFamily: "var(--font-inter)" }}>
+                    <p className="hidden sm:block text-[10px] flex-shrink-0 mr-2" style={{ color: "rgba(0,19,55,0.3)", fontFamily: "var(--font-inter)" }}>
                       {new Date(k.aangemaakt).toLocaleDateString("nl-NL")}
                     </p>
                     {isOpen ? <ChevronUp size={14} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} />}
@@ -239,7 +239,7 @@ export default function KlantenContent() {
                             />
                           </div>
                         ))}
-                        <div style={{ gridColumn: "span 2" }}>
+                        <div className="sm:col-span-2">
                           <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Notitie</label>
                           <textarea
                             defaultValue={k.notitie}
@@ -251,22 +251,22 @@ export default function KlantenContent() {
                           />
                         </div>
                       </div>
-                      <div className="flex items-center justify-between mt-4">
-                        <div className="flex gap-2">
+                      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
+                        <div className="flex flex-wrap gap-2">
                           {k.email && (
-                            <a href={`mailto:${k.email}`} className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
+                            <a href={`mailto:${k.email}`} className="px-4 py-2.5 text-xs font-semibold transition-all hover:opacity-80"
                               style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
                               Mail
                             </a>
                           )}
                           {k.telefoon && (
-                            <a href={`tel:${k.telefoon}`} className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
+                            <a href={`tel:${k.telefoon}`} className="px-4 py-2.5 text-xs font-semibold transition-all hover:opacity-80"
                               style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>
                               Bel
                             </a>
                           )}
                         </div>
-                        <button onClick={() => verwijder(k.id)} className="flex items-center gap-1.5 text-xs transition-all hover:opacity-70"
+                        <button onClick={() => verwijder(k.id)} className="flex items-center gap-1.5 py-2 text-xs transition-all hover:opacity-70"
                           style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
                           <Trash2 size={12} /> Verwijder
                         </button>

@@ -136,14 +136,14 @@ export default function BoekhoudingContent({ onNavigeer }: {
         <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
           Resultaat, BTW en openstaande posten — op basis van je facturen en calculatordossiers
         </p>
-        <div className="flex items-center gap-1 mt-3">
+        <div className="flex items-center gap-1 mt-3 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
           {BLADEN.map((b) => {
             const actief = blad === b.key;
             return (
               <button
                 key={b.key}
                 onClick={() => setBlad(b.key)}
-                className="px-3 py-2 text-xs font-semibold transition-all"
+                className="px-3 py-2 text-xs font-semibold transition-all flex-shrink-0 whitespace-nowrap"
                 style={{
                   fontFamily: "var(--font-inter)",
                   color: actief ? "#001337" : "rgba(0,19,55,0.4)",
@@ -251,7 +251,7 @@ export default function BoekhoudingContent({ onNavigeer }: {
                       na inkoop, kosten en BTW-afdracht
                     </p>
                   </div>
-                  <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
                     {[
                       { label: "Omzet", waarde: euroKort(r.omzet), sub: "gefactureerd" },
                       { label: "Voorraad (inkoop)", waarde: euroKort(data.voorraadInkoop), sub: "geld in de schappen" },
@@ -296,7 +296,7 @@ export default function BoekhoudingContent({ onNavigeer }: {
                   </p>
                 ) : (
                   <div style={{ overflowX: "auto" }}>
-                    <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse" }}>
+                    <table className="w-full" style={{ fontFamily: "var(--font-inter)", borderCollapse: "collapse", minWidth: 760 }}>
                       <thead>
                         <tr style={{ borderBottom: "1.5px solid rgba(0,19,55,0.12)" }}>
                           {["Periode", "Facturen", "Omzet", "Marge-grondslag", "BTW marge", "BTW 21%", "Totaal af te dragen"].map((h, i) => (

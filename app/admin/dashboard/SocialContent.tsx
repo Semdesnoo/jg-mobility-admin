@@ -43,39 +43,41 @@ function TekstVak({ titel, tekst, hint, limiet }: { titel: string; tekst: string
 
   return (
     <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
-      <div className="px-5 py-3.5 flex items-center justify-between gap-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
-        <div className="min-w-0">
+      <div className="px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>{titel}</h3>
           {hint && <p className="text-[11px] mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>{hint}</p>}
         </div>
-        {limiet && (
-          <span
-            className="text-[11px] font-semibold flex-shrink-0 px-2 py-1"
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {limiet && (
+            <span
+              className="text-[11px] font-semibold flex-shrink-0 px-2 py-1"
+              style={{
+                fontFamily: "var(--font-inter)",
+                color: tekst.length > limiet ? "#b91c1c" : "#15803d",
+                backgroundColor: tekst.length > limiet ? "#fee2e2" : "#dcfce7",
+              }}
+              title={`Marktplaats staat maximaal ${limiet} tekens toe`}
+            >
+              {tekst.length} / {limiet}
+            </span>
+          )}
+          <button
+            onClick={kopieer}
+            className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold flex-shrink-0 transition-all hover:opacity-85"
             style={{
+              backgroundColor: gekopieerd ? "#dcfce7" : "#001337",
+              color: gekopieerd ? "#15803d" : "#ffffff",
               fontFamily: "var(--font-inter)",
-              color: tekst.length > limiet ? "#b91c1c" : "#15803d",
-              backgroundColor: tekst.length > limiet ? "#fee2e2" : "#dcfce7",
             }}
-            title={`Marktplaats staat maximaal ${limiet} tekens toe`}
           >
-            {tekst.length} / {limiet}
-          </span>
-        )}
-        <button
-          onClick={kopieer}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all hover:opacity-85"
-          style={{
-            backgroundColor: gekopieerd ? "#dcfce7" : "#001337",
-            color: gekopieerd ? "#15803d" : "#ffffff",
-            fontFamily: "var(--font-inter)",
-          }}
-        >
-          {gekopieerd ? <><Check size={12} /> Gekopieerd</> : <><Copy size={12} /> Kopieer</>}
-        </button>
+            {gekopieerd ? <><Check size={12} /> Gekopieerd</> : <><Copy size={12} /> Kopieer</>}
+          </button>
+        </div>
       </div>
       <pre
-        className="px-5 py-4 text-sm whitespace-pre-wrap"
-        style={{ color: "#001337", fontFamily: "var(--font-inter)", lineHeight: 1.75, margin: 0 }}
+        className="px-4 sm:px-5 py-4 text-sm whitespace-pre-wrap"
+        style={{ color: "#001337", fontFamily: "var(--font-inter)", lineHeight: 1.75, margin: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}
       >
         {tekst}
       </pre>
@@ -318,7 +320,7 @@ export default function SocialContent() {
               <button
                 onClick={() => genereer(true)}
                 disabled={bezig}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold flex-shrink-0 transition-all hover:opacity-85 disabled:opacity-40"
+                className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold flex-shrink-0 transition-all hover:opacity-85 disabled:opacity-40"
                 style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
                 title="Negeert het archief en laat het model een nieuwe versie schrijven — dit kost tokens"
               >

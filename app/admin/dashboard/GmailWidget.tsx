@@ -165,7 +165,7 @@ export default function GmailWidget() {
               <p
                 key={i}
                 className="text-xs flex gap-2 mb-1"
-                style={{ color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-inter)" }}
+                style={{ color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-inter)", overflowWrap: "anywhere" }}
               >
                 <span style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }}>{i + 1}.</span>
                 {stap}
@@ -201,7 +201,12 @@ export default function GmailWidget() {
             </span>
           )}
         </div>
-        <button onClick={laadBerichten} disabled={loading} className="transition-all hover:opacity-60">
+        <button
+          onClick={laadBerichten}
+          disabled={loading}
+          aria-label="Vernieuwen"
+          className="flex items-center justify-center -mr-2 p-2 transition-all hover:opacity-60"
+        >
           <RefreshCw
             size={12}
             className={loading ? "animate-spin" : ""}
@@ -314,10 +319,10 @@ export default function GmailWidget() {
                   ) : detail ? (
                     <>
                       <div className="mb-3 pb-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
-                        <p className="text-xs" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                        <p className="text-xs" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", overflowWrap: "anywhere" }}>
                           Van: <span style={{ color: "#001337" }}>{detail.from}</span>
                         </p>
-                        <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                        <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", overflowWrap: "anywhere" }}>
                           Datum: <span style={{ color: "#001337" }}>{detail.date}</span>
                         </p>
                       </div>
@@ -328,13 +333,15 @@ export default function GmailWidget() {
                           fontFamily: "var(--font-inter)",
                           lineHeight: 1.6,
                           maxHeight: "220px",
+                          overflowWrap: "anywhere",
+                          wordBreak: "break-word",
                         }}
                         dangerouslySetInnerHTML={{ __html: detail.body || "(leeg)" }}
                       />
                       {!replyOpen ? (
                         <button
                           onClick={() => setReplyOpen(true)}
-                          className="flex items-center gap-1.5 text-xs font-semibold transition-all hover:opacity-70"
+                          className="flex items-center gap-1.5 py-1.5 text-xs font-semibold transition-all hover:opacity-70"
                           style={{ color: "#001337", fontFamily: "var(--font-inter)" }}
                         >
                           <Send size={11} /> Beantwoorden
@@ -355,11 +362,11 @@ export default function GmailWidget() {
                               lineHeight: 1.6,
                             }}
                           />
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <button
                               onClick={verstuurAntwoord}
                               disabled={replying || !replyText.trim()}
-                              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-40"
+                              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-40"
                               style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
                             >
                               <Send size={10} />
@@ -367,7 +374,7 @@ export default function GmailWidget() {
                             </button>
                             <button
                               onClick={() => setReplyOpen(false)}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-70"
+                              className="px-4 py-2.5 text-xs font-semibold transition-all hover:opacity-70"
                               style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
                             >
                               Annuleren

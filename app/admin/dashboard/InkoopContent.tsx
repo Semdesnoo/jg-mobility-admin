@@ -71,11 +71,14 @@ export default function InkoopContent() {
         className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-6 xl:px-8"
         style={{ height: 56, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
       >
-        <h2 style={{ fontFamily: T.play, fontSize: 19, fontWeight: 700, color: T.navy, whiteSpace: "nowrap" }}>
+        <h2
+          className="min-w-0 truncate text-[17px] sm:text-[19px]"
+          style={{ fontFamily: T.play, fontWeight: 700, color: T.navy }}
+        >
           Inkoop &amp; Taxatie
         </h2>
         <span className="hidden md:block flex-shrink-0" style={{ width: 1, height: 16, backgroundColor: T.line2 }} />
-        <p className="hidden md:block truncate" style={micro(T.ink(0.35))}>
+        <p className="hidden md:block min-w-0 truncate" style={micro(T.ink(0.35))}>
           {actieveTab.context}
         </p>
 

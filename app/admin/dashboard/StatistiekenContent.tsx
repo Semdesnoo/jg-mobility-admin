@@ -231,11 +231,11 @@ function Leeg({ tekst }: { tekst: string }) {
 /** Compacte cijferregel — vervangt de losse KPI-kaarten. */
 function Cijfer({ label, waarde, sub }: { label: string; waarde: string | number; sub?: string }) {
   return (
-    <div className="px-5 py-4">
+    <div className="min-w-0 px-4 py-4 sm:px-5">
       <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
         {label}
       </p>
-      <p className="text-2xl font-bold leading-none" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+      <p className="text-xl sm:text-2xl font-bold leading-none break-words" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
         {waarde}
       </p>
       {sub && (
@@ -283,7 +283,7 @@ export default function StatistiekenContent() {
           Overzicht van je bedrijfsprestaties
         </p>
         {/* Bladen — houdt de pagina kort in plaats van één lange kolom */}
-        <div className="flex items-center gap-1 mt-3">
+        <div className="flex flex-wrap items-center gap-1 mt-3">
           {BLADEN.map((b) => {
             const actief = blad === b.key;
             return (
@@ -321,11 +321,11 @@ export default function StatistiekenContent() {
               <>
                 {/* Hoofdcijfer + context ernaast */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="lg:col-span-1 p-6" style={{ backgroundColor: "#001337" }}>
+                  <div className="lg:col-span-1 p-5 sm:p-6" style={{ backgroundColor: "#001337" }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
                       Omzet dit jaar
                     </p>
-                    <p className="text-4xl font-bold leading-none text-white" style={{ fontFamily: "var(--font-playfair)" }}>
+                    <p className="text-3xl sm:text-4xl font-bold leading-none text-white break-words" style={{ fontFamily: "var(--font-playfair)" }}>
                       {fmtEur(stats.omzetDitJaar)}
                     </p>
                     <p className="text-[11px] mt-2" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>
@@ -375,11 +375,11 @@ export default function StatistiekenContent() {
                       {(() => {
                         const max = Math.max(...stats.perMerk.map((m) => m.voorraad + m.verkocht), 1);
                         return stats.perMerk.map((m) => (
-                          <div key={m.merk} className="flex items-center gap-3">
-                            <span className="text-sm font-semibold flex-shrink-0 truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)", width: 130 }}>
+                          <div key={m.merk} className="flex items-center gap-2 sm:gap-3">
+                            <span className="w-20 sm:w-[130px] text-xs sm:text-sm font-semibold flex-shrink-0 truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                               {m.merk}
                             </span>
-                            <div className="flex-1 h-5 flex" style={{ backgroundColor: "rgba(0,19,55,0.04)" }}>
+                            <div className="flex-1 min-w-0 h-5 flex" style={{ backgroundColor: "rgba(0,19,55,0.04)" }}>
                               {m.voorraad > 0 && (
                                 <div title={`${m.voorraad} op voorraad`} style={{ width: `${(m.voorraad / max) * 100}%`, backgroundColor: BLAUW }} />
                               )}
@@ -387,7 +387,7 @@ export default function StatistiekenContent() {
                                 <div title={`${m.verkocht} verkocht`} style={{ width: `${(m.verkocht / max) * 100}%`, backgroundColor: BLAUW_LICHT, marginLeft: m.voorraad > 0 ? 2 : 0 }} />
                               )}
                             </div>
-                            <span className="text-[11px] flex-shrink-0 text-right" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", width: 90 }}>
+                            <span className="w-14 sm:w-[90px] text-[11px] flex-shrink-0 text-right" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
                               {m.voorraad} · {m.verkocht}
                             </span>
                           </div>
@@ -395,7 +395,7 @@ export default function StatistiekenContent() {
                       })()}
                     </div>
                   )}
-                  <div className="flex items-center gap-4 mt-4 pt-4" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-4" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
                     {[
                       { label: "Op voorraad", kleur: BLAUW },
                       { label: "Verkocht", kleur: BLAUW_LICHT },

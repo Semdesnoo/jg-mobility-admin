@@ -172,7 +172,7 @@ export default function CosignatieContent() {
 
   return (
     <div>
-      <div className="px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-10"
+      <div className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10"
         style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
         <div>
           <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Cosignatie</h2>
@@ -181,7 +181,7 @@ export default function CosignatieContent() {
           </p>
         </div>
         <button type="button" onClick={() => setToonNieuw((v) => !v)}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
+          className="flex items-center justify-center gap-2 w-full sm:w-auto flex-shrink-0 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
           style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
           <Plus size={14} /> Klant toevoegen
         </button>
@@ -194,7 +194,7 @@ export default function CosignatieContent() {
             <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
               <p className="text-[10px] font-bold uppercase tracking-wider" style={S.label}>Nieuwe cosignatie klant</p>
             </div>
-            <div className="p-5">
+            <div className="p-4 sm:p-5">
               {/* Kenteken lookup */}
               <div className="flex gap-2 mb-5 items-end">
                 <div className="flex-1">
@@ -263,7 +263,7 @@ export default function CosignatieContent() {
                     />
                   </div>
                 ))}
-                <div style={{ gridColumn: "span 2" }}>
+                <div className="sm:col-span-2">
                   <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Opmerking</label>
                   <textarea value={form.opmerking} rows={2}
                     onChange={(e) => setForm((p) => ({ ...p, opmerking: e.target.value }))}
@@ -271,7 +271,7 @@ export default function CosignatieContent() {
                 </div>
               </div>
             </div>
-            <div className="px-5 pb-5 flex gap-2">
+            <div className="px-4 sm:px-5 pb-5 flex flex-wrap gap-2">
               <button type="button" onClick={maakAan} disabled={saving || !form.merk.trim()}
                 className="px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
                 style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
@@ -334,7 +334,7 @@ export default function CosignatieContent() {
               return (
                 <div key={a.id} style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
                   <button type="button" onClick={() => setOpenId(isOpen ? null : a.id)}
-                    className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gray-50">
+                    className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 text-left transition-all hover:bg-gray-50">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
@@ -372,7 +372,7 @@ export default function CosignatieContent() {
                   </button>
 
                   {isOpen && (
-                    <div className="px-5 pb-5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)" }}>
+                    <div className="px-4 sm:px-5 pb-5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)" }}>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
                         {/* Links: bewerkbare velden + marktprijzen */}
                         <div>
