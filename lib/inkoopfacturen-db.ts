@@ -60,14 +60,48 @@ async function init() {
     CREATE UNIQUE INDEX IF NOT EXISTS inkoop_facturen_gmail_uniek
     ON inkoop_facturen (gmail_message_id) WHERE gmail_message_id IS NOT NULL
   `;
+  // Register van álle al door de scan bekeken mails — niet alleen de geboekte.
+  // Zonder dit zou een mail die "geen factuur" bleek bij elke volgende scan
+  // opnieuw door de AI gaan (herhaalde kosten) en zou een doorlopende scan nooit
+  // klaar zijn. Uitslag bewaart waaróm, zodat het terug te zien is.
+  await sql`
+    CREATE TABLE IF NOT EXISTS gescande_emails (
+      gmail_message_id TEXT PRIMARY KEY,
+      uitslag TEXT NOT NULL DEFAULT '',
+      onderwerp TEXT DEFAULT '',
+      gescand_op TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
 }
 
-/** Gmail-id's die we al hebben geïmporteerd — voorkomt dat dezelfde mail
- *  twee keer wordt geboekt. */
+/**
+ * Alle Gmail-id's die de scan niet opnieuw hoeft te bekijken: de geboekte
+ * facturen én elke eerder bekeken mail (ook de afgewezen). De unie zorgt dat een
+ * doorlopende scan echt convergeert en dat niets twee keer tokens kost.
+ */
 export async function bestaandeGmailIds(): Promise<Set<string>> {
   await init();
-  const rows = await sql`SELECT gmail_message_id FROM inkoop_facturen WHERE gmail_message_id IS NOT NULL`;
-  return new Set(rows.map((r) => r.gmail_message_id as string));
+  const geboekt = await sql`SELECT gmail_message_id FROM inkoop_facturen WHERE gmail_message_id IS NOT NULL`;
+  const bekeken = await sql`SELECT gmail_message_id FROM gescande_emails`;
+  const set = new Set<string>();
+  for (const r of geboekt) set.add(r.gmail_message_id as string);
+  for (const r of bekeken) set.add(r.gmail_message_id as string);
+  return set;
+}
+
+/** Onthoudt dat een mail is bekeken, met de reden. Idempotent: een tweede keer
+ *  markeren overschrijft simpelweg de uitslag. */
+export async function markeerGescand(
+  gmailMessageId: string,
+  uitslag: string,
+  onderwerp = ""
+): Promise<void> {
+  await init();
+  await sql`
+    INSERT INTO gescande_emails (gmail_message_id, uitslag, onderwerp)
+    VALUES (${gmailMessageId}, ${uitslag}, ${onderwerp})
+    ON CONFLICT (gmail_message_id) DO UPDATE SET uitslag = ${uitslag}, gescand_op = NOW()
+  `;
 }
 
 /**

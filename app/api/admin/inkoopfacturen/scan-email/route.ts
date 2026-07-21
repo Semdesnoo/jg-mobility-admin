@@ -6,6 +6,7 @@ import {
   createInkoopFactuur,
   vindDubbeleFactuur,
   normaliseerLeverancier,
+  markeerGescand,
 } from "@/lib/inkoopfacturen-db";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,10 @@ export const maxDuration = 60;
  * wachten, zodat je gewoon nog een keer kunt scannen.
  */
 
-const MAX_PER_RONDE = 3;
+// Per aanroep verwerken we een handvol mails: Vercel kapt functies af op 60s en
+// één factuur uitlezen kost enkele seconden. De frontend rijgt de rondes aan
+// elkaar tot alles op is, dus dit hoeft niet hoog — vier houdt ruime marge.
+const MAX_PER_RONDE = 4;
 
 const SYSTEM_PROMPT = `Je leest inkoopfacturen voor een Nederlands autobedrijf. De
 invoer is óf een factuur-PDF, óf de tekst van een e-mail (bijvoorbeeld een order-
@@ -131,15 +135,15 @@ function gmailFout(err: unknown): string {
   return bericht;
 }
 
-/** Zoekopdracht die de kandidaten oplevert. Bewust géén PDF-eis meer: ook
- *  facturen die in de mailtekst zelf staan (zoals een RDW-bevestiging met
- *  "totale kosten") moeten meekomen. Ruim opgezet: liever een mail te veel
- *  bekijken dan een factuur missen — de AI filtert daarna op is_factuur. De
- *  betaaltermen erbij vangen bevestigingen die het woord "factuur" niet
- *  gebruiken maar wel een bedrag noemen. */
+/** Zoekopdracht die de kandidaten oplevert. Breed opgezet zodat werkelijk elke
+ *  factuur meekomt: elke mail met een PDF-bijlage (daar zit vrijwel elke echte
+ *  factuur in) én elke mail met een betaalterm in de tekst (voor facturen die in
+ *  de mail zelf staan, zoals een RDW-bevestiging met "totale kosten"). De AI
+ *  filtert daarna op is_factuur, dus reclame met een PDF valt alsnog af. */
 const ZOEKOPDRACHT =
-  'newer_than:90d (factuur OR invoice OR nota OR rekening OR "te betalen" OR ' +
-  '"totale kosten" OR betaalverzoek OR betalingsherinnering OR bestelbevestiging)';
+  'newer_than:90d (filename:pdf OR factuur OR invoice OR nota OR rekening OR ' +
+  '"te betalen" OR "totale kosten" OR betaalverzoek OR betalingsherinnering OR ' +
+  'bestelbevestiging OR orderbevestiging)';
 
 /**
  * Voorvertoning: laat zien welke mails de scan zou oppakken, zonder ze door de
@@ -156,7 +160,7 @@ export async function GET() {
   }
 
   try {
-    const lijst = await gmail.users.messages.list({ userId: "me", q: ZOEKOPDRACHT, maxResults: 25 });
+    const lijst = await gmail.users.messages.list({ userId: "me", q: ZOEKOPDRACHT, maxResults: 200 });
     const berichten = lijst.data.messages ?? [];
     const alGedaan = await bestaandeGmailIds();
 
@@ -219,7 +223,7 @@ export async function POST() {
   }
 
   try {
-    const lijst = await gmail.users.messages.list({ userId: "me", q: ZOEKOPDRACHT, maxResults: 25 });
+    const lijst = await gmail.users.messages.list({ userId: "me", q: ZOEKOPDRACHT, maxResults: 200 });
     const berichten = lijst.data.messages ?? [];
 
     const alGedaan = await bestaandeGmailIds();
@@ -240,6 +244,14 @@ export async function POST() {
       const onderwerp = kop("subject");
       const afzender = kop("from");
 
+      // Elke bekeken mail onthouden — ook als hij wordt overgeslagen. Zonder dit
+      // zou dezelfde niet-factuur bij elke volgende ronde opnieuw tokens kosten
+      // en zou een doorlopende scan nooit klaar zijn.
+      const slaOver = async (reden: string) => {
+        overgeslagen.push({ onderwerp, reden });
+        await markeerGescand(bericht.id!, reden, onderwerp).catch(() => null);
+      };
+
       // PDF-bijlage heeft de voorkeur (meest volledige factuur); anders lezen we
       // de mailtekst zelf uit.
       const pdfs = zoekPdfDelen(volledig.data.payload ?? undefined);
@@ -252,7 +264,7 @@ export async function POST() {
         });
         const ruw = bijlage.data.data;
         if (!ruw) {
-          overgeslagen.push({ onderwerp, reden: "bijlage kon niet worden opgehaald" });
+          await slaOver("bijlage kon niet worden opgehaald");
           continue;
         }
         // Gmail levert base64url; de API verwacht standaard base64.
@@ -263,7 +275,7 @@ export async function POST() {
       } else {
         const mailtekst = haalMailTekst(volledig.data.payload ?? undefined);
         if (mailtekst.length < 40) {
-          overgeslagen.push({ onderwerp, reden: "geen PDF en geen leesbare tekst" });
+          await slaOver("geen PDF en geen leesbare tekst");
           continue;
         }
         bijlageBlok = { type: "text", text: `Onderwerp: ${onderwerp}\nAfzender: ${afzender}\n\n--- Mailtekst ---\n${mailtekst}` };
@@ -310,7 +322,7 @@ export async function POST() {
       });
 
       if (resp.stop_reason === "refusal") {
-        overgeslagen.push({ onderwerp, reden: "geweigerd door het model" });
+        await slaOver("geweigerd door het model");
         continue;
       }
 
@@ -319,17 +331,17 @@ export async function POST() {
       try {
         uit = JSON.parse(tekst);
       } catch {
-        overgeslagen.push({ onderwerp, reden: "onleesbaar antwoord" });
+        await slaOver("onleesbaar antwoord");
         continue;
       }
 
       if (!uit.is_factuur) {
-        overgeslagen.push({ onderwerp, reden: "geen factuur" });
+        await slaOver("geen factuur");
         continue;
       }
       const bedrag = Number(uit.bedrag_incl) || 0;
       if (!bedrag) {
-        overgeslagen.push({ onderwerp, reden: "geen bedrag gevonden" });
+        await slaOver("geen bedrag gevonden");
         continue;
       }
 
@@ -341,16 +353,15 @@ export async function POST() {
       // verschillende mails). Al in deze ronde gezien, of al in de database?
       const kern = `${normaliseerLeverancier(leverancier)}|${bedrag.toFixed(2)}`;
       if (dezeRonde.has(kern)) {
-        overgeslagen.push({ onderwerp, reden: `dubbel in deze scan (${leverancier}, € ${bedrag.toFixed(2)})` });
+        await slaOver(`dubbel in deze scan (${leverancier}, € ${bedrag.toFixed(2)})`);
         continue;
       }
       const bestaand = await vindDubbeleFactuur(leverancier, bedrag);
       if (bestaand) {
-        overgeslagen.push({
-          onderwerp,
-          reden: `mogelijk al geboekt: ${bestaand.leverancier} € ${bestaand.bedrag_incl.toFixed(2)}` +
-            `${bestaand.factuurnummer ? ` (${bestaand.factuurnummer})` : ""} — niet nogmaals toegevoegd`,
-        });
+        await slaOver(
+          `mogelijk al geboekt: ${bestaand.leverancier} € ${bestaand.bedrag_incl.toFixed(2)}` +
+            `${bestaand.factuurnummer ? ` (${bestaand.factuurnummer})` : ""} — niet nogmaals toegevoegd`
+        );
         continue;
       }
       dezeRonde.add(kern);
@@ -370,6 +381,7 @@ export async function POST() {
         gmail_afzender: afzender,
       });
 
+      await markeerGescand(bericht.id!, "geboekt", onderwerp).catch(() => null);
       toegevoegd.push({
         leverancier,
         bedrag,
@@ -378,11 +390,15 @@ export async function POST() {
       });
     }
 
+    // Deze ronde zijn er MAX_PER_RONDE bekeken (of minder als er minder waren);
+    // wat daarna nog "nieuw" is, wacht op de volgende ronde. De frontend rijgt
+    // die rondes aaneen tot resterend 0 is.
+    const bekekenDezeRonde = Math.min(nieuw.length, MAX_PER_RONDE);
     return Response.json({
       gevonden: berichten.length,
       nieuw: nieuw.length,
       verwerkt: toegevoegd.length,
-      resterend: Math.max(nieuw.length - MAX_PER_RONDE, 0),
+      resterend: Math.max(nieuw.length - bekekenDezeRonde, 0),
       toegevoegd,
       overgeslagen,
     });

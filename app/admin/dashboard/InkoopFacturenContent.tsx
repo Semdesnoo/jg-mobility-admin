@@ -60,8 +60,11 @@ export default function InkoopFacturenContent() {
   const [bestand, setBestand] = useState<File | null>(null);
   const [sleep, setSleep] = useState(false);
   const [scanBezig, setScanBezig] = useState(false);
+  // Voortgang van de doorlopende scan: hoeveel mails al bekeken en hoeveel er nog
+  // wachten, zodat de knop een echte teller kan tonen.
+  const [scanVoortgang, setScanVoortgang] = useState<{ bekeken: number; resterend: number } | null>(null);
   const [scanUitslag, setScanUitslag] = useState<{
-    verwerkt?: number; nieuw?: number; resterend?: number;
+    verwerkt?: number; nieuw?: number; resterend?: number; klaar?: boolean;
     toegevoegd?: { leverancier: string; bedrag: number; vervaldatum: string; onzeker: string[] }[];
     overgeslagen?: { onderwerp: string; reden: string }[];
     error?: string; blokkades?: string[]; ontbrekendeSleutel?: boolean; geenGmail?: boolean;
@@ -128,19 +131,72 @@ export default function InkoopFacturenContent() {
     }
   };
 
-  /** Doorzoekt de mailbox op facturen en boekt ze in. */
+  /**
+   * Doorzoekt de mailbox op facturen en boekt ze in. De route verwerkt een
+   * handvol mails per aanroep (Vercel kapt af op 60s); deze functie rijgt die
+   * rondes aaneen tot de mailbox helemaal is nagelopen — één klik, alles erin.
+   * Reeds bekeken mails worden server-side onthouden, dus de scan convergeert en
+   * kost niets dubbel.
+   */
   const scanEmail = async () => {
     setScanBezig(true);
     setScanUitslag(null);
+    setScanVoortgang({ bekeken: 0, resterend: 0 });
+
+    const alleToegevoegd: { leverancier: string; bedrag: number; vervaldatum: string; onzeker: string[] }[] = [];
+    const alleOvergeslagen: { onderwerp: string; reden: string }[] = [];
+    let bekeken = 0;
+    let ietsGeboekt = false;
+
     try {
-      const r = await fetch("/api/admin/inkoopfacturen/scan-email", { method: "POST" });
-      const uit = await r.json();
-      setScanUitslag(uit);
-      if (uit.verwerkt > 0) await laad();
+      // Harde bovengrens als vangnet: 80 rondes × 4 mails = 320, ruim boven een
+      // normale mailbox. Voorkomt een oneindige lus mocht resterend ooit blijven
+      // hangen.
+      for (let ronde = 0; ronde < 80; ronde++) {
+        const r = await fetch("/api/admin/inkoopfacturen/scan-email", { method: "POST" });
+        const uit = await r.json();
+
+        if (uit.error) {
+          setScanUitslag(uit);
+          setScanVoortgang(null);
+          return;
+        }
+
+        alleToegevoegd.push(...(uit.toegevoegd ?? []));
+        alleOvergeslagen.push(...(uit.overgeslagen ?? []));
+        bekeken += (uit.toegevoegd?.length ?? 0) + (uit.overgeslagen?.length ?? 0);
+        if ((uit.verwerkt ?? 0) > 0) ietsGeboekt = true;
+
+        const resterend = uit.resterend ?? 0;
+        setScanVoortgang({ bekeken, resterend });
+        // Tussentijds tonen zodat de gebruiker het ziet groeien.
+        setScanUitslag({
+          verwerkt: alleToegevoegd.length,
+          toegevoegd: alleToegevoegd,
+          overgeslagen: alleOvergeslagen,
+          resterend,
+          klaar: false,
+        });
+
+        // Niets meer te doen, of deze ronde bekeek niets meer (geen voortgang):
+        // dan zijn we klaar.
+        const bekekenDezeRonde = (uit.toegevoegd?.length ?? 0) + (uit.overgeslagen?.length ?? 0);
+        if (resterend <= 0 || bekekenDezeRonde === 0) break;
+      }
+
+      setScanUitslag({
+        verwerkt: alleToegevoegd.length,
+        toegevoegd: alleToegevoegd,
+        overgeslagen: alleOvergeslagen,
+        resterend: 0,
+        klaar: true,
+      });
+      if (ietsGeboekt) await laad();
     } catch (e) {
       setScanUitslag({ error: e instanceof Error ? e.message : String(e) });
     } finally {
       setScanBezig(false);
+      setScanVoortgang(null);
     }
   };
 
@@ -205,7 +261,11 @@ export default function InkoopFacturenContent() {
             style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
           >
             <Mail size={14} />
-            {scanBezig ? "E-mail doorzoeken..." : "Scan e-mail"}
+            {scanBezig
+              ? scanVoortgang && scanVoortgang.bekeken > 0
+                ? `Bezig… ${scanVoortgang.bekeken} bekeken${scanVoortgang.resterend > 0 ? `, nog ${scanVoortgang.resterend}` : ""}`
+                : "E-mail doorzoeken…"
+              : "Scan e-mail"}
           </button>
           <button
             onClick={() => { setForm(leegFormulier()); setOnzeker([]); setBestand(null); setToonForm(true); }}
@@ -276,10 +336,10 @@ export default function InkoopFacturenContent() {
                 </p>
               ))}
 
-              {(scanUitslag.resterend ?? 0) > 0 && (
+              {scanUitslag.klaar && (
                 <p className="text-[11px] mt-2" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
-                  Er wachten nog {scanUitslag.resterend} mails. Per keer worden er een paar verwerkt zodat
-                  de verbinding niet afgekapt wordt — klik nog een keer op Scan e-mail voor de rest.
+                  De hele mailbox is nagelopen. Al eerder bekeken mails worden onthouden, dus een
+                  volgende scan kijkt alleen naar nieuwe binnengekomen post.
                 </p>
               )}
 
