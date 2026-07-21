@@ -232,6 +232,40 @@ export default function InkoopFacturenContent() {
     await laad();
   };
 
+  // ── Meerdere tegelijk ────────────────────────────────────────────
+  const [selectie, setSelectie] = useState<Set<string>>(new Set());
+  const [bulkBezig, setBulkBezig] = useState(false);
+
+  const wisselSelectie = (id: string) =>
+    setSelectie((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  /** Zet de status van alle geselecteerde facturen in één handeling. De
+   *  bestaande route werkt per factuur; die roepen we parallel aan. */
+  const bulkStatus = async (status: "open" | "betaald") => {
+    if (selectie.size === 0) return;
+    setBulkBezig(true);
+    try {
+      await Promise.all(
+        [...selectie].map((id) =>
+          fetch(`/api/admin/inkoopfacturen/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          })
+        )
+      );
+      setSelectie(new Set());
+      await laad();
+    } finally {
+      setBulkBezig(false);
+    }
+  };
+
   const verwijder = async (f: InkoopFactuur) => {
     if (!confirm(`Factuur van ${f.leverancier || "onbekende leverancier"} verwijderen?`)) return;
     await fetch(`/api/admin/inkoopfacturen/${f.id}`, { method: "DELETE" });
@@ -519,10 +553,92 @@ export default function InkoopFacturenContent() {
               </p>
             </div>
           ) : (
-            data.facturen.map((f) => {
-              const teLaat = f.status === "open" && (f.dagenOver ?? -1) > 0;
+            <>
+            {/* Selectiebalk: alles aan/uit + bulkacties zodra er iets aan staat */}
+            {(() => {
+              const alleIds = data.facturen.map((f) => f.id);
+              const allesAan = alleIds.length > 0 && alleIds.every((id) => selectie.has(id));
+              const somSelectie = data.facturen
+                .filter((f) => selectie.has(f.id))
+                .reduce((t, f) => t + f.bedrag_incl, 0);
               return (
-                <div key={f.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)", opacity: f.status === "betaald" ? 0.6 : 1 }}>
+                <div
+                  className="px-5 py-2.5 flex items-center gap-3 flex-wrap sticky top-0 z-[1]"
+                  style={{ borderBottom: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8fafc" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectie(allesAan ? new Set() : new Set(alleIds))}
+                    className="flex items-center justify-center flex-shrink-0 transition-all"
+                    aria-label={allesAan ? "Selectie wissen" : "Alles selecteren"}
+                    style={{
+                      width: 18, height: 18,
+                      border: `1.5px solid ${allesAan ? "#001337" : "rgba(0,19,55,0.3)"}`,
+                      backgroundColor: allesAan ? "#001337" : "#ffffff",
+                    }}
+                  >
+                    {allesAan && <Check size={12} style={{ color: "#ffffff" }} strokeWidth={3} />}
+                  </button>
+                  {selectie.size === 0 ? (
+                    <span className="text-[11px]" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                      Selecteer facturen om ze in één keer op betaald te zetten
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-[12px] font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                        {selectie.size} geselecteerd · {euro(somSelectie)}
+                      </span>
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => bulkStatus("betaald")}
+                          disabled={bulkBezig}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold uppercase transition-all hover:opacity-85 disabled:opacity-50"
+                          style={{ backgroundColor: GROEN, color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                        >
+                          <Check size={12} /> {bulkBezig ? "Bezig…" : "Markeer betaald"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => bulkStatus("open")}
+                          disabled={bulkBezig}
+                          className="px-3 py-1.5 text-[11px] font-bold uppercase transition-all hover:opacity-80 disabled:opacity-50"
+                          style={{ border: `1px solid ${AMBER}`, color: AMBER, fontFamily: "var(--font-inter)" }}
+                        >
+                          Op openstaand
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectie(new Set())}
+                          className="text-[11px] transition-all hover:opacity-70"
+                          style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}
+                        >
+                          wissen
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+            {data.facturen.map((f) => {
+              const teLaat = f.status === "open" && (f.dagenOver ?? -1) > 0;
+              const gekozen = selectie.has(f.id);
+              return (
+                <div key={f.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)", opacity: f.status === "betaald" ? 0.6 : 1, backgroundColor: gekozen ? "#eef4ff" : undefined }}>
+                  <button
+                    type="button"
+                    onClick={() => wisselSelectie(f.id)}
+                    className="flex items-center justify-center flex-shrink-0 transition-all"
+                    aria-label={gekozen ? "Deselecteren" : "Selecteren"}
+                    style={{
+                      width: 18, height: 18,
+                      border: `1.5px solid ${gekozen ? "#001337" : "rgba(0,19,55,0.25)"}`,
+                      backgroundColor: gekozen ? "#001337" : "#ffffff",
+                    }}
+                  >
+                    {gekozen && <Check size={12} style={{ color: "#ffffff" }} strokeWidth={3} />}
+                  </button>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold truncate flex items-center gap-2" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                       {f.leverancier || "Onbekende leverancier"}
@@ -582,7 +698,8 @@ export default function InkoopFacturenContent() {
                   </div>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </div>
