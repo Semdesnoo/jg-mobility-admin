@@ -1,7 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Banknote, Receipt, AlertTriangle, Info, Wallet } from "lucide-react";
+import { Banknote, Receipt, AlertTriangle, Info, Wallet, ArrowRight } from "lucide-react";
+
+/** Waar een waarschuwing je heen kan brengen om het recht te zetten. */
+type Herstelpunt = {
+  factuur_nr: string;
+  auto_naam: string;
+  dossier_id: number | null;
+  auto_id: number | null;
+};
+
+// Deze tabs bestaan in het dashboard; los getypt zodat dit bestand niet van de
+// grote Tab-union in DashboardHub hoeft te importeren.
+type DashTab = "calculator" | "voorraad";
 
 type Kwartaal = {
   sleutel: string; jaar: number; kwartaal: number; label: string;
@@ -25,8 +37,8 @@ type Boekhouding = {
   debiteurenTotaal: number;
   debiteurenTeLaat: number;
   voorraadInkoop: number;
-  zonderInkoop: string[];
-  afgeleideKoppelingen: string[];
+  zonderInkoop: Herstelpunt[];
+  afgeleideKoppelingen: Herstelpunt[];
 };
 
 const BLAUW = "#1d4ed8";
@@ -88,7 +100,9 @@ function Regel({ label, bedrag, teken = "", zwaar = false, kleur }: {
 
 type Blad = "resultaat" | "btw" | "debiteuren";
 
-export default function BoekhoudingContent() {
+export default function BoekhoudingContent({ onNavigeer }: {
+  onNavigeer?: (tab: DashTab, focus?: { dossierId?: number; autoId?: number }) => void;
+} = {}) {
   const [data, setData] = useState<Boekhouding | null>(null);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
@@ -158,11 +172,13 @@ export default function BoekhoudingContent() {
         ) : !data || !r ? null : (
           <div className="flex flex-col gap-6">
 
-            {/* Waarschuwing bovenaan: zonder inkoopprijs kloppen marge en BTW niet */}
+            {/* Waarschuwing bovenaan: zonder inkoopprijs kloppen marge en BTW niet.
+                Elke factuur krijgt een knop die je direct naar het juiste dossier
+                brengt om de inkoop in te vullen. */}
             {onvolledig && (
               <div className="flex items-start gap-3 px-4 py-3.5" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
                 <AlertTriangle size={16} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-[12px] font-bold" style={{ color: AMBER, fontFamily: "var(--font-inter)" }}>
                     {data.zonderInkoop.length} margefactuur{data.zonderInkoop.length === 1 ? "" : "en"} zonder inkoopprijs
                   </p>
@@ -170,8 +186,23 @@ export default function BoekhoudingContent() {
                     Bij de margeregeling wordt BTW berekend over verkoop min inkoop. Zonder inkoopprijs
                     is dat niet te bepalen, dus {data.zonderInkoop.length === 1 ? "die factuur telt" : "die facturen tellen"} nu
                     <strong> niet mee</strong> in de BTW en het resultaat hieronder — een geraden bedrag zou je aangifte fout maken.
-                    Vul de inkoop in bij Calculator: {data.zonderInkoop.join(", ")}.
                   </p>
+                  <div className="flex flex-wrap gap-2 mt-2.5">
+                    {data.zonderInkoop.map((h) => (
+                      <button
+                        key={h.factuur_nr}
+                        type="button"
+                        onClick={() => onNavigeer?.("calculator", { dossierId: h.dossier_id ?? undefined, autoId: h.auto_id ?? undefined })}
+                        disabled={!onNavigeer || (h.dossier_id == null && h.auto_id == null)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: AMBER, color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                        title={h.dossier_id == null && h.auto_id == null ? "Geen dossier gevonden — maak er een aan in de Calculator" : "Inkoop invullen in de Calculator"}
+                      >
+                        {h.factuur_nr}{h.auto_naam ? ` · ${h.auto_naam}` : ""} — inkoop invullen
+                        <ArrowRight size={12} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -179,11 +210,29 @@ export default function BoekhoudingContent() {
             {(data.afgeleideKoppelingen.length > 0) && (
               <div className="flex items-start gap-3 px-4 py-3" style={{ backgroundColor: "#f8fafc", border: "1px solid rgba(0,19,55,0.08)" }}>
                 <Info size={14} style={{ color: "rgba(0,19,55,0.4)", flexShrink: 0, marginTop: 2 }} />
-                <p className="text-[11px]" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", lineHeight: 1.65 }}>
-                  Bij {data.afgeleideKoppelingen.join(", ")} is de inkoopprijs gevonden op merk en model,
-                  niet op kenteken. Loop die na voor je aangifte doet — vul het kenteken in bij de auto
-                  om de koppeling waterdicht te maken.
-                </p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px]" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)", lineHeight: 1.65 }}>
+                    Bij {data.afgeleideKoppelingen.map((h) => h.factuur_nr).join(", ")} is de inkoopprijs gevonden op
+                    merk en model, niet op kenteken. Loop die na voor je aangifte doet — vul het kenteken in bij de
+                    auto om de koppeling waterdicht te maken.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {data.afgeleideKoppelingen.map((h) => (
+                      <button
+                        key={h.factuur_nr}
+                        type="button"
+                        onClick={() => onNavigeer?.("voorraad", { autoId: h.auto_id ?? undefined })}
+                        disabled={!onNavigeer || h.auto_id == null}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ border: "1px solid rgba(0,19,55,0.2)", color: "#001337", fontFamily: "var(--font-inter)" }}
+                        title="Ga naar de auto in de voorraad"
+                      >
+                        {h.auto_naam || h.factuur_nr} — kenteken nalopen
+                        <ArrowRight size={12} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 

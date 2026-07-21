@@ -83,6 +83,37 @@ export async function GET() {
   const kostenVan = (d: (typeof dossiers)[number]) =>
     d.kosten.reduce((s, k) => s + (parseFloat(k.bedrag) || 0), 0);
 
+  // Auto's terugvindbaar op kenteken en op naam — nodig om bij een waarschuwing
+  // het bijbehorende dossier en de auto te kunnen aanwijzen, zodat een knop
+  // rechtstreeks naar de juiste plek springt in plaats van naar een lijst.
+  const autoPerKenteken = new Map<string, (typeof autos)[number]>();
+  const autoPerNaam: { naam: string; auto: (typeof autos)[number] }[] = [];
+  for (const a of autos) {
+    const k = String(a.kenteken ?? "").replace(/-/g, "").toUpperCase();
+    if (k) autoPerKenteken.set(k, a);
+    autoPerNaam.push({ naam: normaliseer(`${a.merk} ${a.model}`), auto: a });
+  }
+
+  /** Herstelpunt: waar de gebruiker heen moet om dit recht te zetten. */
+  function zoekDoel(f: Factuur): Herstelpunt {
+    const kent = String(f.auto_kenteken ?? "").replace(/-/g, "").toUpperCase();
+    let auto = kent ? autoPerKenteken.get(kent) : undefined;
+    if (!auto) {
+      const zoek = normaliseer(`${f.auto_merk ?? ""} ${f.auto_model ?? ""}`);
+      if (zoek.length >= 6) {
+        const treffers = autoPerNaam.filter((x) => x.naam.startsWith(zoek) || zoek.startsWith(x.naam));
+        if (treffers.length === 1) auto = treffers[0].auto;
+      }
+    }
+    const dossier = auto ? dossierPerAutoId.get(auto.id) : undefined;
+    return {
+      factuur_nr: f.factuur_nr,
+      auto_naam: `${f.auto_merk ?? ""} ${f.auto_model ?? ""}`.trim() || (auto ? `${auto.merk} ${auto.model}` : ""),
+      dossier_id: dossier?.id ?? null,
+      auto_id: auto?.id ?? null,
+    };
+  }
+
   const perKenteken = new Map<string, { inkoop: number; kosten: number }>();
   const perNaam: { naam: string; inkoop: number; kosten: number }[] = [];
   for (const a of autos) {
@@ -126,10 +157,10 @@ export async function GET() {
   let inkoopTotaal = 0;
   let kostenTotaal = 0;
   let btwTotaal = 0;
-  const zonderInkoopAlgemeen: string[] = [];
+  const zonderInkoopAlgemeen: Herstelpunt[] = [];
   // Facturen waarvan de inkoop op naam is gevonden i.p.v. op kenteken — die
   // wil je kunnen nalopen voor je de aangifte indient.
-  const afgeleideKoppelingen: string[] = [];
+  const afgeleideKoppelingen: Herstelpunt[] = [];
 
   for (const f of facturen) {
     const datum = parseDatum(f.datum);
@@ -161,10 +192,10 @@ export async function GET() {
         // Zonder inkoopprijs is de marge-BTW niet te berekenen. Niet gokken —
         // een verzonnen bedrag levert een fout aangiftecijfer op.
         k.zonderInkoop.push(f.factuur_nr);
-        zonderInkoopAlgemeen.push(f.factuur_nr);
+        zonderInkoopAlgemeen.push(zoekDoel(f));
         continue;
       }
-      if (gegevens.afgeleid) afgeleideKoppelingen.push(f.factuur_nr);
+      if (gegevens.afgeleid) afgeleideKoppelingen.push(zoekDoel(f));
       const marge = bruto - gegevens.inkoop;
       const btw = marge > 0 ? rond((marge * 21) / 121) : 0;
       k.btwMarge += btw;
@@ -227,8 +258,23 @@ export async function GET() {
     debiteurenTotaal: openstaandTotaal,
     debiteurenTeLaat: teLaat.length,
     voorraadInkoop: rond(voorraadInkoop),
-    // Facturen waarvan de marge-BTW niet berekend kon worden.
-    zonderInkoop: [...new Set(zonderInkoopAlgemeen)],
-    afgeleideKoppelingen: [...new Set(afgeleideKoppelingen)],
+    // Facturen waarvan de marge-BTW niet berekend kon worden — met het doel
+    // (dossier/auto) zodat de knop in de UI er rechtstreeks heen kan springen.
+    zonderInkoop: dedupeHerstel(zonderInkoopAlgemeen),
+    afgeleideKoppelingen: dedupeHerstel(afgeleideKoppelingen),
   });
+}
+
+/** Waar je heen moet om een waarschuwing recht te zetten. */
+type Herstelpunt = {
+  factuur_nr: string;
+  auto_naam: string;
+  dossier_id: number | null;
+  auto_id: number | null;
+};
+
+/** Elk factuurnummer hoogstens één keer. */
+function dedupeHerstel(punten: Herstelpunt[]): Herstelpunt[] {
+  const gezien = new Set<string>();
+  return punten.filter((h) => (gezien.has(h.factuur_nr) ? false : gezien.add(h.factuur_nr)));
 }

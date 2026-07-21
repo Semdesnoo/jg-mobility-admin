@@ -283,10 +283,15 @@ export default function DashboardHub() {
 
   // Spring naar een tab én zet de zijbalk op de groep waar die tab in zit.
   // Zonder dat laatste toont het menu een andere sectie dan de pagina die openstaat.
-  const gaNaarTab = (doel: Tab) => {
+  // Optioneel focus-doel: naar welk dossier of welke auto de bestemming moet
+  // springen. Zo brengt een knop op de ene pagina je rechtstreeks naar de plek
+  // op de andere pagina waar je iets moet aanpassen, in plaats van naar een lijst.
+  const [navFocus, setNavFocus] = useState<{ dossierId?: number; autoId?: number } | null>(null);
+  const gaNaarTab = (doel: Tab, focus?: { dossierId?: number; autoId?: number }) => {
     const groepVanTab = NAV_GROUPS.find((g) => g.items.some((i) => i.id === doel));
     if (groepVanTab) setGroep(groepVanTab.title);
     setTab(doel);
+    setNavFocus(focus ?? null);
     setHubOpen(false);
   };
   const [autos, setAutos] = useState<Auto[]>([]);
@@ -485,10 +490,10 @@ export default function DashboardHub() {
         {tab === "inkoop" && <InkoopContent />}
         {tab === "cosignatie" && <CosignatieContent />}
         {tab === "facturen" && <FacturenContent />}
-        {tab === "calculator" && <CalculatorContent />}
+        {tab === "calculator" && <CalculatorContent focus={navFocus} onFocusGebruikt={() => setNavFocus(null)} />}
         {tab === "statistieken" && <StatistiekenContent />}
         {tab === "merkanalyse" && <MerkAnalyseContent />}
-        {tab === "boekhouding" && <BoekhoudingContent />}
+        {tab === "boekhouding" && <BoekhoudingContent onNavigeer={gaNaarTab} />}
         {tab === "inkoopfacturen" && <InkoopFacturenContent />}
         {tab === "molibox" && <MoliboxPage />}
         {tab === "social" && <SocialContent />}
@@ -3171,7 +3176,10 @@ function useCalculatorLogic(inkoopprijs: string, btwType: "marge" | "21", verkoo
 }
 
 // ── Calculator per auto (dossier beheer) ────────────────────────
-function CalculatorContent() {
+function CalculatorContent({ focus, onFocusGebruikt }: {
+  focus?: { dossierId?: number; autoId?: number } | null;
+  onFocusGebruikt?: () => void;
+} = {}) {
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
   const [actief, setActief] = useState<Dossier | null>(null);
   const [laden, setLaden] = useState(true);
@@ -3214,6 +3222,25 @@ function CalculatorContent() {
         setLaden(false);
       });
   }, []);
+
+  // Kwam je hier via een knop met een focus-doel (bijv. vanuit de Boekhouding
+  // "inkoop invullen"), open dan meteen dat dossier — op dossier-id, of anders op
+  // de bijbehorende auto. Zodra het gebeurd is, melden we het terug zodat het
+  // doel niet blijft plakken bij een volgende, gewone tabwissel.
+  useEffect(() => {
+    if (!focus || dossiers.length === 0) return;
+    const d =
+      (focus.dossierId != null && dossiers.find((x) => x.id === focus.dossierId)) ||
+      (focus.autoId != null && dossiers.find((x) => x.auto_id === focus.autoId)) ||
+      null;
+    if (d) {
+      // Toon ook het archief als het dossier daar staat, anders is het onzichtbaar.
+      if (d.gearchiveerd) setDossierWeergave("alle");
+      openDossier(d);
+    }
+    onFocusGebruikt?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, dossiers]);
 
   // Auto-save with 700ms debounce
   useEffect(() => {
