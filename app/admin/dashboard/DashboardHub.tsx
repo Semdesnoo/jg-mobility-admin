@@ -2004,6 +2004,33 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
 </html>`;
 }
 
+// Auto uit de voorraad, zoals de facturen-autokiezer hem nodig heeft. Bewust een
+// eigen, ruime vorm: /api/admin/autos geeft het volledige Auto-object terug en we
+// lezen alleen de velden die op de factuur terechtkomen.
+type VerkoopAuto = {
+  id: number;
+  merk?: string;
+  model?: string;
+  bouwjaar?: number;
+  km?: number;
+  prijs?: number;
+  kleur?: string;
+  kenteken?: string;
+  verkocht?: boolean;
+  fotos?: string[];
+};
+
+// Een openstaande "weet je het zeker?"-vraag. De bevestigknop voert `actie` uit;
+// tijdens het uitvoeren staat `bezig` op true zodat de knop een spinner toont.
+type Bevestiging = {
+  titel: string;
+  tekst: string;
+  bevestigLabel: string;
+  kleur: string;
+  bezig?: boolean;
+  actie: () => void | Promise<void>;
+};
+
 function FacturenContent() {
   const [facturen, setFacturen] = useState<Factuur[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2024,6 +2051,12 @@ function FacturenContent() {
   const [mailStatus, setMailStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   const [bedankStatus, setBedankStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   const [downloadStatus, setDownloadStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
+  // Voorraad voor de autokiezer + welke auto gekozen is + de zoekterm daarin.
+  const [autos, setAutos] = useState<VerkoopAuto[]>([]);
+  const [autoKeuze, setAutoKeuze] = useState<number | null>(null);
+  const [autoZoek, setAutoZoek] = useState("");
+  // De openstaande bevestigingspopup (of null als er geen vraag open staat).
+  const [bevestig, setBevestig] = useState<Bevestiging | null>(null);
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -2033,6 +2066,17 @@ function FacturenContent() {
   }, []);
 
   useEffect(() => { laad(); }, [laad]);
+
+  // Voorraad ophalen voor de autokiezer. Faalt stil: de kiezer is een hulpmiddel,
+  // je kunt de velden altijd nog met de hand invullen.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/autos");
+        if (res.ok) setAutos(await res.json());
+      } catch { /* voorraad optioneel */ }
+    })();
+  }, []);
 
   const zoekRdw = useCallback(async (kenteken: string) => {
     const schoon = kenteken.replace(/[-\s]/g, "").toUpperCase();
@@ -2089,8 +2133,32 @@ function FacturenContent() {
     setView("nieuw");
   };
 
+  // Vult de voertuiggegevens en de verkoopprijs met één klik uit een auto in de
+  // voorraad — scheelt overtypen (of het aan de AI vragen). Het VIN zit niet in de
+  // voorraad, dus dat vul je zelf in; daarom is dat veld ook verplicht gemaakt.
+  const kiesAuto = (a: VerkoopAuto) => {
+    setAutoKeuze(a.id);
+    setForm((prev) => ({
+      ...prev,
+      auto_merk: a.merk ?? prev.auto_merk,
+      auto_model: a.model ?? prev.auto_model,
+      auto_bouwjaar: a.bouwjaar ? String(a.bouwjaar) : prev.auto_bouwjaar,
+      auto_kenteken: a.kenteken ?? prev.auto_kenteken,
+      auto_km: a.km ? String(a.km) : prev.auto_km,
+      auto_kleur: a.kleur ?? prev.auto_kleur,
+      verkoopprijs: a.prijs ? String(a.prijs) : prev.verkoopprijs,
+    }));
+    setFout(null);
+  };
+
   const sla = async () => {
     setFout(null);
+    // Het VIN (chassisnummer) is verplicht: zonder is de factuur juridisch
+    // onvolledig. Blokkeer het opslaan meteen, nog vóór de netwerkcall.
+    if (!form.auto_vin.trim()) {
+      setFout("Het VIN-nummer is verplicht. Vul het VIN (chassisnummer) van het voertuig in voordat je de factuur opslaat.");
+      return;
+    }
     setSaving(true);
     try {
       const actieveRegels = regels.filter((r) => r.omschrijving && Number(r.prijs) > 0);
@@ -2127,6 +2195,8 @@ function FacturenContent() {
       setView("lijst");
       setForm(LEEG_FORM);
       setRegels(LEEG_REGELS);
+      setAutoKeuze(null);
+      setAutoZoek("");
     } catch (err) {
       setFout(`Netwerkfout: ${String(err)}`);
     } finally {
@@ -2280,7 +2350,10 @@ function FacturenContent() {
     }
   };
 
-  const verstuurMail = async (f: Factuur) => {
+  // Poort vóór het versturen: eerst de harde controles (geen mailadres / al
+  // verstuurd), daarna een "weet je het zeker?"-popup. Pas als je die bevestigt
+  // gaat de mail écht de deur uit via doeVerstuurMail.
+  const verstuurMail = (f: Factuur) => {
     if (!f.klant_email) {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
@@ -2295,6 +2368,16 @@ function FacturenContent() {
       );
       return;
     }
+    setBevestig({
+      titel: "Factuur per e-mail versturen?",
+      tekst: `De factuur ${f.factuur_nr} wordt als PDF-bijlage verstuurd naar ${f.klant_email}. Dit kan niet ongedaan worden gemaakt.`,
+      bevestigLabel: "Ja, verstuur de factuur",
+      kleur: "#1d4ed8",
+      actie: () => doeVerstuurMail(f),
+    });
+  };
+
+  const doeVerstuurMail = async (f: Factuur) => {
     setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
@@ -2324,8 +2407,10 @@ function FacturenContent() {
     }
   };
 
-  // Bedankmail: stuurt de factuur met "Betaald"-stempel als blijvend bewijs voor de klant
-  const verstuurBedankmail = async (f: Factuur) => {
+  // Bedankmail: stuurt de factuur met "Betaald"-stempel als blijvend bewijs voor
+  // de klant. Verstuur je pas als de klant betaald heeft of de auto is opgehaald —
+  // vandaar dezelfde "weet je het zeker?"-popup vóór het versturen.
+  const verstuurBedankmail = (f: Factuur) => {
     if (!f.klant_email) {
       alert("Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.");
       return;
@@ -2338,6 +2423,16 @@ function FacturenContent() {
       );
       return;
     }
+    setBevestig({
+      titel: "Bedankmail versturen?",
+      tekst: `Verstuur dit alleen als ${f.klant_naam || "de klant"} betaald heeft of de auto is opgehaald. De factuur met "Betaald"-stempel gaat naar ${f.klant_email} en de factuur wordt op "betaald" gezet.`,
+      bevestigLabel: "Ja, verstuur de bedankmail",
+      kleur: "#047857",
+      actie: () => doeVerstuurBedankmail(f),
+    });
+  };
+
+  const doeVerstuurBedankmail = async (f: Factuur) => {
     setBedankStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
@@ -2538,7 +2633,7 @@ function FacturenContent() {
           subtitle={bewerkFactuur ? "Wijzig de gegevens en sla op — factuurnummer blijft ongewijzigd" : "Vul de gegevens in en genereer de factuur"}
           action={
             <button
-              onClick={() => { setView("lijst"); setForm(LEEG_FORM); setRegels(LEEG_REGELS); setBewerkFactuur(null); }}
+              onClick={() => { setView("lijst"); setForm(LEEG_FORM); setRegels(LEEG_REGELS); setBewerkFactuur(null); setAutoKeuze(null); setAutoZoek(""); setFout(null); }}
               className="text-xs px-4 py-2 transition-all hover:opacity-70"
               style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
             >
@@ -2552,6 +2647,106 @@ function FacturenContent() {
               <strong>Fout:</strong> {fout}
             </div>
           )}
+
+          {/* Autokiezer: klik de verkochte auto aan en de voertuiggegevens +
+              verkoopprijs worden ingevuld. Scheelt overtypen of AI-vragen. */}
+          {(() => {
+            const zoek = autoZoek.trim().toLowerCase();
+            const gesorteerd = [...autos].sort((a, b) =>
+              (Number(!!b.verkocht) - Number(!!a.verkocht)) || (b.id - a.id)
+            );
+            const zichtbaar = zoek
+              ? gesorteerd.filter((a) =>
+                  `${a.merk ?? ""} ${a.model ?? ""} ${a.kenteken ?? ""}`.toLowerCase().includes(zoek)
+                )
+              : gesorteerd;
+            return (
+              <div className="mb-5" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(29,78,216,0.25)" }}>
+                <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(29,78,216,0.05)" }}>
+                  <div className="flex items-center gap-2">
+                    <Car size={14} style={{ color: "#1d4ed8" }} />
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#1d4ed8", fontFamily: "var(--font-inter)" }}>
+                      Auto uit voorraad kiezen
+                    </p>
+                  </div>
+                  {autos.length > 4 && (
+                    <input
+                      type="text"
+                      value={autoZoek}
+                      onChange={(e) => setAutoZoek(e.target.value)}
+                      placeholder="Zoek op merk, model of kenteken…"
+                      className="px-3 py-1.5 text-xs outline-none"
+                      style={{ ...veldStijl, minWidth: "220px", flex: "1 1 220px" }}
+                    />
+                  )}
+                </div>
+                <div className="px-5 pt-3">
+                  <p className="text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)", lineHeight: 1.5 }}>
+                    Klik op de auto die je hebt verkocht — merk, model, bouwjaar, kenteken, km, kleur en prijs worden automatisch ingevuld. Het VIN vul je zelf in (verplicht).
+                  </p>
+                </div>
+                <div className="p-3 md:p-4 flex flex-col gap-2" style={{ maxHeight: "280px", overflowY: "auto" }}>
+                  {autos.length === 0 ? (
+                    <p className="px-2 py-3 text-xs" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                      Geen auto&apos;s in de voorraad gevonden — vul de gegevens hieronder handmatig in.
+                    </p>
+                  ) : zichtbaar.length === 0 ? (
+                    <p className="px-2 py-3 text-xs" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                      Geen auto gevonden voor &ldquo;{autoZoek}&rdquo;.
+                    </p>
+                  ) : (
+                    zichtbaar.map((a) => {
+                      const actief = autoKeuze === a.id;
+                      const foto = a.fotos?.[0];
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => kiesAuto(a)}
+                          className="flex items-center gap-3 px-2.5 py-2 text-left transition-all hover:opacity-90"
+                          style={{
+                            border: `1px solid ${actief ? "#1d4ed8" : "rgba(0,19,55,0.1)"}`,
+                            backgroundColor: actief ? "rgba(29,78,216,0.06)" : "#ffffff",
+                          }}
+                        >
+                          <div style={{ width: "52px", height: "40px", flexShrink: 0, backgroundColor: "rgba(0,19,55,0.05)", overflow: "hidden", position: "relative" }}>
+                            {foto ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              <span className="flex items-center justify-center w-full h-full">
+                                <Car size={16} style={{ color: "rgba(0,19,55,0.25)" }} />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                              {a.merk} {a.model}
+                            </p>
+                            <p className="text-[11px] truncate" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                              {[a.bouwjaar || null, a.kenteken || null, a.prijs ? `€ ${a.prijs.toLocaleString("nl-NL")}` : null].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                          {a.verkocht && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5" style={{ backgroundColor: "#dcfce7", color: "#15803d" }}>
+                              Verkocht
+                            </span>
+                          )}
+                          {actief && <CheckCircle2 size={16} style={{ color: "#1d4ed8", flexShrink: 0 }} />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                {autoKeuze !== null && (
+                  <div className="px-5 py-2.5 text-[11px] font-medium flex items-center gap-1.5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)", color: "#15803d", fontFamily: "var(--font-inter)" }}>
+                    <CheckCircle2 size={13} /> Gegevens overgenomen — controleer ze hieronder en vul het VIN in.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {secties.map(({ titel, velden }) => (
             <div key={titel} className="mb-5" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
               <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
@@ -2574,12 +2769,25 @@ function FacturenContent() {
                 )}
               </div>
               <div className="p-4 md:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {velden.map(({ label, field, col }) => (
-                  <div key={field} style={{ gridColumn: col ? `span ${col}` : undefined }}>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>{label}</label>
-                    <input type="text" {...inp(field)} className="w-full px-3 py-2 text-sm outline-none" style={veldStijl} />
-                  </div>
-                ))}
+                {velden.map(({ label, field, col }) => {
+                  const verplicht = field === "auto_vin";
+                  const leeg = verplicht && !form.auto_vin.trim();
+                  return (
+                    <div key={field} style={{ gridColumn: col ? `span ${col}` : undefined }}>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>
+                        {label}
+                        {verplicht && <span style={{ color: "#b91c1c" }}> * verplicht</span>}
+                      </label>
+                      <input
+                        type="text"
+                        {...inp(field)}
+                        placeholder={verplicht ? "Chassisnummer (17 tekens) — verplicht" : undefined}
+                        className="w-full px-3 py-2 text-sm outline-none"
+                        style={leeg ? { ...veldStijl, border: "1px solid #fca5a5", backgroundColor: "#fff5f5" } : veldStijl}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -2914,7 +3122,7 @@ function FacturenContent() {
               )}
             </button>
             <button
-              onClick={() => setView("nieuw")}
+              onClick={() => { setBewerkFactuur(null); setForm(LEEG_FORM); setRegels(LEEG_REGELS); setAutoKeuze(null); setAutoZoek(""); setFout(null); setView("nieuw"); }}
               className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
               style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
             >
@@ -3181,6 +3389,60 @@ function FacturenContent() {
           </div>
         )}
       </div>
+
+      {/* "Weet je het zeker?"-popup vóór het versturen van een mail. Eén modal
+          voor zowel de factuur- als de bedankmail; de inhoud komt uit `bevestig`. */}
+      {bevestig && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,19,55,0.45)" }}
+          onClick={() => { if (!bevestig.bezig) setBevestig(null); }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ backgroundColor: "#ffffff", width: "100%", maxWidth: "440px", border: "1px solid rgba(0,19,55,0.1)", boxShadow: "0 24px 60px rgba(0,19,55,0.28)" }}
+          >
+            <div className="px-6 pt-6 pb-3 flex items-start gap-3">
+              <span
+                className="flex items-center justify-center"
+                style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: `${bevestig.kleur}18`, flexShrink: 0 }}
+              >
+                <Mail size={18} style={{ color: bevestig.kleur }} />
+              </span>
+              <p className="text-base font-bold mt-1" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                {bevestig.titel}
+              </p>
+            </div>
+            <div className="px-6 pb-5">
+              <p className="text-sm" style={{ color: "rgba(0,19,55,0.7)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                {bevestig.tekst}
+              </p>
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-2" style={{ borderTop: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
+              <button
+                onClick={() => setBevestig(null)}
+                disabled={bevestig.bezig}
+                className="px-4 py-2 text-sm font-semibold transition-all hover:opacity-70 disabled:opacity-50"
+                style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={async () => {
+                  const actie = bevestig.actie;
+                  setBevestig((b) => (b ? { ...b, bezig: true } : b));
+                  try { await actie(); } finally { setBevestig(null); }
+                }}
+                disabled={bevestig.bezig}
+                className="px-5 py-2 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-70"
+                style={{ backgroundColor: bevestig.kleur, color: "#ffffff", fontFamily: "var(--font-inter)" }}
+              >
+                {bevestig.bezig ? "Bezig…" : bevestig.bevestigLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
