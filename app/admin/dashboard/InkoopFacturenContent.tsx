@@ -538,6 +538,36 @@ export default function InkoopFacturenContent() {
           </div>
         )}
 
+        {/* ── Urgentiemelding: facturen die binnen 3 dagen vervallen ── */}
+        {(() => {
+          const urgent = (data?.facturen ?? []).filter(
+            (f) => f.status === "open" && f.dagenOver !== null && f.dagenOver <= 0 && f.dagenOver >= -3
+          );
+          if (urgent.length === 0) return null;
+          const totaal = urgent.reduce((s, f) => s + f.bedrag_incl, 0);
+          return (
+            <div className="flex items-start gap-3 px-4 py-3.5" style={{ backgroundColor: "#fee2e2", border: "1px solid #fca5a5" }}>
+              <AlertTriangle size={17} style={{ color: ROOD, flexShrink: 0, marginTop: 1 }} strokeWidth={2.5} />
+              <div className="min-w-0">
+                <p className="text-[12px] font-bold" style={{ color: ROOD, fontFamily: "var(--font-inter)" }}>
+                  {urgent.length} factu{urgent.length === 1 ? "ur vervalt" : "ren vervallen"} binnen 3 dagen — samen {euro(totaal)}
+                </p>
+                <p className="text-[11px] mt-1" style={{ color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                  {urgent
+                    .slice()
+                    .sort((a, b) => (a.dagenOver ?? 0) - (b.dagenOver ?? 0)) // meest urgent eerst (vandaag → +3)
+                    .map((f) => {
+                      const rest = -(f.dagenOver ?? 0);
+                      const wanneer = rest === 0 ? "vandaag" : rest === 1 ? "morgen" : `over ${rest} dagen`;
+                      return `${f.leverancier || "onbekend"} (${euro(f.bedrag_incl)}) — ${wanneer}`;
+                    })
+                    .join(" · ")}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Lijst ── */}
         <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
           {laden ? (
@@ -623,6 +653,11 @@ export default function InkoopFacturenContent() {
             })()}
             {data.facturen.map((f) => {
               const teLaat = f.status === "open" && (f.dagenOver ?? -1) > 0;
+              // Bijna te laat: vervalt vandaag of binnen 3 dagen en nog niet betaald.
+              // dagenOver is negatief als de vervaldatum nog moet komen (−3 = over 3 dagen).
+              const d = f.dagenOver;
+              const bijnaTeLaat = f.status === "open" && d !== null && d <= 0 && d >= -3;
+              const restDagen = d !== null ? -d : 0; // 0 = vandaag, 3 = over 3 dagen
               const gekozen = selectie.has(f.id);
               return (
                 <div key={f.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)", opacity: f.status === "betaald" ? 0.6 : 1, backgroundColor: gekozen ? "#eef4ff" : undefined }}>
@@ -654,6 +689,21 @@ export default function InkoopFacturenContent() {
                   {teLaat && (
                     <span className="px-2 py-1 text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: "#fee2e2", color: ROOD, fontFamily: "var(--font-inter)" }}>
                       {f.dagenOver} dagen te laat
+                    </span>
+                  )}
+
+                  {bijnaTeLaat && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold flex-shrink-0"
+                      style={{ backgroundColor: "#fee2e2", color: ROOD, fontFamily: "var(--font-inter)" }}
+                      title="Betaaltermijn loopt bijna af"
+                    >
+                      <AlertTriangle size={11} strokeWidth={2.5} />
+                      {restDagen === 0
+                        ? "Vervalt vandaag!"
+                        : restDagen === 1
+                          ? "Nog 1 dag!"
+                          : `Nog ${restDagen} dagen!`}
                     </span>
                   )}
 
