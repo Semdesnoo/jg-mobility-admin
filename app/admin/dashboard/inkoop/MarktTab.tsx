@@ -113,7 +113,22 @@ export default function MarktTab() {
         body: JSON.stringify({ type, zoekterm: zoekterm.trim() }),
       });
       if (res.ok) {
-        setData(normaliseer((await res.json()) as MarktOverzicht));
+        const uit = normaliseer((await res.json()) as MarktOverzicht);
+        setData(uit);
+        // Elke marktanalyse gaat automatisch het archief in (per kwartaal), net als
+        // de taxaties. Fire-and-forget zodat een mislukte archivering de analyse
+        // niet in de weg zit.
+        fetch("/api/admin/inkoop/markt-archief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: uit.type,
+            zoekterm: uit.zoekterm ?? "",
+            samenvatting: uit.samenvatting ?? "",
+            markt_temperatuur: uit.markt_temperatuur ?? 0,
+            resultaat: uit,
+          }),
+        }).catch(() => {});
       } else {
         const d = (await res.json().catch(() => ({}))) as { error?: string };
         setFout(d.error ?? "Analyse mislukt");
