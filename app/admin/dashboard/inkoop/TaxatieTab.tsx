@@ -118,8 +118,25 @@ export default function TaxatieTab({
           geschatte_kosten: kosten,
         }),
       });
-      if (res.ok) setResultaat(await res.json());
-      else {
+      if (res.ok) {
+        const uit: TaxatieResultaat = await res.json();
+        setResultaat(uit);
+        // Elke analyse gaat automatisch het archief in (per kwartaal bewaard), zodat
+        // je altijd terug kunt naar wat de tool op dat moment adviseerde. Fire-and-
+        // forget: mislukt het archiveren, dan mag dat de taxatie niet blokkeren.
+        fetch("/api/admin/inkoop/archief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kenteken, merk: rdw.merk, model: rdw.model, bouwjaar: rdw.bouwjaar,
+            km: kmNum, marge, kosten,
+            max_inkoop: uit.berekening.max_inkoop,
+            verwachte_verkoop: uit.berekening.verwachte_verkoop,
+            betrouwbaarheid: uit.markt.betrouwbaarheid ?? "",
+            resultaat: uit,
+          }),
+        }).catch(() => {});
+      } else {
         const d = await res.json().catch(() => ({}));
         setFout(d.error ?? "Analyse mislukt");
       }

@@ -1,21 +1,23 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Globe, Award, FolderOpen } from "lucide-react";
+import { Search, Globe, Award, FolderOpen, Archive } from "lucide-react";
 import { T, micro, num } from "./inkoop/ui";
 import type { InkoopDossier, PrestatiesData } from "./inkoop/types";
 import TaxatieTab from "./inkoop/TaxatieTab";
 import MarktTab from "./inkoop/MarktTab";
 import PrestatiesTab from "./inkoop/PrestatiesTab";
 import DossiersTab from "./inkoop/DossiersTab";
+import ArchiefTab from "./inkoop/ArchiefTab";
 
-type TabId = "taxatie" | "markt" | "prestaties" | "dossiers";
+type TabId = "taxatie" | "markt" | "prestaties" | "dossiers" | "archief";
 
 const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[] = [
   { id: "taxatie", label: "Taxatietool", Icon: Search, context: "Waardebepaling aan de stoeprand" },
   { id: "markt", label: "Marktoverzicht", Icon: Globe, context: "Live marktbeeld Nederland" },
   { id: "prestaties", label: "Prestaties", Icon: Award, context: "Wat verkoopt er bij JG Mobility" },
   { id: "dossiers", label: "Dossiers", Icon: FolderOpen, context: "Lopende inkooptrajecten" },
+  { id: "archief", label: "Archief", Icon: Archive, context: "Bewaarde analyses per kwartaal" },
 ];
 
 export default function InkoopContent() {
@@ -144,6 +146,7 @@ export default function InkoopContent() {
         {tab === "dossiers" && (
           <DossiersTab dossiers={dossiers} herlaad={laadDossiers} onNieuweTaxatie={() => setTab("taxatie")} />
         )}
+        {tab === "archief" && <ArchiefTab />}
       </div>
     </div>
   );
