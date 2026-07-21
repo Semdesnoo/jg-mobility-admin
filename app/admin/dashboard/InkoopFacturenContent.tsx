@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
-import { Plus, Upload, Sparkles, Trash2, AlertTriangle, Check, Wallet, Mail, FileText } from "lucide-react";
+import { Plus, Upload, Sparkles, Trash2, AlertTriangle, Check, Wallet, Mail, FileText, Paperclip } from "lucide-react";
 
 type InkoopFactuur = {
   id: string; leverancier: string; factuurnummer: string;
@@ -10,8 +10,12 @@ type InkoopFactuur = {
   bedrag_incl: number; btw_bedrag: number; btw_tarief: number;
   omschrijving: string; categorie: string;
   status: "open" | "betaald"; betaald_op: string | null;
-  bron: "handmatig" | "ai" | "email"; gmail_afzender: string; dagenOver: number | null;
+  bron: "handmatig" | "ai" | "email"; gmail_afzender: string;
+  gmail_message_id: string | null; dagenOver: number | null;
 };
+
+/** Een bijlage uit de bron-e-mail (meestal de factuur-PDF van de leverancier). */
+type Bijlage = { attachmentId: string; filename: string; mimeType: string; size: number };
 
 type Overzicht = {
   facturen: InkoopFactuur[];
@@ -271,6 +275,38 @@ export default function InkoopFacturenContent() {
     await fetch(`/api/admin/inkoopfacturen/${f.id}`, { method: "DELETE" });
     await laad();
   };
+
+  // ── Bijlagen uit de bron-e-mail ──────────────────────────────────
+  // De originele factuur-PDF die de leverancier meestuurde, lazy opgehaald: pas
+  // bij het openklappen doen we de Gmail-call, zodat de lijst niet trager laadt.
+  const [bijlageOpen, setBijlageOpen] = useState<Set<string>>(new Set());
+  const [bijlageState, setBijlageState] = useState<
+    Record<string, { status: "laden" | "klaar" | "leeg" | "fout"; items: Bijlage[] }>
+  >({});
+
+  const openBijlagen = async (f: InkoopFactuur) => {
+    setBijlageOpen((prev) => {
+      const n = new Set(prev);
+      if (n.has(f.id)) n.delete(f.id);
+      else n.add(f.id);
+      return n;
+    });
+    if (!f.gmail_message_id || bijlageState[f.id]) return; // al geladen of geen mail
+    setBijlageState((p) => ({ ...p, [f.id]: { status: "laden", items: [] } }));
+    try {
+      const r = await fetch(`/api/admin/gmail/attachments?messageId=${encodeURIComponent(f.gmail_message_id)}`);
+      const uit = await r.json().catch(() => ({}));
+      const items: Bijlage[] = Array.isArray(uit.bijlagen) ? uit.bijlagen : [];
+      setBijlageState((p) => ({ ...p, [f.id]: { status: items.length ? "klaar" : "leeg", items } }));
+    } catch {
+      setBijlageState((p) => ({ ...p, [f.id]: { status: "fout", items: [] } }));
+    }
+  };
+
+  const bijlageUrl = (messageId: string, b: Bijlage) =>
+    `/api/admin/gmail/attachment?messageId=${encodeURIComponent(messageId)}` +
+    `&attachmentId=${encodeURIComponent(b.attachmentId)}` +
+    `&mimeType=${encodeURIComponent(b.mimeType)}&name=${encodeURIComponent(b.filename)}`;
 
   const invoer = (veld: keyof ReturnType<typeof leegFormulier>) => ({
     value: form[veld] as string,
@@ -737,6 +773,22 @@ export default function InkoopFacturenContent() {
                         </button>
                       );
                     })}
+                    {f.gmail_message_id && (
+                      <button
+                        onClick={() => openBijlagen(f)}
+                        aria-label="Bijlage uit e-mail openen"
+                        title="Open de factuur-bijlage uit de originele e-mail"
+                        className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase transition-all hover:opacity-80"
+                        style={{
+                          border: `1px solid ${bijlageOpen.has(f.id) ? "#1d4ed8" : "rgba(0,19,55,0.15)"}`,
+                          color: bijlageOpen.has(f.id) ? "#1d4ed8" : "#001337",
+                          backgroundColor: bijlageOpen.has(f.id) ? "rgba(29,78,216,0.06)" : "transparent",
+                          fontFamily: "var(--font-inter)",
+                        }}
+                      >
+                        <Paperclip size={11} /> Bijlage
+                      </button>
+                    )}
                     <button
                       onClick={() => verwijder(f)}
                       aria-label="Verwijderen"
@@ -746,6 +798,48 @@ export default function InkoopFacturenContent() {
                       <Trash2 size={11} />
                     </button>
                   </div>
+
+                  {/* Uitklap: de originele factuur-bijlage(n) uit de e-mail. w-full
+                      zodat het onder de regel valt (de regel is flex-wrap). */}
+                  {f.gmail_message_id && bijlageOpen.has(f.id) && (
+                    <div className="w-full mt-1.5 sm:pl-8">
+                      {(() => {
+                        const st = bijlageState[f.id];
+                        if (!st || st.status === "laden") {
+                          return (
+                            <p className="text-[11px] flex items-center gap-2" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>
+                              <span className="inline-block w-3 h-3 rounded-full border border-current border-t-transparent animate-spin" />
+                              Bijlagen laden…
+                            </p>
+                          );
+                        }
+                        if (st.status === "fout") {
+                          return <p className="text-[11px]" style={{ color: ROOD, fontFamily: "var(--font-inter)" }}>Kon de bijlagen niet ophalen — is Gmail nog gekoppeld?</p>;
+                        }
+                        if (st.status === "leeg") {
+                          return <p className="text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>Geen bijlage in deze e-mail — de factuur stond vermoedelijk in de tekst van de mail zelf.</p>;
+                        }
+                        return (
+                          <div className="flex flex-col gap-1.5">
+                            {st.items.map((b) => (
+                              <a
+                                key={b.attachmentId}
+                                href={bijlageUrl(f.gmail_message_id!, b)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-80 w-fit max-w-full"
+                                style={{ border: "1px solid rgba(29,78,216,0.25)", color: "#1d4ed8", backgroundColor: "rgba(29,78,216,0.04)", fontFamily: "var(--font-inter)" }}
+                              >
+                                <FileText size={13} style={{ flexShrink: 0 }} />
+                                <span className="truncate">{b.filename}</span>
+                                {b.size > 0 && <span style={{ color: "rgba(0,19,55,0.4)" }}>· {(b.size / 1024).toFixed(0)} kB</span>}
+                              </a>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               );
             })}
