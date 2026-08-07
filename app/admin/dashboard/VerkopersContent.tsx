@@ -24,7 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import VerkopersCriteria from "./VerkopersCriteria";
+import VerkopersCriteria, { type Criteria as ZoekCriteria } from "./VerkopersCriteria";
 import {
   T,
   micro,
@@ -120,12 +120,6 @@ const STATUS_LABEL: Record<Status, { label: string; kleur: string }> = {
   cosignatie: { label: "In consignatie", kleur: T.paars },
   afgewezen: { label: "Afgewezen", kleur: T.ink(0.4) },
 };
-
-const VOORBEELDEN = [
-  "Volkswagen Polo of Golf, 2016-2020, particulier, Zuid-Holland",
-  "SUV automaat onder €20.000 particulier aangeboden regio Rotterdam",
-  "Diesel stationwagen 2015-2019 particulier Zuid-Holland",
-];
 
 export default function VerkopersContent() {
   const [tab, setTab] = useState<TabId>("zoeken");
@@ -275,6 +269,8 @@ function ZoekTab({
   tellers: { nieuw: number; klaar: number; verstuurd: number; reacties: number; consignatie: number };
 }) {
   const [zoekopdracht, setZoekopdracht] = useState("");
+  const [toonExtra, setToonExtra] = useState(false);
+  const [criteria, setCriteria] = useState<ZoekCriteria | null>(null);
   const [bezig, setBezig] = useState(false);
   const [fase, setFase] = useState("");
   const [auto, setAuto] = useState<Autopilot | null>(null);
@@ -342,7 +338,7 @@ function ZoekTab({
   } | null>(null);
 
   const zoek = async () => {
-    if (!zoekopdracht.trim() || bezig) return;
+    if (bezig) return;
     setBezig(true);
     setResultaat(null);
     onFout("");
@@ -401,32 +397,41 @@ function ZoekTab({
       <div className="xl:col-span-2 flex flex-col gap-4 md:gap-5">
         <Panel title="Zoek particuliere verkopers" icon={<Search size={14} color={T.navy} />}>
           <div className="flex flex-col gap-3">
-            <Field
-              label="Wat zoek je?"
-              hint="Hoe specifieker, hoe beter: noem merk, bouwjaren, prijsklasse en regio."
-            >
-              <textarea
-                value={zoekopdracht}
-                onChange={(e) => setZoekopdracht(e.target.value)}
-                rows={3}
-                placeholder="bijv. Volkswagen Polo 2016-2020 particulier aangeboden in Zuid-Holland"
-                style={{ ...inputStijl, resize: "vertical", lineHeight: 1.6 }}
-              />
-            </Field>
+            <p style={body(12.5)}>
+              De zoekgrenzen hieronder bepalen wat er gezocht wordt. Je hoeft niets in te typen —
+              <strong style={{ color: T.navy }}> alle merken doen mee</strong>, zolang het maar een
+              particulier is.
+            </p>
 
-            <div className="flex flex-wrap gap-1.5">
-              {VOORBEELDEN.map((v) => (
-                <Chip key={v} onClick={() => setZoekopdracht(v)}>
-                  {v}
-                </Chip>
-              ))}
-            </div>
+            {criteria && (
+              <div className="flex flex-wrap gap-1.5">
+                <Pill color={T.navy}>
+                  {criteria.straalKm} km rond {criteria.vertrekpunt.naam.split(",")[0]}
+                </Pill>
+                <Pill color={T.teal}>
+                  {criteria.brandstof.length ? criteria.brandstof.join(", ") : "alle brandstoffen"}
+                </Pill>
+                <Pill color={T.amber}>
+                  {criteria.prijsMin || criteria.prijsMax
+                    ? `€ ${(criteria.prijsMin || 0).toLocaleString("nl-NL")} – ${
+                        criteria.prijsMax ? `€ ${criteria.prijsMax.toLocaleString("nl-NL")}` : "∞"
+                      }`
+                    : "elke prijs"}
+                </Pill>
+                <Pill color={T.ink(0.45)}>Nederland</Pill>
+              </div>
+            )}
 
-            <div className="flex items-center gap-3 pt-1">
-              <Btn onClick={zoek} disabled={bezig || zoekopdracht.trim().length < 3} size="lg">
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Btn onClick={zoek} disabled={bezig} size="lg">
                 {bezig ? <Spinner size={13} tone="donker" /> : <Radar size={13} />}
                 {bezig ? "Aan het zoeken…" : "Zoek verkopers"}
               </Btn>
+              {!bezig && (
+                <Btn variant="ghost" size="sm" onClick={() => setToonExtra((v) => !v)}>
+                  {toonExtra ? "Extra wens verbergen" : "Extra wens toevoegen"}
+                </Btn>
+              )}
               {bezig && (
                 <span style={body(11.5, T.ink(0.45))}>
                   {fase} De AI zoekt live en opent daarna elke advertentie apart. Reken op een
@@ -434,10 +439,35 @@ function ZoekTab({
                 </span>
               )}
             </div>
+
+            {toonExtra && !bezig && (
+              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
+                <Field
+                  label="Extra wens (niet verplicht)"
+                  hint="Alleen als je deze ronde iets specifieks zoekt. Blijft binnen de grenzen hierboven."
+                >
+                  <input
+                    value={zoekopdracht}
+                    onChange={(e) => setZoekopdracht(e.target.value)}
+                    placeholder="bijv. automaat, stationwagen, weinig kilometers"
+                    style={inputStijl}
+                  />
+                </Field>
+                {zoekopdracht && (
+                  <div className="mt-2">
+                    <Btn variant="ghost" size="sm" onClick={() => setZoekopdracht("")}>
+                      Wissen
+                    </Btn>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Panel>
 
-        <VerkopersCriteria onFout={onFout} />
+        <PlakAdvertentie herlaad={herlaad} gaNaarLeads={gaNaarLeads} onFout={onFout} />
+
+        <VerkopersCriteria onFout={onFout} onGewijzigd={setCriteria} />
 
         {resultaat && (
           <Panel title="Resultaat" icon={<Check size={14} color={T.groen} />}>
@@ -565,6 +595,107 @@ function ZoekTab({
         </Panel>
       </div>
     </div>
+  );
+}
+
+// ── Advertentie zelf toevoegen ────────────────────────────────────
+/**
+ * Plak een advertentielink en de AI doet de rest.
+ *
+ * Bestaat omdat het automatisch zoeken een taaie kant heeft: zoekmachines
+ * indexeren van advertentiesites vooral de categoriepagina's, niet de losse
+ * advertenties. Kom je er zelf een tegen tijdens het rondkijken, dan is dit de
+ * snelste weg — plakken, en het uitlezen, beoordelen en schrijven gaat vanzelf.
+ */
+function PlakAdvertentie({
+  herlaad,
+  gaNaarLeads,
+  onFout,
+}: {
+  herlaad: () => Promise<void>;
+  gaNaarLeads: () => void;
+  onFout: (s: string) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [bezig, setBezig] = useState(false);
+  const [stap, setStap] = useState("");
+  const [gelukt, setGelukt] = useState("");
+
+  const voegToe = async () => {
+    const schoon = url.trim();
+    if (!/^https?:\/\//i.test(schoon) || bezig) return;
+    setBezig(true);
+    setGelukt("");
+    onFout("");
+    try {
+      setStap("Advertentie opslaan…");
+      const res = await fetch("/api/admin/verkopers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ advertentie_url: schoon, bron: "Zelf gevonden" }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        onFout(d.error || "Toevoegen mislukt");
+        return;
+      }
+
+      setStap("Advertentie uitlezen…");
+      const vr = await fetch(`/api/admin/verkopers/${d.id}/verrijk`, { method: "POST" });
+      const vd = await vr.json().catch(() => ({}));
+      await herlaad();
+
+      if (vd?.handelaar) {
+        onFout("Dit blijkt een handelaar te zijn — de lead is niet bewaard.");
+        setUrl("");
+        return;
+      }
+      if (vd?.bereikbaar === false) {
+        onFout("De advertentie kon niet worden geopend. Hij staat wel in de lijst; probeer hem daar opnieuw uit te lezen.");
+      } else {
+        setGelukt("Toegevoegd en uitgelezen.");
+      }
+      setUrl("");
+    } catch (e) {
+      onFout(String(e));
+    } finally {
+      setBezig(false);
+      setStap("");
+    }
+  };
+
+  return (
+    <Panel title="Zelf een advertentie toevoegen" icon={<Plus size={14} color={T.navy} />}>
+      <p className="mb-3" style={body(12.5)}>
+        Zie je zelf een mooie advertentie voorbijkomen? Plak de link — de AI leest hem uit,
+        beoordeelt of het een particulier is en schrijft het bericht.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") voegToe();
+          }}
+          placeholder="https://www.marktplaats.nl/v/auto-s/..."
+          style={{ ...inputStijl, flex: 1 }}
+        />
+        <Btn onClick={voegToe} disabled={bezig || !/^https?:\/\//i.test(url.trim())}>
+          {bezig ? <Spinner size={12} tone="donker" /> : <Plus size={12} />}
+          {bezig ? stap || "Bezig…" : "Toevoegen"}
+        </Btn>
+      </div>
+      {gelukt && (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="flex items-center gap-1.5" style={body(12.5, T.groen)}>
+            <Check size={13} /> {gelukt}
+          </span>
+          <Btn variant="ghost" size="sm" onClick={gaNaarLeads}>
+            Bekijken
+          </Btn>
+        </div>
+      )}
+    </Panel>
   );
 }
 

@@ -20,11 +20,8 @@ const BRANDSTOFFEN = [
   { id: "elektrisch", label: "Elektrisch" },
 ];
 
-const LANDEN = [
-  { code: "NL", naam: "Nederland" },
-  { code: "BE", naam: "België" },
-  { code: "DE", naam: "Duitsland" },
-];
+/** Vast op Nederland — zie de toelichting in lib/verkopers-criteria.ts. */
+const LANDEN = ["NL"];
 
 /** Referentiesteden om de straal aan af te meten. */
 const STEDEN = [
@@ -192,7 +189,14 @@ function StraalKaart({
   );
 }
 
-export default function VerkopersCriteria({ onFout }: { onFout: (s: string) => void }) {
+export default function VerkopersCriteria({
+  onFout,
+  onGewijzigd,
+}: {
+  onFout: (s: string) => void;
+  /** Meldt de geldende grenzen aan het zoekpaneel, zodat dat de samenvatting kan tonen. */
+  onGewijzigd?: (c: Criteria) => void;
+}) {
   const [criteria, setCriteria] = useState<Criteria | null>(null);
   const [opgeslagen, setOpgeslagen] = useState<string>("");
   const [bezig, setBezig] = useState(false);
@@ -202,6 +206,10 @@ export default function VerkopersCriteria({ onFout }: { onFout: (s: string) => v
   const [plaatsen, setPlaatsen] = useState<{ naam: string; lat: number; lon: number }[]>([]);
   const [zoekt, setZoekt] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Via een ref, zodat het ophalen bij het opstarten niet opnieuw draait als de
+  // ouder een nieuwe functie doorgeeft.
+  const onGewijzigdRef = useRef(onGewijzigd);
+  onGewijzigdRef.current = onGewijzigd;
 
   useEffect(() => {
     fetch("/api/admin/verkopers/criteria")
@@ -210,6 +218,7 @@ export default function VerkopersCriteria({ onFout }: { onFout: (s: string) => v
         if (!d?.criteria) return;
         setCriteria(d.criteria);
         setOpgeslagen(JSON.stringify(d.criteria));
+        onGewijzigdRef.current?.(d.criteria);
       })
       .catch(() => {});
   }, []);
@@ -260,6 +269,7 @@ export default function VerkopersCriteria({ onFout }: { onFout: (s: string) => v
       }
       setCriteria(d.criteria);
       setOpgeslagen(JSON.stringify(d.criteria));
+      onGewijzigdRef.current?.(d.criteria);
     } finally {
       setBezig(false);
     }
@@ -355,31 +365,13 @@ export default function VerkopersCriteria({ onFout }: { onFout: (s: string) => v
           </div>
         </div>
 
-        {/* Landen */}
-        <div>
-          <p className="flex items-center gap-1.5 mb-2" style={micro()}>
-            <Globe size={11} /> Landen
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {LANDEN.map((l) => {
-              const aan = criteria.landen.includes(l.code);
-              return (
-                <Chip
-                  key={l.code}
-                  active={aan}
-                  onClick={() =>
-                    zet({
-                      landen: aan
-                        ? criteria.landen.filter((x) => x !== l.code)
-                        : [...criteria.landen, l.code],
-                    })
-                  }
-                >
-                  {l.naam}
-                </Chip>
-              );
-            })}
-          </div>
+        {/* Land ligt vast; geen keuze om per ongeluk om te zetten. */}
+        <div className="flex items-start gap-2" style={{ ...body(11.5, T.ink(0.5)), lineHeight: 1.6 }}>
+          <Globe size={12} color={T.ink(0.35)} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>
+            Alleen <strong style={{ color: T.navy }}>Nederland</strong>. Advertenties uit België en
+            Duitsland vallen af, ook als ze dichterbij liggen dan een Nederlandse.
+          </span>
         </div>
 
         {/* Vertrekpunt en straal */}
@@ -443,18 +435,14 @@ export default function VerkopersCriteria({ onFout }: { onFout: (s: string) => v
               </div>
             </div>
 
-            <StraalKaart
-              punt={criteria.vertrekpunt}
-              straalKm={criteria.straalKm}
-              landen={criteria.landen}
-            />
+            <StraalKaart punt={criteria.vertrekpunt} straalKm={criteria.straalKm} landen={LANDEN} />
           </div>
         </div>
       </div>
 
       <PanelVoet>
-        Deze grenzen gelden bij elke zoekopdracht. Merk en model laat je bewust vrij — het gaat erom
-        dat het een particulier is die zijn auto verkoopt.
+        Dit ís de zoekopdracht — meer hoef je niet in te vullen. Merk en model blijven bewust vrij:
+        alle merken doen mee, zolang het maar een particulier is die zijn auto verkoopt.
       </PanelVoet>
     </Panel>
   );

@@ -1,6 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { initVerkopersDB, voegLeadToe } from "@/lib/verkopers-db";
-import { leesCriteria, criteriaAlsTekst, type Criteria } from "@/lib/verkopers-criteria";
+import {
+  leesCriteria,
+  criteriaAlsTekst,
+  volgendeMerken,
+  type Criteria,
+} from "@/lib/verkopers-criteria";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -47,13 +52,16 @@ const JSON_VORM = `{
   "toelichting": "1-2 zinnen over wat je vond"
 }`;
 
-const ZOEK_PROMPT = (opdracht: string, criteria: Criteria) =>
+const ZOEK_PROMPT = (extraWens: string, criteria: Criteria, merken: string[]) =>
   `Je zoekt voor autobedrijf JG Mobility (Barendrecht) naar advertenties van PARTICULIEREN die hun auto zelf te koop hebben gezet.
 
-Zoekopdracht: "${opdracht}"
-
-VASTE ZOEKGRENZEN — deze gelden altijd, ook als de zoekopdracht hierboven iets anders suggereert:
+ZOEKGRENZEN:
 ${criteriaAlsTekst(criteria)}
+${extraWens ? `\nEXTRA WENS van de gebruiker (binnen bovenstaande grenzen): "${extraWens}"\n` : ""}
+MERKEN VOOR DEZE RONDE: ${merken.join(", ")}
+Gebruik deze merken om je zoekopdrachten concreet te maken — bijvoorbeeld "${merken[0]} particulier te koop ${criteria.vertrekpunt.naam.split(",")[0]}" of "${merken[1] ?? merken[0]} particulier aangeboden Zuid-Holland". Dat is bewust: zoeken zonder merk levert alleen categorie- en dealerpagina's op, met merk vind je losse advertenties. Een volgende zoekronde krijgt andere merken, dus je hoeft ze hier niet allemaal te dekken.
+
+Vind je bij een merk niets bruikbaars, ga dan door naar het volgende merk uit het rijtje. Kom je een geschikte advertentie van een ánder merk tegen, neem die gerust mee — de merken hierboven sturen je zoekopdracht, ze zijn geen filter.
 
 Je taak in deze stap is beperkt en moet SNEL: verzamel links naar INDIVIDUELE advertenties. Je hoeft ze niet te openen en niet te controleren — een volgende stap doet dat per advertentie.
 
@@ -134,13 +142,21 @@ export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
 
-  const { zoekopdracht } = await req.json();
-  if (!zoekopdracht || typeof zoekopdracht !== "string" || zoekopdracht.trim().length < 3) {
-    return Response.json({ error: "Geef een zoekopdracht op" }, { status: 400 });
+  // De zoekopdracht is optioneel: de zoekgrenzen zijn de opdracht. Wie een extra
+  // wens heeft ("automaat", "stationwagen") kan die meegeven, maar hoeft niet.
+  let extraWens = "";
+  try {
+    const body = await req.json();
+    extraWens = typeof body?.zoekopdracht === "string" ? body.zoekopdracht.trim().slice(0, 300) : "";
+  } catch {
+    /* lege body is prima */
   }
 
   await initVerkopersDB();
   const criteria = await leesCriteria();
+  // Merken voor deze ronde; de teller schuift meteen door zodat de volgende klik
+  // andere merken pakt en je over een paar rondes de hele lijst hebt gehad.
+  const merken = await volgendeMerken(4);
   const client = new Anthropic({ apiKey });
 
   // Harde grens: Vercel kapt op 60s af. Wint de timeout, dan melden we dat eerlijk.
@@ -149,7 +165,7 @@ export async function POST(req: Request) {
   const controller = new AbortController();
   const zoeken = zoekKandidaten(
     client,
-    ZOEK_PROMPT(zoekopdracht.trim(), criteria),
+    ZOEK_PROMPT(extraWens, criteria, merken),
     controller.signal
   ).catch(() => "");
   const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 45000));
@@ -161,7 +177,7 @@ export async function POST(req: Request) {
     return Response.json(
       {
         error:
-          "De zoekopdracht leverde binnen de tijd niets bruikbaars op. Probeer het opnieuw met één merk en één regio, bijvoorbeeld 'Volkswagen Polo particulier Rotterdam'.",
+          "De zoekopdracht leverde binnen de tijd niets bruikbaars op. Probeer het nog eens — advertentiesites zijn wisselend doorzoekbaar. Helpt dat niet, zet de actieradius dan ruimer of vul een extra wens in.",
       },
       { status: 422 }
     );
@@ -215,7 +231,7 @@ export async function POST(req: Request) {
       particulier_score: 0,
       kans_score: 0,
       motivatie: k.motivatie ?? "",
-      zoekopdracht: zoekopdracht.trim(),
+      zoekopdracht: extraWens || `binnen ${criteria.straalKm} km van ${criteria.vertrekpunt.naam}`,
     });
     if (id) nieuweIds.push(id);
     else overgeslagen++; // kenden we al (unieke index op advertentie_url)
@@ -227,6 +243,7 @@ export async function POST(req: Request) {
     toegevoegd: nieuweIds.length,
     overgeslagen,
     nieuwe_ids: nieuweIds,
+    merken,
     toelichting: data.toelichting ?? "",
   });
 }
