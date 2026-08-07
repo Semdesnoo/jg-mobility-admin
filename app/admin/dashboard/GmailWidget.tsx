@@ -46,6 +46,10 @@ export default function GmailWidget() {
   // Waarom de koppeling niet werkt — "verlopen" verdient een andere tekst dan
   // "nog nooit gekoppeld", anders zoek je in de verkeerde hoek.
   const [reden, setReden] = useState<string | null>(null);
+  // Waarschuwing van de statuscontrole: de koppeling werkt, maar Google heeft er
+  // een houdbaarheidsdatum aan gehangen. Zonder dit in beeld merk je dat pas als
+  // hij stuk is — en dan sta je zonder mail.
+  const [waarschuwing, setWaarschuwing] = useState<string | null>(null);
   const [tab, setTab] = useState<"inbox" | "cosignatie">("inbox");
   const [messages, setMessages] = useState<EmailSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -59,7 +63,11 @@ export default function GmailWidget() {
   useEffect(() => {
     fetch("/api/admin/gmail/status")
       .then((r) => r.json())
-      .then((d) => { setConnected(d.connected); setReden(d.reden ?? null); });
+      .then((d) => {
+        setConnected(d.connected);
+        setReden(d.reden ?? null);
+        setWaarschuwing(d.waarschuwing ?? null);
+      });
   }, []);
 
   const laadBerichten = useCallback(async () => {
@@ -214,6 +222,28 @@ export default function GmailWidget() {
           />
         </button>
       </div>
+
+      {/* Koppeling werkt, maar niet blijvend — met de knop om het nu te herstellen.
+          Zonder deze balk is er geen enkele manier om opnieuw te koppelen zolang de
+          verbinding het nog doet, en dan kun je een tijdelijk token niet vervangen. */}
+      {waarschuwing && (
+        <div
+          className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5"
+          style={{ backgroundColor: "#fef3c7", borderBottom: "1px solid #fde68a" }}
+        >
+          <AlertCircle size={14} style={{ color: "#b45309", flexShrink: 0 }} />
+          <p className="flex-1 text-xs" style={{ color: "rgba(0,19,55,0.75)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+            {waarschuwing}
+          </p>
+          <a
+            href="/api/admin/gmail/connect"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all hover:opacity-90"
+            style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+          >
+            <Mail size={12} /> Opnieuw koppelen
+          </a>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
