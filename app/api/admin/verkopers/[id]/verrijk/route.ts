@@ -108,19 +108,27 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     for (let i = 0; i < 4; i++) {
       const resp = await client.messages.create(
         {
-          // Sonnet 5 in plaats van Opus 5: dit is uitlezen, geen denkwerk — een paar
-          // velden overtikken uit een pagina die je hem aanreikt. Scheelt ruim de helft
-          // per advertentie, en dit is met afstand de duurste stap omdat hij per
-          // advertentie draait.
-          model: "claude-sonnet-5",
+          // Haiku 4.5 — het goedkoopste model dat dit werk aankan, en dit is met
+          // afstand de duurste stap omdat hij per advertentie draait. Het is dan ook
+          // overtikwerk: een paar velden uit een pagina die je hem aanreikt.
+          //
+          // Haiku vraagt wel andere instellingen dan de zwaardere modellen, alle drie
+          // geverifieerd tegen de echte API:
+          // - "adaptive" thinking geeft een 400; het moet met een vast budget. Aan
+          //   laten staat wel: met thinking uit schrijven modellen hun tool-aanroepen
+          //   soms als gewone tekst, en dan wordt er stilletjes niets opgehaald.
+          // - output_config/effort geeft een 400 en is hier weggelaten.
+          // - de _20260209-versies van de gereedschappen geeft een 400; de oudere
+          //   _20250910 werkt en las een echte Marktplaats-advertentie correct uit.
+          model: "claude-haiku-4-5-20251001",
           max_tokens: 3000,
-          thinking: { type: "adaptive" },
-          output_config: { effort: "low" },
+          thinking: { type: "enabled", budget_tokens: 1024 },
           // Advertentiepagina's zijn enorm (een halve megabyte is normaal) en je betaalt
           // per stuk tekst die erin gaat. Alles wat je nodig hebt — prijs, kilometers,
-          // verkoper — staat bovenin; de rest is menu's en aanbevelingen.
+          // verkoper — staat bovenin; de rest is menu's en aanbevelingen. Deze grens is
+          // hier extra belangrijk: de oudere gereedschapsversie filtert zelf niet.
           tools: [
-            { type: "web_fetch_20260209", name: "web_fetch", max_uses: 3, max_content_tokens: 12000 },
+            { type: "web_fetch_20250910", name: "web_fetch", max_uses: 3, max_content_tokens: 12000 },
           ],
           messages,
         },

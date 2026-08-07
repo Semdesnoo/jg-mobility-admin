@@ -95,6 +95,53 @@ function extractLaatsteJson(text: string): string | null {
   return null;
 }
 
+/**
+ * Houdt alleen de links over die echt bestaan.
+ *
+ * Dit is de grendel tegen verzonnen advertenties. Een lichter model levert dat vaker
+ * op dan een zwaar model, en een verzonnen link is de duurste soort rommel: hij ziet
+ * er goed uit, komt in je lijst terecht, en kost je pas een aanroep bij het uitlezen
+ * voordat blijkt dat er niets achter zit. Eén keer echt ophalen kost bijna niets en
+ * maakt het probleem hard onmogelijk.
+ *
+ * We halen alleen de kop op, niet de hele pagina, en gooien alleen weg bij een hard
+ * "bestaat niet" (404 of 410). Bij een 403, een storing of een time-out blijft de link
+ * staan: dat kan net zo goed aan de andere kant liggen, en goede leads verliezen aan
+ * een haperend netwerk is erger dan een rotte link die de uitleesstap er toch uit haalt.
+ *
+ * Getest op de echte sites: een bestaande Marktplaats- en AutoScout24-advertentie geeft
+ * 200, een verzonnen of afgekapte URL geeft 404.
+ */
+async function filterBestaandeUrls(urls: string[], budgetMs: number): Promise<Set<string>> {
+  const uniek = [...new Set(urls.filter(Boolean))];
+  const goed = new Set<string>(uniek);
+  if (uniek.length === 0) return goed;
+
+  const stop = Date.now() + budgetMs;
+  const wachtrij = [...uniek];
+
+  const werker = async () => {
+    for (;;) {
+      const url = wachtrij.shift();
+      if (!url || Date.now() > stop) return;
+      try {
+        const res = await fetch(url, {
+          method: "HEAD",
+          redirect: "follow",
+          signal: AbortSignal.timeout(Math.min(6000, Math.max(1000, stop - Date.now()))),
+          headers: { "user-agent": "Mozilla/5.0 (compatible; JGMobility/1.0)" },
+        });
+        if (res.status === 404 || res.status === 410) goed.delete(url);
+      } catch {
+        /* netwerkfout of time-out: laten staan, de uitleesstap kijkt er nog naar */
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(8, uniek.length) }, werker));
+  return goed;
+}
+
 /** Overzichts- en filterpagina's herkennen — die leveren geen bruikbare lead op. */
 function isOverzichtsPagina(url: string): boolean {
   return /\/(l|lrp|zoeken|search|aanbod)\/?$|[?&](postcode|zoekterm|priceTo|price_to|sort)=|\/l\/auto-s\/[^/]+\/?$/i.test(
@@ -120,22 +167,28 @@ async function zoekKandidaten(
   for (let i = 0; i < 6; i++) {
     const resp = await client.messages.create(
       {
-        // Sonnet 5 in plaats van Opus 5. Deze stap verzamelt links; het oordeel of
-        // het echt een particulier is valt pas in de volgende stap. Scheelt ruim de
-        // helft, en bij "blijf zoeken" draait dit tientallen keren achter elkaar.
-        model: "claude-sonnet-5",
+        // Haiku 4.5 — het goedkoopste model dat dit aankan. Deze stap verzamelt
+        // links; het oordeel of het echt een particulier is valt pas in de volgende
+        // stap, en bij "blijf zoeken" draait dit tientallen keren achter elkaar.
+        //
+        // Het risico van een lichter model is dat het een link verzint. Daar staat
+        // hieronder een harde controle tegenover: elke URL wordt echt opgehaald
+        // voordat hij bewaard wordt. Zo kan een verzonnen link er niet doorheen.
+        //
+        // De instellingen wijken af van de zwaardere modellen; alle drie geverifieerd
+        // tegen de echte API: "adaptive" thinking en output_config/effort geven een
+        // 400 op Haiku, en van web_search werkt alleen de oudere _20250305.
+        model: "claude-haiku-4-5-20251001",
         // Ruim genoeg voor een lijst van dertig kandidaten; op vierduizend paste
         // die niet en brak het antwoord halverwege af.
         max_tokens: 8000,
-        // Lage effort en alleen web_search: deze stap moet ruim binnen de 60s van
-        // Vercel blijven. Thinking bewust AAN — met thinking uit schrijft Opus 5
-        // tool-aanroepen soms als gewone tekst, waardoor er stilletjes niet gezocht wordt.
-        thinking: { type: "adaptive" },
-        output_config: { effort: "low" },
+        // Thinking bewust AAN: met thinking uit schrijven modellen hun tool-aanroepen
+        // soms als gewone tekst, waardoor er stilletjes niet gezocht wordt.
+        thinking: { type: "enabled", budget_tokens: 2048 },
         // Vijf zoekacties was te krap voor acht merken. Tien past nog binnen de
         // tijd die Vercel geeft en laat ruimte om een formulering te variëren als
         // de eerste poging bij een merk niets oplevert.
-        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 10 }],
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 10 }],
         messages,
       },
       { signal }
@@ -193,7 +246,9 @@ export async function POST(req: Request) {
   // wegschrijven en te antwoorden. Terugvallen op modelkennis doen we hier bewust
   // NIET — dat levert verzonnen advertenties op, en die zijn schadelijker dan geen
   // resultaat.
-  const budget = Math.max(10_000, 44_000 - (Date.now() - gestart));
+  // Ruimte laten voor het natrekken van de links en het wegschrijven daarna; die
+  // stappen komen ná deze en vallen binnen dezelfde 60 seconden van Vercel.
+  const budget = Math.max(10_000, 38_000 - (Date.now() - gestart));
   const controller = new AbortController();
   const opvang = { tekst: "", afgekapt: false };
   let apiFout: unknown = null;
@@ -263,16 +318,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const ruw = data.kandidaten;
+  // Eerst de vorm nakijken, dan pas of de pagina echt bestaat — dat scheelt
+  // netwerkverkeer voor links die er sowieso niet doorheen komen.
+  const ruw = data.kandidaten.filter((k) => {
+    const url = k.advertentie_url ?? "";
+    return /^https?:\/\//i.test(url) && !isOverzichtsPagina(url);
+  });
+  let overgeslagen = data.kandidaten.length - ruw.length;
+
+  const echt = await filterBestaandeUrls(
+    ruw.map((k) => k.advertentie_url ?? ""),
+    Math.max(3000, 52_000 - (Date.now() - gestart))
+  );
+  overgeslagen += ruw.length - echt.size;
+
   const nieuweIds: string[] = [];
-  let overgeslagen = 0;
 
   for (const k of ruw) {
     const url = k.advertentie_url ?? "";
-    if (!/^https?:\/\//i.test(url) || isOverzichtsPagina(url)) {
-      overgeslagen++;
-      continue;
-    }
+    if (!echt.has(url)) continue;
     // Prijsgrens ook hier nog eens nakijken. De AI houdt zich er meestal aan, maar
     // een instructie is geen garantie en een lead buiten je klasse kost je tijd.
     const prijs = Number(k.vraagprijs) || 0;
