@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Share2, Sparkles, Copy, Check, AlertTriangle, Car, Search, Archive, RefreshCw } from "lucide-react";
+import { useAiTaak } from "./AiTaken";
 
 type Auto = {
   id: number; merk: string; model: string; versie?: string; bouwjaar: number;
@@ -90,8 +91,12 @@ export default function SocialContent() {
   const [gekozen, setGekozen] = useState<Auto | null>(null);
   const [zoek, setZoek] = useState("");
   const [extra, setExtra] = useState("");
-  const [bezig, setBezig] = useState(false);
-  const [resultaat, setResultaat] = useState<Resultaat | null>(null);
+
+  // Het genereren draait in de takenlaag: die staat boven de tabbladen, dus je kunt
+  // ondertussen doorwerken en de tekst staat er als je terugkomt.
+  const { taak, start } = useAiTaak<Resultaat>("social-tekst");
+  const bezig = taak?.bezig ?? false;
+  const resultaat: Resultaat | null = taak?.fout ? { error: taak.fout } : taak?.resultaat ?? null;
 
   useEffect(() => {
     fetch("/api/admin/autos")
@@ -108,22 +113,22 @@ export default function SocialContent() {
   );
 
   // opnieuw=true slaat het archief over en laat het model echt opnieuw schrijven.
-  const genereer = async (opnieuw = false) => {
-    if (!gekozen && !extra.trim()) return;
-    setBezig(true);
-    setResultaat(null);
-    try {
+  // Draait in de takenlaag, zodat wegklikken naar een ander tabblad de tekst niet
+  // weggooit — bij terugkomst staat hij er gewoon.
+  const genereer = (opnieuw = false) => {
+    if ((!gekozen && !extra.trim()) || bezig) return;
+    const auto = gekozen;
+    const wens = extra;
+    const label = auto ? `Social tekst ${auto.merk} ${auto.model}` : "Social tekst";
+
+    start(label, async () => {
       const res = await fetch("/api/admin/social-tekst", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(gekozen ?? {}), extra, opnieuw }),
+        body: JSON.stringify({ ...(auto ?? {}), extra: wens, opnieuw }),
       });
-      setResultaat(await res.json());
-    } catch (e) {
-      setResultaat({ error: e instanceof Error ? e.message : String(e) });
-    } finally {
-      setBezig(false);
-    }
+      return await res.json();
+    });
   };
 
   return (

@@ -11,6 +11,7 @@ import {
   Th, Td, TabelWrap, rijStijl,
 } from "./ui";
 import { berekenKoerslijst, weging } from "./koerslijst";
+import { useAiTaak } from "../AiTaken";
 import type { InkoopDossier, PrestatiesData, RdwData, TaxatieResultaat, Vergelijkbaar } from "./types";
 
 type TabId = "taxatie" | "markt" | "prestaties" | "dossiers";
@@ -55,11 +56,15 @@ export default function TaxatieTab({
   const [marge, setMarge] = useState(10);
   const [kosten, setKosten] = useState(0);
   const [posten, setPosten] = useState<{ id: number; label: string; bedrag: number }[]>([]);
-  const [laden, setLaden] = useState(false);
   const [scanStap, setScanStap] = useState(0);
-  const [resultaat, setResultaat] = useState<TaxatieResultaat | null>(null);
-  const [fout, setFout] = useState<string | null>(null);
   const [opgeslagen, setOpgeslagen] = useState(false);
+
+  // De taxatie draait in de takenlaag boven de tabbladen, zodat hij doorloopt als
+  // je tussendoor wegklikt en het antwoord er nog staat als je terugkomt.
+  const { taak, start, wis } = useAiTaak<TaxatieResultaat>("inkoop-taxatie");
+  const laden = taak?.bezig ?? false;
+  const resultaat = taak?.bezig ? null : (taak?.resultaat ?? null);
+  const fout = taak?.bezig ? null : (taak?.fout ?? null);
   const [sorteer, setSorteer] = useState<{ kolom: "prijs" | "km" | "bouwjaar"; op: boolean }>({ kolom: "prijs", op: true });
 
   const kmNum = parseInt(km.replace(/\D/g, "")) || 0;
@@ -82,7 +87,8 @@ export default function TaxatieTab({
     setRdwLaden(true);
     setRdwFout(null);
     setRdw(null);
-    setResultaat(null);
+    // Vorige taxatie weghalen: die hoort bij het vorige kenteken.
+    wis();
     try {
       const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(k)}`);
       if (res.ok) {
@@ -98,52 +104,52 @@ export default function TaxatieTab({
     setRdwLaden(false);
   };
 
-  const analyseer = async () => {
-    if (!rdw) return;
-    setLaden(true);
+  const analyseer = () => {
+    if (!rdw || laden) return;
     setScanStap(0);
-    setFout(null);
-    setResultaat(null);
-    try {
+    // Alles wat de opdracht nodig heeft nu vastleggen: hij draait straks buiten dit
+    // scherm door, ook als je naar een ander tabblad klikt.
+    const auto = rdw;
+    const gegevens = { kenteken, km: kmNum, marge, kosten };
+
+    start(`Taxatie ${auto.merk} ${auto.model}`, async () => {
       const res = await fetch("/api/admin/inkoop/taxeer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          merk: rdw.merk, model: rdw.model, bouwjaar: rdw.bouwjaar,
+          merk: auto.merk, model: auto.model, bouwjaar: auto.bouwjaar,
           // Genormaliseerd naar cijfers: de server doet parseInt, en die maakt van
           // "125.000" anders 125 — wat de hele waardebepaling zou vertekenen.
-          km: String(kmNum), brandstof: rdw.brandstof, vermogen: rdw.vermogen, bodytype: rdw.bodytype,
-          catalogusprijs: rdw.catalogusprijs,
-          gewenste_marge: marge,
-          geschatte_kosten: kosten,
+          km: String(gegevens.km), brandstof: auto.brandstof, vermogen: auto.vermogen,
+          bodytype: auto.bodytype, catalogusprijs: auto.catalogusprijs,
+          gewenste_marge: gegevens.marge,
+          geschatte_kosten: gegevens.kosten,
         }),
       });
-      if (res.ok) {
-        const uit: TaxatieResultaat = await res.json();
-        setResultaat(uit);
-        // Elke analyse gaat automatisch het archief in (per kwartaal bewaard), zodat
-        // je altijd terug kunt naar wat de tool op dat moment adviseerde. Fire-and-
-        // forget: mislukt het archiveren, dan mag dat de taxatie niet blokkeren.
-        fetch("/api/admin/inkoop/archief", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kenteken, merk: rdw.merk, model: rdw.model, bouwjaar: rdw.bouwjaar,
-            km: kmNum, marge, kosten,
-            max_inkoop: uit.berekening.max_inkoop,
-            verwachte_verkoop: uit.berekening.verwachte_verkoop,
-            betrouwbaarheid: uit.markt.betrouwbaarheid ?? "",
-            resultaat: uit,
-          }),
-        }).catch(() => {});
-      } else {
+      if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setFout(d.error ?? "Analyse mislukt");
+        throw new Error(d.error ?? "Analyse mislukt");
       }
-    } catch {
-      setFout("Analyse mislukt — controleer de verbinding");
-    }
-    setLaden(false);
+      const uit: TaxatieResultaat = await res.json();
+
+      // Elke analyse gaat automatisch het archief in (per kwartaal bewaard), zodat
+      // je altijd terug kunt naar wat de tool op dat moment adviseerde. Fire-and-
+      // forget: mislukt het archiveren, dan mag dat de taxatie niet blokkeren.
+      fetch("/api/admin/inkoop/archief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kenteken: gegevens.kenteken, merk: auto.merk, model: auto.model, bouwjaar: auto.bouwjaar,
+          km: gegevens.km, marge: gegevens.marge, kosten: gegevens.kosten,
+          max_inkoop: uit.berekening.max_inkoop,
+          verwachte_verkoop: uit.berekening.verwachte_verkoop,
+          betrouwbaarheid: uit.markt.betrouwbaarheid ?? "",
+          resultaat: uit,
+        }),
+      }).catch(() => {});
+
+      return uit;
+    });
   };
 
   const slaOp = async () => {
@@ -170,8 +176,8 @@ export default function TaxatieTab({
   };
 
   const reset = () => {
-    setResultaat(null); setRdw(null); setKenteken(""); setKm("");
-    setFout(null); setRdwFout(null); setKosten(0); setPosten([]);
+    wis(); setRdw(null); setKenteken(""); setKm("");
+    setRdwFout(null); setKosten(0); setPosten([]);
   };
 
   const voegKostenToe = (label: string, bedrag: number) => {

@@ -6,8 +6,21 @@ import Link from "next/link";
 import Image from "next/image";
 import { X, Plus, ArrowLeft, Search, Upload, Sparkles } from "lucide-react";
 import type { Auto } from "@/lib/autos";
+import { useAiTaak } from "@/app/admin/dashboard/AiTaken";
 
 type Optie = { categorie: string; items: string[] };
+
+/** Wat de AI oplevert, met het kenteken erbij zodat we weten bij welke auto het hoort. */
+type AiTekst = {
+  kenteken: string;
+  omschrijving: string;
+  versie: string;
+  transmissie: string;
+  opties: Optie[];
+};
+
+/** Kentekens vergelijken zonder gedoe over streepjes, spaties en hoofdletters. */
+const kentekenSleutel = (k: string) => k.replace(/[^a-z0-9]/gi, "").toUpperCase();
 
 // Eén foto is óf een bestaande (al opgeslagen) URL, óf een nieuw te uploaden bestand.
 // Zo kun je bij het bewerken bestaande foto's behouden, verwijderen en herschikken,
@@ -117,10 +130,40 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
 
   const [rdwLoading, setRdwLoading] = useState(false);
   const [rdwError, setRdwError] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [opslaan, setOpslaan] = useState(false);
   const [error, setError] = useState("");
+
+  // Het schrijven van de omschrijving draait in de takenlaag (app/admin/layout.tsx).
+  // Die staat boven dit formulier, dus het werk loopt door als je tussendoor naar een
+  // ander scherm gaat. Het formulier zelf gaat bij zo'n sprong wél verloren; daarom
+  // bewaren we het kenteken bij het antwoord, zodat we het bij terugkomst kunnen
+  // herkennen en alsnog kunnen invullen in plaats van opnieuw te laten schrijven.
+  const { taak: aiTaak, start: startAi } = useAiTaak<AiTekst>("auto-tekst");
+  const aiLoading = aiTaak?.bezig ?? false;
+  const aiFout = aiError || (aiLoading ? "" : aiTaak?.fout ?? "");
+
+  const geldigeTransmissies = ["Handgeschakeld", "Automatisch", "Semi-automaat"];
+
+  const pasAiToe = (t: AiTekst) => {
+    setForm((prev) => ({
+      ...prev,
+      omschrijving: t.omschrijving || prev.omschrijving,
+      versie: t.versie || prev.versie,
+      transmissie: geldigeTransmissies.includes(t.transmissie) ? t.transmissie : prev.transmissie,
+    }));
+    if (t.opties.length) setOpties(t.opties);
+  };
+
+  // Klaargekomen tekst die bij het kenteken in het formulier hoort en er nog niet in staat.
+  const aiKlaarstaand =
+    !aiLoading &&
+    aiTaak?.resultaat &&
+    aiTaak.resultaat.kenteken === kentekenSleutel(form.kenteken) &&
+    aiTaak.resultaat.omschrijving &&
+    aiTaak.resultaat.omschrijving !== form.omschrijving
+      ? aiTaak.resultaat
+      : null;
 
   const set = (key: keyof FormState, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -130,38 +173,44 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
     setForm((prev) => ({ ...prev, verkocht: v === "verkocht", gereserveerd: v === "gereserveerd" }));
 
   // AI omschrijving + versie + opties genereren
-  const genereerAI = async (huidigForm?: FormState) => {
+  const genereerAI = (huidigForm?: FormState) => {
     const bronForm = huidigForm ?? form;
     if (!bronForm.merk || !bronForm.model) {
       setAiError("Zoek eerst het kenteken op zodat merk en model bekend zijn.");
       return;
     }
-    setAiLoading(true);
+    if (aiLoading) return;
     setAiError("");
 
-    const res = await fetch("/api/admin/generate-description", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(bronForm),
-    });
-    const data = await res.json();
+    const sleutel = kentekenSleutel(bronForm.kenteken);
+    const label = `Tekst ${bronForm.merk} ${bronForm.model}`;
 
-    if (!res.ok) {
-      // 503 = geen API key ingesteld → stil overslaan, handmatig invullen
-      if (res.status !== 503) {
-        setAiError(data.error ?? "AI genereren mislukt");
+    startAi(label, async () => {
+      const res = await fetch("/api/admin/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bronForm),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // 503 = geen API key ingesteld → stil overslaan, handmatig invullen
+        if (res.status === 503) return { kenteken: sleutel, omschrijving: "", versie: "", transmissie: "", opties: [] };
+        throw new Error(data.error ?? "AI genereren mislukt");
       }
-    } else {
-      const geldigeTransmissies = ["Handgeschakeld", "Automatisch", "Semi-automaat"];
-      setForm((prev) => ({
-        ...prev,
-        omschrijving: data.omschrijving || prev.omschrijving,
-        versie: data.versie || prev.versie,
-        transmissie: geldigeTransmissies.includes(data.transmissie) ? data.transmissie : prev.transmissie,
-      }));
-      if (data.opties?.length) setOpties(data.opties);
-    }
-    setAiLoading(false);
+
+      const tekst: AiTekst = {
+        kenteken: sleutel,
+        omschrijving: data.omschrijving ?? "",
+        versie: data.versie ?? "",
+        transmissie: data.transmissie ?? "",
+        opties: data.opties?.length ? data.opties : [],
+      };
+      // Sta je nog op dit formulier, dan vult hij zichzelf meteen in. Ben je weg,
+      // dan doet deze regel niets en pikt `aiKlaarstaand` het later op.
+      pasAiToe(tekst);
+      return tekst;
+    });
   };
 
   // RDW opzoeking — daarna automatisch AI aanroepen
@@ -200,8 +249,23 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
     setForm(updatedForm);
     setRdwLoading(false);
 
+    // Ligt de tekst voor dit kenteken al klaar — bijvoorbeeld omdat je tussendoor naar
+    // een ander scherm ging terwijl de AI doorwerkte — vul die dan in plaats van
+    // opnieuw te laten schrijven.
+    const eerder = aiTaak?.resultaat;
+    if (!aiLoading && eerder && eerder.kenteken === kentekenSleutel(updatedForm.kenteken) && eerder.omschrijving) {
+      setForm({
+        ...updatedForm,
+        omschrijving: eerder.omschrijving,
+        versie: eerder.versie || updatedForm.versie,
+        transmissie: geldigeTransmissies.includes(eerder.transmissie) ? eerder.transmissie : updatedForm.transmissie,
+      });
+      if (eerder.opties.length) setOpties(eerder.opties);
+      return;
+    }
+
     // Automatisch AI starten met de verse RDW data
-    await genereerAI(updatedForm);
+    genereerAI(updatedForm);
   };
 
   // Foto's selecteren — lees alle bestanden in en voeg ze in de gekozen volgorde toe.
@@ -382,7 +446,28 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
           />
           <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-inter)" }}>
             AI zoekt internet af voor uitrusting, trim-niveau en omschrijving…
+            <span className="font-normal" style={{ opacity: 0.7 }}> Je kunt gerust doorklikken, hij gaat door.</span>
           </span>
+        </div>
+      )}
+
+      {/* Tekst die klaar is gekomen terwijl je elders was — één klik en hij staat erin. */}
+      {aiKlaarstaand && (
+        <div
+          className="sticky top-[73px] z-30 px-6 py-3 flex flex-wrap items-center justify-center gap-3"
+          style={{ backgroundColor: "#dcfce7", borderBottom: "1px solid rgba(21,128,61,0.2)" }}
+        >
+          <span className="text-sm font-semibold" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
+            De AI-tekst voor dit kenteken staat klaar.
+          </span>
+          <button
+            type="button"
+            onClick={() => pasAiToe(aiKlaarstaand)}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold tracking-wide transition-all hover:opacity-90"
+            style={{ backgroundColor: "#15803d", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+          >
+            <Sparkles size={12} /> Invullen
+          </button>
         </div>
       )}
 
@@ -430,9 +515,9 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
               {rdwError}
             </p>
           )}
-          {aiError && (
+          {aiFout && (
             <p className="text-xs mt-2" style={{ color: "#dc2626", fontFamily: "var(--font-inter)" }}>
-              {aiError}
+              {aiFout}
             </p>
           )}
           <p className="text-xs mt-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
@@ -626,9 +711,9 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
               {aiLoading ? "Genereren..." : "AI genereren"}
             </button>
           </div>
-          {aiError && (
+          {aiFout && (
             <p className="text-xs mb-2" style={{ color: "#dc2626", fontFamily: "var(--font-inter)" }}>
-              {aiError}
+              {aiFout}
             </p>
           )}
           <div className="relative">

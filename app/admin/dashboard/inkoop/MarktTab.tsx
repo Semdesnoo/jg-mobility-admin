@@ -3,11 +3,13 @@
 /**
  * Tabblad "Marktoverzicht" — live puls van de Nederlandse occasionmarkt.
  *
- * Gedrag is identiek aan de vorige versie (één POST naar /api/admin/inkoop/markt),
- * alleen de opmaak is herbouwd op het gedeelde ontwerpsysteem uit ./ui.
+ * De analyse zelf draait in de takenlaag (../AiTaken): tabbladen worden bij het
+ * wisselen uit het geheugen gehaald, en dan zou een lopende analyse met het scherm
+ * mee verdwijnen.
  */
 
 import { useState } from "react";
+import { useAiTaak } from "../AiTaken";
 import {
   Flame,
   Search,
@@ -97,47 +99,50 @@ function normaliseer(d: MarktOverzicht): MarktOverzicht {
 
 // ── Component ─────────────────────────────────────────────────────
 export default function MarktTab() {
-  const [data, setData] = useState<MarktOverzicht | null>(null);
-  const [laden, setLaden] = useState(false);
-  const [fout, setFout] = useState<string | null>(null);
   const [zoekterm, setZoekterm] = useState("");
 
-  const analyseer = async (type: "puls" | "zoek") => {
+  // De analyse draait in de takenlaag boven de tabbladen, zodat hij doorloopt als
+  // je tussendoor naar een ander scherm klikt en het antwoord er nog staat als je
+  // terugkomt.
+  const { taak, start } = useAiTaak<MarktOverzicht>("inkoop-markt");
+  const laden = taak?.bezig ?? false;
+  const data = taak?.bezig ? null : (taak?.resultaat ?? null);
+  const fout = taak?.bezig ? null : (taak?.fout ?? null);
+
+  const analyseer = (type: "puls" | "zoek") => {
     if (type === "zoek" && !zoekterm.trim()) return;
-    setLaden(true);
-    setFout(null);
-    try {
+    if (laden) return;
+    const term = zoekterm.trim();
+
+    start(type === "zoek" ? `Marktanalyse: ${term}` : "Marktoverzicht", async () => {
       const res = await fetch("/api/admin/inkoop/markt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, zoekterm: zoekterm.trim() }),
+        body: JSON.stringify({ type, zoekterm: term }),
       });
-      if (res.ok) {
-        const uit = normaliseer((await res.json()) as MarktOverzicht);
-        setData(uit);
-        // Elke marktanalyse gaat automatisch het archief in (per kwartaal), net als
-        // de taxaties. Fire-and-forget zodat een mislukte archivering de analyse
-        // niet in de weg zit.
-        fetch("/api/admin/inkoop/markt-archief", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: uit.type,
-            zoekterm: uit.zoekterm ?? "",
-            samenvatting: uit.samenvatting ?? "",
-            markt_temperatuur: uit.markt_temperatuur ?? 0,
-            resultaat: uit,
-          }),
-        }).catch(() => {});
-      } else {
+      if (!res.ok) {
         const d = (await res.json().catch(() => ({}))) as { error?: string };
-        setFout(d.error ?? "Analyse mislukt");
+        throw new Error(d.error ?? "Analyse mislukt");
       }
-    } catch {
-      setFout("Analyse mislukt — controleer de verbinding");
-    } finally {
-      setLaden(false);
-    }
+      const uit = normaliseer((await res.json()) as MarktOverzicht);
+
+      // Elke marktanalyse gaat automatisch het archief in (per kwartaal), net als
+      // de taxaties. Fire-and-forget zodat een mislukte archivering de analyse
+      // niet in de weg zit.
+      fetch("/api/admin/inkoop/markt-archief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: uit.type,
+          zoekterm: uit.zoekterm ?? "",
+          samenvatting: uit.samenvatting ?? "",
+          markt_temperatuur: uit.markt_temperatuur ?? 0,
+          resultaat: uit,
+        }),
+      }).catch(() => {});
+
+      return uit;
+    });
   };
 
   const live = data?.live !== false;

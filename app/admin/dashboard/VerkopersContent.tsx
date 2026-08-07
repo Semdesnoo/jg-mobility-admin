@@ -25,6 +25,20 @@ import {
   ChevronRight,
 } from "lucide-react";
 import VerkopersCriteria, { type Criteria as ZoekCriteria } from "./VerkopersCriteria";
+import { useAiTaak } from "./AiTaken";
+
+/** Wat een zoekronde oplevert. Wordt bewaard in de takenlaag, zodat het er nog
+ *  staat als je tussendoor naar een ander tabblad bent geweest. */
+type ZoekResultaat = {
+  toegevoegd: number;
+  overgeslagen: number;
+  gecontroleerd: number;
+  afgevallen: number;
+  automatischVerstuurd: number;
+  toelichting: string;
+  merken?: string[];
+  autoLog: string[];
+};
 import {
   T,
   micro,
@@ -271,10 +285,16 @@ function ZoekTab({
   const [zoekopdracht, setZoekopdracht] = useState("");
   const [toonExtra, setToonExtra] = useState(false);
   const [criteria, setCriteria] = useState<ZoekCriteria | null>(null);
-  const [bezig, setBezig] = useState(false);
-  const [fase, setFase] = useState("");
   const [auto, setAuto] = useState<Autopilot | null>(null);
-  const [autoLog, setAutoLog] = useState<string[]>([]);
+
+  // De zoekronde draait in de takenlaag boven de tabbladen. Daardoor loopt hij
+  // door als je naar een ander scherm klikt, en staat het antwoord er nog als je
+  // terugkomt.
+  const { taak, start } = useAiTaak<ZoekResultaat>("verkopers-zoek");
+  const bezig = taak?.bezig ?? false;
+  const fase = taak?.stap ?? "";
+  const resultaat = taak?.bezig ? null : (taak?.resultaat ?? null);
+  const autoLog = resultaat?.autoLog ?? [];
 
   const laadAutopilot = useCallback(async () => {
     const res = await fetch("/api/admin/verkopers/autopilot");
@@ -293,19 +313,20 @@ function ZoekTab({
    * aanroep een kleine partij (anders loopt hij tegen de time-out van Vercel aan),
    * dus we roepen hem herhaald aan. De ronde-teller is een noodrem tegen doorrazen.
    */
-  const draaiAutopilot = async (): Promise<number> => {
+  const draaiAutopilot = async (
+    stap: (t: string) => void,
+    log: string[]
+  ): Promise<number> => {
     let totaal = 0;
     for (let ronde = 0; ronde < 15; ronde++) {
-      setFase(`Automatisch versturen — ronde ${ronde + 1}…`);
+      stap(`Automatisch versturen — ronde ${ronde + 1}`);
       const res = await fetch("/api/admin/verkopers/autopilot", { method: "POST" });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        onFout(d.error || "Automatisch versturen mislukt");
+        log.push(d.error || "Automatisch versturen mislukt");
         break;
       }
-      if (Array.isArray(d.meldingen) && d.meldingen.length) {
-        setAutoLog((vorig) => [...vorig, ...d.meldingen]);
-      }
+      if (Array.isArray(d.meldingen) && d.meldingen.length) log.push(...d.meldingen);
       totaal += d.verstuurd ?? 0;
       await herlaad();
       if (d.uit || d.klaar || (d.verstuurd ?? 0) === 0) break;
@@ -314,54 +335,49 @@ function ZoekTab({
     return totaal;
   };
 
-  const alleenVersturen = async () => {
+  const alleenVersturen = () => {
     if (bezig) return;
-    setBezig(true);
-    setAutoLog([]);
     onFout("");
-    try {
-      await draaiAutopilot();
-    } catch (e) {
-      onFout(String(e));
-    } finally {
-      setBezig(false);
-      setFase("");
-    }
+    start("Berichten versturen", async (stap) => {
+      const log: string[] = [];
+      const aantal = await draaiAutopilot(stap, log);
+      return {
+        toegevoegd: 0,
+        overgeslagen: 0,
+        gecontroleerd: 0,
+        afgevallen: 0,
+        automatischVerstuurd: aantal,
+        toelichting: "",
+        autoLog: log,
+      };
+    });
   };
-  const [resultaat, setResultaat] = useState<{
-    toegevoegd: number;
-    overgeslagen: number;
-    gecontroleerd: number;
-    afgevallen: number;
-    automatischVerstuurd: number;
-    toelichting: string;
-  } | null>(null);
 
-  const zoek = async () => {
+  const zoek = () => {
     if (bezig) return;
-    setBezig(true);
-    setResultaat(null);
     onFout("");
-    try {
+    const wens = zoekopdracht;
+    const autopilotAan = auto?.aan ?? false;
+
+    start("Verkopers zoeken", async (stap) => {
+      const log: string[] = [];
+
       // Fase 1 — snel advertentielinks verzamelen.
-      setFase("Zoeken naar advertenties…");
+      stap("Zoeken naar advertenties");
       const res = await fetch("/api/admin/verkopers/zoek", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ zoekopdracht }),
+        body: JSON.stringify({ zoekopdracht: wens }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        onFout(data.error || "Zoeken mislukt");
-        return;
-      }
+      if (!res.ok) throw new Error(data.error || "Zoeken mislukt");
 
       // Fase 2 — elke gevonden advertentie apart openen en uitlezen. Eén verzoek per
       // advertentie, want alles in één keer past niet binnen de time-out van Vercel.
       const ids: string[] = Array.isArray(data.nieuwe_ids) ? data.nieuwe_ids : [];
       let afgevallen = 0;
       for (let i = 0; i < ids.length; i++) {
-        setFase(`Advertentie ${i + 1} van ${ids.length} controleren…`);
+        stap(`Advertentie ${i + 1} van ${ids.length} controleren`);
         try {
           const vr = await fetch(`/api/admin/verkopers/${ids[i]}/verrijk`, { method: "POST" });
           const vd = await vr.json().catch(() => ({}));
@@ -373,23 +389,19 @@ function ZoekTab({
       }
 
       // Fase 3 — staat de autopilot aan, dan gaan de berichten hier meteen de deur uit.
-      let automatischVerstuurd = 0;
-      if (auto?.aan) automatischVerstuurd = await draaiAutopilot();
+      const automatischVerstuurd = autopilotAan ? await draaiAutopilot(stap, log) : 0;
 
-      setResultaat({
+      return {
         toegevoegd: Math.max(0, ids.length - afgevallen),
         overgeslagen: data.overgeslagen ?? 0,
         gecontroleerd: ids.length,
         afgevallen,
         automatischVerstuurd,
         toelichting: data.toelichting ?? "",
-      });
-    } catch (e) {
-      onFout(String(e));
-    } finally {
-      setBezig(false);
-      setFase("");
-    }
+        merken: Array.isArray(data.merken) ? data.merken : [],
+        autoLog: log,
+      };
+    });
   };
 
   return (
@@ -465,6 +477,10 @@ function ZoekTab({
           </div>
         </Panel>
 
+        {taak?.fout && !taak.bezig && (
+          <Foutmelding>{taak.fout}</Foutmelding>
+        )}
+
         <PlakAdvertentie herlaad={herlaad} gaNaarLeads={gaNaarLeads} onFout={onFout} />
 
         <VerkopersCriteria onFout={onFout} onGewijzigd={setCriteria} />
@@ -491,6 +507,12 @@ function ZoekTab({
                   {resultaat.automatischVerstuurd === 1 ? "" : "en"} verstuurd.
                 </p>
               </div>
+            )}
+            {resultaat.merken && resultaat.merken.length > 0 && (
+              <p className="mb-2" style={body(12, T.ink(0.5))}>
+                Deze ronde gezocht op: {resultaat.merken.join(", ")}. Een volgende ronde pakt andere
+                merken.
+              </p>
             )}
             {resultaat.toelichting && <p style={body(12.5)}>{resultaat.toelichting}</p>}
             {resultaat.toegevoegd === 0 ? (
