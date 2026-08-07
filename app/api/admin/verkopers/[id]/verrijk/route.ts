@@ -127,8 +127,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           // per stuk tekst die erin gaat. Alles wat je nodig hebt — prijs, kilometers,
           // verkoper — staat bovenin; de rest is menu's en aanbevelingen. Deze grens is
           // hier extra belangrijk: de oudere gereedschapsversie filtert zelf niet.
+          //
+          // Waarom 6000 en niet lager, gemeten op echte advertenties:
+          // - Marktplaats komt sowieso onder deze grens binnen (~7900 tokens totaal),
+          //   dus 12000 kostte daar niets extra's en 6000 kost daar niets.
+          // - AutoScout24 is vier keer zo groot en werd op 12000 afgekapt (~11970);
+          //   op 6000 scheelt dat ruwweg een kwart.
+          // - Op 3000 bleven de feiten kloppen (merk, bouwjaar, kilometers, prijs,
+          //   plaats), maar viel bij AutoScout24 het oordeel particulier-of-handelaar
+          //   weg. Dat oordeel is het hele punt van deze stap, dus die paar cent
+          //   winst is het niet waard.
           tools: [
-            { type: "web_fetch_20250910", name: "web_fetch", max_uses: 3, max_content_tokens: 12000 },
+            { type: "web_fetch_20250910", name: "web_fetch", max_uses: 3, max_content_tokens: 6000 },
           ],
           messages,
         },
