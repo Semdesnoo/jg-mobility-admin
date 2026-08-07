@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { MapPin, Fuel, Euro, Globe, Check, Search } from "lucide-react";
 import { T, micro, body, Panel, Btn, Chip, Field, inputStijl, Spinner, PanelVoet } from "./inkoop/ui";
+import "leaflet/dist/leaflet.css";
 
 export type Criteria = {
   brandstof: string[];
@@ -46,8 +47,6 @@ const STEDEN = [
   { naam: "Düsseldorf", lat: 51.2277, lon: 6.7735, land: "DE" },
 ];
 
-const KM_PER_GRAAD = 111.32;
-
 function afstandKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
   const R = 6371;
   const rad = (g: number) => (g * Math.PI) / 180;
@@ -59,13 +58,15 @@ function afstandKm(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 }
 
 /**
- * Kaartje met de actieradius.
+ * Echte kaart met de actieradius eroverheen.
  *
- * Geen echte kaartdienst maar een eigen tekening: dat scheelt een externe
- * afhankelijkheid én verzoeken naar buiten, en de vraag die je beantwoord wilt
- * hebben is toch "hoe ver kom ik" — niet "waar loopt de A15". De steden staan op
- * hun echte coördinaten en de cirkel is op kilometers geschaald, dus wat je ziet
- * klopt: valt Utrecht binnen de rand, dan valt Utrecht er ook echt in.
+ * De tegels komen van OpenStreetMap: gratis, geen sleutel nodig, en je ziet
+ * gewoon steden, wegen en water zoals op Google Maps. Leaflet raakt `window` aan
+ * en wordt daarom pas ingeladen zodra het scherm er staat.
+ *
+ * De cirkel is een echte geografische cirkel (straal in meters), dus wat je ziet
+ * klopt op de kilometer: valt een plaats binnen de rand, dan valt hij er ook
+ * echt in.
  */
 function StraalKaart({
   punt,
@@ -76,110 +77,99 @@ function StraalKaart({
   straalKm: number;
   landen: string[];
 }) {
-  const B = 150; // halve breedte van het tekenvlak
-  const H = 118; // halve hoogte
-  // De cirkel mag 78% van de halve hoogte beslaan; zo blijft er rand over voor
-  // steden die er net buiten vallen.
-  const schaal = (H * 0.78) / straalKm;
-  const cosLat = Math.cos((punt.lat * Math.PI) / 180);
+  const vak = useRef<HTMLDivElement>(null);
+  // De kaart en de cirkel leven buiten React: opnieuw tekenen bij elke
+  // schuifbeweging zou de kaart laten knipperen, dus we passen ze bij.
+  const kaart = useRef<import("leaflet").Map | null>(null);
+  const cirkel = useRef<import("leaflet").Circle | null>(null);
+  const speld = useRef<import("leaflet").CircleMarker | null>(null);
 
-  const naarXY = (s: { lat: number; lon: number }) => ({
-    x: (s.lon - punt.lon) * KM_PER_GRAAD * cosLat * schaal,
-    y: -(s.lat - punt.lat) * KM_PER_GRAAD * schaal,
-  });
+  useEffect(() => {
+    let levend = true;
 
-  const zichtbaar = STEDEN.map((s) => {
-    const { x, y } = naarXY(s);
-    const km = afstandKm(punt, s);
-    return { ...s, x, y, km, binnen: km <= straalKm && landen.includes(s.land) };
-  }).filter((s) => Math.abs(s.x) < B - 6 && Math.abs(s.y) < H - 6);
+    (async () => {
+      const L = (await import("leaflet")).default;
+      if (!levend || !vak.current || kaart.current) return;
 
-  const binnen = zichtbaar.filter((s) => s.binnen);
+      const m = L.map(vak.current, {
+        zoomControl: true,
+        scrollWheelZoom: false, // anders scroll je per ongeluk de kaart in plaats van de pagina
+        attributionControl: true,
+      });
+
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(m);
+
+      cirkel.current = L.circle([punt.lat, punt.lon], {
+        radius: straalKm * 1000,
+        color: T.navy,
+        weight: 2,
+        fillColor: T.navy,
+        fillOpacity: 0.08,
+      }).addTo(m);
+
+      speld.current = L.circleMarker([punt.lat, punt.lon], {
+        radius: 6,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: T.navy,
+        fillOpacity: 1,
+      }).addTo(m);
+
+      m.fitBounds(cirkel.current.getBounds(), { padding: [12, 12] });
+      kaart.current = m;
+    })();
+
+    return () => {
+      levend = false;
+      kaart.current?.remove();
+      kaart.current = null;
+      cirkel.current = null;
+      speld.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- opzet is: één keer opbouwen, daarna bijstellen
+
+  // Vertrekpunt of straal veranderd → cirkel en speld verplaatsen, kaart meebewegen.
+  useEffect(() => {
+    if (!kaart.current || !cirkel.current || !speld.current) return;
+    cirkel.current.setLatLng([punt.lat, punt.lon]);
+    cirkel.current.setRadius(straalKm * 1000);
+    speld.current.setLatLng([punt.lat, punt.lon]);
+    kaart.current.fitBounds(cirkel.current.getBounds(), { padding: [12, 12] });
+  }, [punt.lat, punt.lon, straalKm]);
+
+  const binnen = STEDEN.filter(
+    (s) => landen.includes(s.land) && afstandKm(punt, s) <= straalKm
+  );
 
   return (
     <div>
-      <svg
-        viewBox={`${-B} ${-H} ${B * 2} ${H * 2}`}
-        style={{ width: "100%", height: "auto", display: "block", backgroundColor: "#f6f7f9" }}
+      <div
+        ref={vak}
+        style={{
+          width: "100%",
+          height: 260,
+          backgroundColor: "#f6f7f9",
+          border: `1px solid ${T.line2}`,
+          zIndex: 0, // houdt de kaart onder de zwevende takenbalk
+        }}
         role="img"
-        aria-label={`Actieradius van ${straalKm} kilometer rond ${punt.naam}`}
-      >
-        {/* Ringen op een kwart, de helft en driekwart van de straal, als maatlat */}
-        {[0.25, 0.5, 0.75].map((f) => (
-          <circle
-            key={f}
-            cx={0}
-            cy={0}
-            r={straalKm * f * schaal}
-            fill="none"
-            stroke="rgba(0,19,55,0.08)"
-            strokeWidth={0.8}
-          />
-        ))}
-
-        <circle
-          cx={0}
-          cy={0}
-          r={straalKm * schaal}
-          fill="rgba(0,19,55,0.06)"
-          stroke={T.navy}
-          strokeWidth={1.4}
-        />
-
-        {zichtbaar.map((s) => (
-          <g key={s.naam}>
-            <circle
-              cx={s.x}
-              cy={s.y}
-              r={s.binnen ? 2.6 : 1.8}
-              fill={s.binnen ? T.groen : "rgba(0,19,55,0.28)"}
-            />
-            <text
-              x={s.x + 4}
-              y={s.y + 3}
-              style={{
-                fontFamily: "var(--font-inter)",
-                fontSize: 7,
-                fill: s.binnen ? T.navy : "rgba(0,19,55,0.4)",
-                fontWeight: s.binnen ? 700 : 400,
-              }}
-            >
-              {s.naam}
-            </text>
-          </g>
-        ))}
-
-        {/* Het vertrekpunt zelf */}
-        <circle cx={0} cy={0} r={3.6} fill={T.navy} stroke="#ffffff" strokeWidth={1.4} />
-        <text
-          x={0}
-          y={-7}
-          textAnchor="middle"
-          style={{ fontFamily: "var(--font-inter)", fontSize: 8, fill: T.navy, fontWeight: 700 }}
-        >
-          {punt.naam.split(",")[0]}
-        </text>
-
-        {/* Maatlat rechtsonder */}
-        <g transform={`translate(${B - 12}, ${H - 10})`}>
-          <line x1={-straalKm * schaal} y1={0} x2={0} y2={0} stroke="rgba(0,19,55,0.35)" strokeWidth={0.8} />
-          <line x1={-straalKm * schaal} y1={-2.5} x2={-straalKm * schaal} y2={2.5} stroke="rgba(0,19,55,0.35)" strokeWidth={0.8} />
-          <line x1={0} y1={-2.5} x2={0} y2={2.5} stroke="rgba(0,19,55,0.35)" strokeWidth={0.8} />
-          <text
-            x={(-straalKm * schaal) / 2}
-            y={-4}
-            textAnchor="middle"
-            style={{ fontFamily: "var(--font-inter)", fontSize: 7, fill: "rgba(0,19,55,0.5)" }}
-          >
-            {straalKm} km
-          </text>
-        </g>
-      </svg>
+        aria-label={`Kaart met een actieradius van ${straalKm} kilometer rond ${punt.naam}`}
+      />
 
       <p className="mt-2" style={body(11.5, T.ink(0.5))}>
         {binnen.length > 0 ? (
           <>
-            Binnen bereik: <strong style={{ color: T.navy }}>{binnen.map((s) => s.naam).join(", ")}</strong>
+            Binnen bereik:{" "}
+            <strong style={{ color: T.navy }}>
+              {binnen
+                .map((s) => s.naam)
+                .slice(0, 8)
+                .join(", ")}
+              {binnen.length > 8 ? ` en ${binnen.length - 8} meer` : ""}
+            </strong>
           </>
         ) : (
           "Geen van de referentiesteden valt binnen deze straal — kies een grotere afstand."
