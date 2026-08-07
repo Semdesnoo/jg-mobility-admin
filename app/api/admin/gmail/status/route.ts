@@ -47,7 +47,9 @@ export async function GET() {
       connected: false,
       reden: verlopen ? "verlopen" : "fout",
       melding: verlopen
-        ? "De Gmail-koppeling is verlopen. Koppel je mailbox opnieuw via Instellingen → Gmail."
+        ? // Het pad moet kloppen met het menu: er is geen "Instellingen" in dit dashboard,
+          // de koppelknop staat in het e-mailscherm onder Boekhouding.
+          "De Gmail-koppeling is verlopen. Koppel je mailbox opnieuw via Boekhouding → E-mail → Opnieuw koppelen."
         : bericht,
     });
   }
