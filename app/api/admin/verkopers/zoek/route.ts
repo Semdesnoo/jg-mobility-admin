@@ -65,14 +65,16 @@ Vind je bij een merk niets bruikbaars, ga dan door naar het volgende merk uit he
 
 Je taak in deze stap is beperkt en moet SNEL: verzamel links naar INDIVIDUELE advertenties. Je hoeft ze niet te openen en niet te controleren — een volgende stap doet dat per advertentie.
 
-Gebruik web_search. Richt je op AutoScout24, AutoTrack, Gaspedaal en Marktplaats. Zoek naar losse advertentiepagina's, niet naar categorie- of filterpagina's.
+Gebruik web_search, en gebruik hem ruim: doe meerdere zoekopdrachten, minstens één per merk uit het rijtje, en varieer je formulering en plaatsnaam als een zoekopdracht weinig oplevert. Richt je op AutoScout24, AutoTrack, Gaspedaal en Marktplaats. Zoek naar losse advertentiepagina's, niet naar categorie- of filterpagina's.
+
+OPBRENGST IS HET DOEL. Verzamel er zo veel als je er eerlijk kunt vinden — een volgende stap opent elke advertentie afzonderlijk en gooit weg wat een handelaar blijkt of buiten de grenzen valt. Een twijfelgeval dat daar sneuvelt kost bijna niets; een advertentie die je hier niet meeneemt is definitief weg.
 
 Wat je oplevert:
-- Alleen URL's die je daadwerkelijk in de zoekresultaten hebt gezien. Verzin er nooit één en pas nooit een URL aan.
+- Alleen URL's die je daadwerkelijk in de zoekresultaten hebt gezien. Verzin er nooit één en pas nooit een URL aan. Dit is de enige harde regel: een verzonnen link is erger dan geen link.
 - Neem ook overzichts-URL's NIET op — alleen pagina's van één specifieke auto.
 - Vul merk, model, bouwjaar, prijs en plaats in voor zover die uit het zoekresultaat blijken. Weet je iets niet, laat het leeg.
-- Maximaal 10 kandidaten. Liever 5 goede links dan 10 gokken.
-- Twijfel je of een advertentie binnen de zoekgrenzen valt (te ver weg, verkeerd land, buiten de prijsklasse)? Laat hem dan weg.
+- Tot 30 kandidaten. Stop niet bij vijf omdat dat genoeg voelt; ga door zolang je nog echte advertenties vindt.
+- Valt een advertentie duidelijk buiten de zoekgrenzen (verkeerd land, ver buiten de prijsklasse), laat hem weg. Twijfel je? Neem hem mee — de volgende stap controleert het.
 
 Antwoord UITSLUITEND met dit JSON-object, zonder tekst eromheen:
 ${JSON_VORM}`;
@@ -100,10 +102,16 @@ function isOverzichtsPagina(url: string): boolean {
   );
 }
 
+/**
+ * @param opvang Vangt op wat er onderweg al binnenkwam. Wint de tijdklok tijdens een
+ *   tussenronde (het model zoekt in meerdere beurten), dan staat hier de tekst van de
+ *   laatste voltooide beurt in plaats van niets.
+ */
 async function zoekKandidaten(
   client: Anthropic,
   prompt: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  opvang: { tekst: string; afgekapt: boolean }
 ): Promise<string> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
   let laatsteTekst = "";
@@ -113,13 +121,18 @@ async function zoekKandidaten(
     const resp = await client.messages.create(
       {
         model: "claude-opus-5",
-        max_tokens: 4000,
+        // Ruim genoeg voor een lijst van dertig kandidaten; op vierduizend paste
+        // die niet en brak het antwoord halverwege af.
+        max_tokens: 8000,
         // Lage effort en alleen web_search: deze stap moet ruim binnen de 60s van
         // Vercel blijven. Thinking bewust AAN — met thinking uit schrijft Opus 5
         // tool-aanroepen soms als gewone tekst, waardoor er stilletjes niet gezocht wordt.
         thinking: { type: "adaptive" },
         output_config: { effort: "low" },
-        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }],
+        // Vijf zoekacties was te krap voor acht merken. Tien past nog binnen de
+        // tijd die Vercel geeft en laat ruimte om een formulering te variëren als
+        // de eerste poging bij een merk niets oplevert.
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 10 }],
         messages,
       },
       { signal }
@@ -128,7 +141,14 @@ async function zoekKandidaten(
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
-    if (rondeTekst) laatsteTekst = rondeTekst;
+    if (rondeTekst) {
+      laatsteTekst = rondeTekst;
+      opvang.tekst = rondeTekst;
+    }
+    // Op max_tokens breekt het antwoord middenin de lijst af. Dat moet je weten:
+    // de laatste accolade sluit dan een losse kandidaat in plaats van het geheel,
+    // en dat leest als een geldig maar leeg antwoord.
+    if (resp.stop_reason === "max_tokens") opvang.afgekapt = true;
     if (resp.stop_reason === "pause_turn") {
       messages.push({ role: "assistant", content: resp.content });
       continue;
@@ -139,6 +159,13 @@ async function zoekKandidaten(
 }
 
 export async function POST(req: Request) {
+  // De klok begint hier, niet pas bij het zoeken. Vercel kapt het hele verzoek af op
+  // 60 seconden, en daar valt ook het opzetten van de database, het lezen van de
+  // criteria en het wegschrijven van de vondsten onder. Rekenden we de tijd pas vanaf
+  // het zoeken, dan kon een trage start de bewaarstap eruit duwen: de leads stonden
+  // dan wel in de database, maar het antwoord bereikte het scherm nooit.
+  const gestart = Date.now();
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
 
@@ -156,28 +183,55 @@ export async function POST(req: Request) {
   const criteria = await leesCriteria();
   // Merken voor deze ronde; de teller schuift meteen door zodat de volgende klik
   // andere merken pakt en je over een paar rondes de hele lijst hebt gehad.
-  const merken = await volgendeMerken(4);
+  const merken = await volgendeMerken(8);
   const client = new Anthropic({ apiKey });
 
-  // Harde grens: Vercel kapt op 60s af. Wint de timeout, dan melden we dat eerlijk.
-  // Terugvallen op modelkennis doen we hier bewust NIET — dat levert verzonnen
-  // advertenties op, en die zijn schadelijker dan geen resultaat.
+  // Wat er van de 60 seconden overblijft, min een marge om de vondsten nog te kunnen
+  // wegschrijven en te antwoorden. Terugvallen op modelkennis doen we hier bewust
+  // NIET — dat levert verzonnen advertenties op, en die zijn schadelijker dan geen
+  // resultaat.
+  const budget = Math.max(10_000, 44_000 - (Date.now() - gestart));
   const controller = new AbortController();
+  const opvang = { tekst: "", afgekapt: false };
+  let apiFout: unknown = null;
   const zoeken = zoekKandidaten(
     client,
     ZOEK_PROMPT(extraWens, criteria, merken),
-    controller.signal
-  ).catch(() => "");
-  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 45000));
+    controller.signal,
+    opvang
+  ).catch((e: unknown) => {
+    apiFout = e;
+    return "";
+  });
+  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), budget));
   const tekst = await Promise.race([zoeken, timeout]);
   controller.abort();
 
-  const jsonText = extractLaatsteJson(tekst);
+  // Een sleutel die niet werkt of een limiet die vol zit hoort niet als "niets
+  // gevonden" te eindigen — dan blijf je de actieradius verruimen terwijl het
+  // probleem ergens anders zit.
+  const status = (apiFout as { status?: number } | null)?.status;
+  if (status === 401 || status === 403) {
+    return Response.json(
+      { error: "De AI-sleutel wordt geweigerd. Controleer ANTHROPIC_API_KEY in de Vercel-instellingen." },
+      { status: 502 }
+    );
+  }
+  if (status === 429) {
+    return Response.json(
+      { error: "De AI zit even aan zijn limiet. Wacht een minuut en probeer het opnieuw." },
+      { status: 502 }
+    );
+  }
+
+  // Bij een tijdklok-afbreking is `tekst` leeg; val dan terug op wat er onderweg al
+  // binnenkwam.
+  const jsonText = extractLaatsteJson(tekst || opvang.tekst);
   if (!jsonText) {
     return Response.json(
       {
         error:
-          "De zoekopdracht leverde binnen de tijd niets bruikbaars op. Probeer het nog eens — advertentiesites zijn wisselend doorzoekbaar. Helpt dat niet, zet de actieradius dan ruimer of vul een extra wens in.",
+          "De zoekopdracht leverde binnen de tijd niets bruikbaars op. Probeer het nog eens — advertentiesites zijn wisselend doorzoekbaar. Helpt dat niet, zet de actieradius dan ruimer of verbreed de prijsklasse.",
       },
       { status: 422 }
     );
@@ -192,7 +246,21 @@ export async function POST(req: Request) {
     return Response.json({ error: "Ongeldige data van AI", raw: schoon.slice(0, 300) }, { status: 422 });
   }
 
-  const ruw = Array.isArray(data.kandidaten) ? data.kandidaten : [];
+  // Zonder kandidatenlijst is dit niet het bedoelde antwoord maar een afgekapt of
+  // half stuk tekst waar toevallig een geldig blokje in stond. Dat als "0 gevonden"
+  // doorgeven zou een hele zoekronde stil laten verdwijnen.
+  if (!Array.isArray(data.kandidaten)) {
+    return Response.json(
+      {
+        error: opvang.afgekapt
+          ? "Het antwoord van de AI werd halverwege afgekapt. Probeer het nog eens."
+          : "De AI gaf geen bruikbare lijst terug. Probeer het nog eens.",
+      },
+      { status: 422 }
+    );
+  }
+
+  const ruw = data.kandidaten;
   const nieuweIds: string[] = [];
   let overgeslagen = 0;
 

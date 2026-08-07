@@ -143,7 +143,11 @@ export async function volgendeMerken(aantal = 4): Promise<string[]> {
     (_, i) => MERKEN[(start + i) % MERKEN.length]
   );
 
-  const volgende = String((start + gekozen.length) % MERKEN.length);
+  // Eentje extra opschuiven. Zou hij precies `gekozen.length` doorschuiven, dan komt
+  // de teller na drie rondes van acht merken exact terug op zijn beginwaarde — 24 is
+  // ook de lengte van de lijst — en zoekt elke klik weer dezelfde drie groepjes.
+  // Met die ene stap erbij schuift het venster elke keer op.
+  const volgende = String((start + gekozen.length + 1) % MERKEN.length);
   await sql`
     INSERT INTO settings (key, value) VALUES (${MERK_KEY}, ${volgende})
     ON CONFLICT (key) DO UPDATE SET value = ${volgende}

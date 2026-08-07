@@ -66,11 +66,16 @@ async function schrijfInstelling(key: string, waarde: string) {
 /**
  * Leads die door alle grendels komen. particulier_score > 0 is de belangrijkste:
  * die is pas ingevuld nadat de advertentie daadwerkelijk is geopend en gelezen.
+ *
+ * Alleen status 'nieuw'. Wat jij op het tabblad Verkopers hebt afgevinkt krijgt de
+ * status 'goedgekeurd' en wacht op het tabblad Nakijken op jou — daar hoort de
+ * autopilot vanaf te blijven, anders is die mail al de deur uit voordat je hem hebt
+ * gezien.
  */
 async function kandidaten(inst: Instellingen, limiet: number): Promise<VerkoperLead[]> {
   const rijen = await sql`
     SELECT l.* FROM verkoper_leads l
-    WHERE l.status IN ('nieuw', 'goedgekeurd')
+    WHERE l.status = 'nieuw'
       AND l.verstuurd_op IS NULL
       AND l.email <> ''
       AND l.particulier_score >= ${inst.minParticulier}
