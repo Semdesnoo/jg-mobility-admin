@@ -12,10 +12,13 @@ export async function GET() {
   const url = auth.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
+    // Alleen de rechten die we echt gebruiken: lezen (mailwidget), versturen
+    // (facturen, cosignatie-updates, verkopersradar) en modify (een bericht als
+    // gelezen markeren). gmail.compose stond hier ook, maar wordt nergens gebruikt —
+    // eraf, want elk extra recht is er één die je niet nodig had.
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.send",
-      "https://www.googleapis.com/auth/gmail.compose",
       "https://www.googleapis.com/auth/gmail.modify",
     ],
   });
