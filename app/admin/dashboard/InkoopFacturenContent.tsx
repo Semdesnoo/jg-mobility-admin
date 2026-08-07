@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
 import { Plus, Upload, Sparkles, Trash2, AlertTriangle, Check, Wallet, Mail, FileText, Paperclip } from "lucide-react";
+import InkoopFacturenOverzicht from "./InkoopFacturenOverzicht";
 
 type InkoopFactuur = {
   id: string; leverancier: string; factuurnummer: string;
@@ -50,6 +51,7 @@ const labelStijl: React.CSSProperties = { color: "rgba(0,19,55,0.45)", fontFamil
 
 export default function InkoopFacturenContent() {
   const [data, setData] = useState<Overzicht | null>(null);
+  const [weergave, setWeergave] = useState<"facturen" | "overzicht">("facturen");
   const [laden, setLaden] = useState(true);
   const [toonForm, setToonForm] = useState(false);
   const [form, setForm] = useState(leegFormulier);
@@ -74,13 +76,18 @@ export default function InkoopFacturenContent() {
     error?: string; blokkades?: string[]; ontbrekendeSleutel?: boolean; geenGmail?: boolean;
   } | null>(null);
 
-  const laad = useCallback(async () => {
-    setLaden(true);
+  /**
+   * `stil` haalt de gegevens op zonder de laadtoestand aan te zetten. Dat is het
+   * verschil tussen "de pagina bouwt zich opnieuw op" en "er verandert stilletjes
+   * een regel": bij een simpele statuswijziging hoort het scherm niet te knipperen.
+   */
+  const laad = useCallback(async (stil = false) => {
+    if (!stil) setLaden(true);
     try {
       const r = await fetch("/api/admin/inkoopfacturen");
       if (r.ok) setData(await r.json());
     } finally {
-      setLaden(false);
+      if (!stil) setLaden(false);
     }
   }, []);
 
@@ -227,13 +234,57 @@ export default function InkoopFacturenContent() {
     }
   };
 
+  /**
+   * Status omzetten zonder dat het scherm opnieuw opbouwt.
+   *
+   * De regel wordt meteen lokaal bijgewerkt en op de juiste plek gezet — betaalde
+   * facturen bovenaan hun eigen groep, net als de server ze straks teruggeeft. De
+   * server bevestigt daarna in stilte; klopt er iets niet, dan corrigeert die ronde
+   * het alsnog. Zo zie je het resultaat direct in plaats van na een laadmoment.
+   */
   const zetStatus = async (f: InkoopFactuur, status: "open" | "betaald") => {
-    await fetch(`/api/admin/inkoopfacturen/${f.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+    const vandaag = new Date().toISOString().slice(0, 10);
+
+    setData((vorig) => {
+      if (!vorig) return vorig;
+      const bijgewerkt: InkoopFactuur = {
+        ...f,
+        status,
+        betaald_op: status === "betaald" ? vandaag : null,
+      };
+      const rest = vorig.facturen.filter((x) => x.id !== f.id);
+      // Open blijft op zijn plek in de betaalvolgorde; betaald gaat vooraan de
+      // betaalde groep staan, want dat is wat je zojuist hebt afgehandeld.
+      const eersteBetaalde = rest.findIndex((x) => x.status === "betaald");
+      const nieuweLijst =
+        status === "betaald"
+          ? eersteBetaalde === -1
+            ? [...rest, bijgewerkt]
+            : [...rest.slice(0, eersteBetaalde), bijgewerkt, ...rest.slice(eersteBetaalde)]
+          : [bijgewerkt, ...rest];
+
+      const open = nieuweLijst.filter((x) => x.status === "open");
+      const teLaat = open.filter((x) => (x.dagenOver ?? -1) > 0);
+      const rond = (n: number) => Math.round(n * 100) / 100;
+      return {
+        ...vorig,
+        facturen: nieuweLijst,
+        openAantal: open.length,
+        openTotaal: rond(open.reduce((s, x) => s + x.bedrag_incl, 0)),
+        teLaatAantal: teLaat.length,
+        teLaatTotaal: rond(teLaat.reduce((s, x) => s + x.bedrag_incl, 0)),
+      };
     });
-    await laad();
+
+    try {
+      await fetch(`/api/admin/inkoopfacturen/${f.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+    } finally {
+      await laad(true);
+    }
   };
 
   // ── Meerdere tegelijk ────────────────────────────────────────────
@@ -347,6 +398,34 @@ export default function InkoopFacturenContent() {
         </div>
       </div>
 
+      {/* ── Schakelaar: de lijst zelf, of het overzicht per maand en kwartaal ── */}
+      <div className="px-4 md:px-8 pt-4 flex items-center gap-1.5">
+        {([
+          ["facturen", "Facturen"],
+          ["overzicht", "Maand & kwartaal"],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setWeergave(id)}
+            className="px-3.5 py-2 text-xs font-semibold transition-all hover:opacity-80"
+            style={{
+              fontFamily: "var(--font-inter)",
+              color: weergave === id ? "#ffffff" : "rgba(0,19,55,0.55)",
+              backgroundColor: weergave === id ? "#001337" : "transparent",
+              border: `1px solid ${weergave === id ? "#001337" : "rgba(0,19,55,0.15)"}`,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {weergave === "overzicht" ? (
+        <div className="p-4 md:p-8">
+          <InkoopFacturenOverzicht facturen={data?.facturen ?? []} />
+        </div>
+      ) : (
       <div className="p-4 md:p-8 flex flex-col gap-6">
 
         {/* ── Bovenaan: wat moet je nog betalen ── */}
@@ -847,6 +926,7 @@ export default function InkoopFacturenContent() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -56,6 +56,10 @@ async function init() {
   // tweede scan over dezelfde mail voegt niets toe.
   await sql`ALTER TABLE inkoop_facturen ADD COLUMN IF NOT EXISTS gmail_message_id TEXT`;
   await sql`ALTER TABLE inkoop_facturen ADD COLUMN IF NOT EXISTS gmail_afzender TEXT DEFAULT ''`;
+  // Wanneer je op "betaald" klikte — met tijd, niet alleen de datum. `betaald_op`
+  // is een dagdatum en dat is te grof: markeer je er drie op één dag af, dan is de
+  // volgorde willekeurig en springt de factuur die je net aantikte niet naar boven.
+  await sql`ALTER TABLE inkoop_facturen ADD COLUMN IF NOT EXISTS betaald_gemarkeerd_op TIMESTAMPTZ`;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS inkoop_facturen_gmail_uniek
     ON inkoop_facturen (gmail_message_id) WHERE gmail_message_id IS NOT NULL
@@ -176,11 +180,18 @@ function mapRow(r: Record<string, unknown>): InkoopFactuur {
 
 export async function getInkoopFacturen(): Promise<InkoopFactuur[]> {
   await init();
-  // Open bovenaan, daarbinnen de oudste vervaldatum eerst — dat is de volgorde
-  // waarin je ze wilt betalen.
+  // Open bovenaan met de oudste vervaldatum eerst — dat is de volgorde waarin je
+  // ze wilt betalen. Daaronder de betaalde, met de laatst afgevinkte bovenaan:
+  // dan zie je meteen wat je net hebt afgehandeld in plaats van dat het onderaan
+  // de lijst verdwijnt.
   const rows = await sql`
     SELECT * FROM inkoop_facturen
-    ORDER BY (status = 'open') DESC, vervaldatum ASC NULLS LAST, aangemaakt DESC
+    ORDER BY
+      (status = 'open') DESC,
+      CASE WHEN status = 'open' THEN vervaldatum END ASC NULLS LAST,
+      CASE WHEN status <> 'open' THEN betaald_gemarkeerd_op END DESC NULLS LAST,
+      CASE WHEN status <> 'open' THEN betaald_op END DESC NULLS LAST,
+      aangemaakt DESC
   `;
   return rows.map(mapRow);
 }
@@ -243,6 +254,12 @@ export async function updateInkoopFactuur(id: string, data: Partial<InkoopFactuu
                         WHEN ${data.status ?? null}::text = 'betaald' THEN ${betaaldOp}
                         WHEN ${data.status ?? null}::text = 'open'    THEN NULL
                         ELSE betaald_op
+                      END,
+      -- Het moment van afvinken bepaalt de volgorde binnen de betaalde facturen.
+      betaald_gemarkeerd_op = CASE
+                        WHEN ${data.status ?? null}::text = 'betaald' THEN NOW()
+                        WHEN ${data.status ?? null}::text = 'open'    THEN NULL
+                        ELSE betaald_gemarkeerd_op
                       END
     WHERE id = ${id}
   `;
