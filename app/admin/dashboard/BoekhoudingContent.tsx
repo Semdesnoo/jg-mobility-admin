@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Banknote, Receipt, AlertTriangle, Info, Wallet, ArrowRight, ArrowLeftRight } from "lucide-react";
+import { Banknote, Receipt, AlertTriangle, Info, Wallet, ArrowRight, ArrowLeftRight, Sparkles, ExternalLink } from "lucide-react";
 
 /** Waar een waarschuwing je heen kan brengen om het recht te zetten. */
 type Herstelpunt = {
@@ -111,6 +111,54 @@ function Regel({ label, bedrag, teken = "", zwaar = false, kleur }: {
         {teken}{euro(Math.abs(bedrag))}
       </p>
     </div>
+  );
+}
+
+/**
+ * Snelkoppeling naar het AI-tegoed.
+ *
+ * De AI in dit dashboard — de omschrijvingen, de taxaties, de verkopersradar —
+ * loopt op tegoed bij Anthropic. Raakt dat op, dan stopt dat allemaal er middenin
+ * mee, en dan wil je niet eerst gaan zoeken waar je moet zijn. Vandaar hier, bij
+ * de rest van wat er betaald moet worden.
+ */
+function AiTegoed() {
+  const knop = (href: string, label: string, primair: boolean) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-bold transition-all hover:opacity-90"
+      style={{
+        backgroundColor: primair ? "#001337" : "#ffffff",
+        color: primair ? "#ffffff" : "#001337",
+        border: primair ? "1px solid #001337" : "1px solid rgba(0,19,55,0.15)",
+        fontFamily: "var(--font-inter)",
+      }}
+    >
+      {label} <ExternalLink size={11} />
+    </a>
+  );
+
+  return (
+    <Kaart titel="AI-tegoed" icon={Sparkles} toelichting="Waar de AI in dit dashboard op draait">
+      <div className="px-5 py-4">
+        <p className="text-[12px]" style={{ color: "rgba(0,19,55,0.6)", fontFamily: "var(--font-inter)", lineHeight: 1.7 }}>
+          Alles wat de AI hier doet — omschrijvingen schrijven, taxeren, de verkopersradar —
+          gaat van je tegoed bij Anthropic af. Is dat op, dan stopt dat er middenin mee.
+          Je koopt tegoed bij met een creditcard; het staat er direct op.
+        </p>
+        <div className="flex flex-wrap gap-2 mt-3.5">
+          {knop("https://console.anthropic.com/settings/billing", "Tegoed bijkopen", true)}
+          {knop("https://console.anthropic.com/settings/usage", "Verbruik bekijken", false)}
+          {knop("https://console.anthropic.com/settings/cost", "Kosten per dag", false)}
+        </div>
+        <p className="text-[11px] mt-3" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+          Inloggen met het account waar de API-sleutel van dit dashboard onder valt. Zet in de
+          Console ook <strong>auto-reload</strong> aan als je niet wilt dat het onverwacht opraakt.
+        </p>
+      </div>
+    </Kaart>
   );
 }
 
@@ -528,6 +576,12 @@ export default function BoekhoudingContent({ onNavigeer }: {
             )}
           </div>
         )}
+
+        {/* Buiten de laad-afhandeling hierboven: juist als de boekhouding niet
+            laadt wil je nog steeds bij je tegoed kunnen. */}
+        <div className="mt-6">
+          <AiTegoed />
+        </div>
       </div>
     </div>
   );
