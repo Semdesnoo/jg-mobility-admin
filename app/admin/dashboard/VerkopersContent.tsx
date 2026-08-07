@@ -332,9 +332,13 @@ const TEGELIJK = 3;
  */
 const DROOG_NA = 3;
 
-/** Noodrem tegen eindeloos doorrazen als er om wat voor reden dan ook steeds nieuwe
- *  URL's blijven komen. Elke ronde kost een AI-aanroep, dus dit moet een dak hebben. */
-const MAX_RONDES = 60;
+/**
+ * Noodrem tegen eindeloos doorrazen. Elke ronde kost een AI-aanroep plus het uitlezen
+ * van elke gevonden advertentie, dus dit moet een dak hebben — en dat dak stond te
+ * hoog. In de praktijk stopt hij ruim eerder omdat er niets nieuws meer bij komt;
+ * de rondes daarna leveren vooral advertenties op die je al had.
+ */
+const MAX_RONDES = 20;
 
 /**
  * De stopvlag van het doorzoeken, bewust buiten React.

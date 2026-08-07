@@ -97,11 +97,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     for (let i = 0; i < 4; i++) {
       const resp = await client.messages.create(
         {
-          model: "claude-opus-5",
+          // Sonnet 5 in plaats van Opus 5: dit is uitlezen, geen denkwerk — een paar
+          // velden overtikken uit een pagina die je hem aanreikt. Scheelt ruim de helft
+          // per advertentie, en dit is met afstand de duurste stap omdat hij per
+          // advertentie draait.
+          model: "claude-sonnet-5",
           max_tokens: 3000,
           thinking: { type: "adaptive" },
           output_config: { effort: "low" },
-          tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 3 }],
+          // Advertentiepagina's zijn enorm (een halve megabyte is normaal) en je betaalt
+          // per stuk tekst die erin gaat. Alles wat je nodig hebt — prijs, kilometers,
+          // verkoper — staat bovenin; de rest is menu's en aanbevelingen.
+          tools: [
+            { type: "web_fetch_20260209", name: "web_fetch", max_uses: 3, max_content_tokens: 12000 },
+          ],
           messages,
         },
         { signal: controller.signal }

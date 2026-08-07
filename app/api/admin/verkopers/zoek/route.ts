@@ -120,7 +120,10 @@ async function zoekKandidaten(
   for (let i = 0; i < 6; i++) {
     const resp = await client.messages.create(
       {
-        model: "claude-opus-5",
+        // Sonnet 5 in plaats van Opus 5. Deze stap verzamelt links; het oordeel of
+        // het echt een particulier is valt pas in de volgende stap. Scheelt ruim de
+        // helft, en bij "blijf zoeken" draait dit tientallen keren achter elkaar.
+        model: "claude-sonnet-5",
         // Ruim genoeg voor een lijst van dertig kandidaten; op vierduizend paste
         // die niet en brak het antwoord halverwege af.
         max_tokens: 8000,

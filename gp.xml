@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/merken.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/regio.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/filter.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/mapping.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/autobedrijven.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/portals.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/general.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://www.gaspedaal.nl/sitemap-v3/cms.xml.gz</loc>
+    <lastmod>2026-08-07</lastmod>
+  </sitemap>
+</sitemapindex>
