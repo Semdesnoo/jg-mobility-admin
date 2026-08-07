@@ -69,13 +69,23 @@ async function schrijfInstelling(key: string, waarde: string) {
  */
 async function kandidaten(inst: Instellingen, limiet: number): Promise<VerkoperLead[]> {
   const rijen = await sql`
-    SELECT * FROM verkoper_leads
-    WHERE status IN ('nieuw', 'goedgekeurd')
-      AND verstuurd_op IS NULL
-      AND email <> ''
-      AND particulier_score >= ${inst.minParticulier}
-      AND kans_score >= ${inst.minKans}
-    ORDER BY kans_score DESC, gevonden_op ASC
+    SELECT l.* FROM verkoper_leads l
+    WHERE l.status IN ('nieuw', 'goedgekeurd')
+      AND l.verstuurd_op IS NULL
+      AND l.email <> ''
+      AND l.particulier_score >= ${inst.minParticulier}
+      AND l.kans_score >= ${inst.minKans}
+      -- Al eens benaderd, al was het voor een andere auto? Dan valt hij hier al af
+      -- in plaats van bij het versturen. Scheelt een mislukte poging per ronde.
+      AND NOT EXISTS (
+        SELECT 1 FROM verkoper_contactlog c
+        WHERE c.lead_id <> l.id
+          AND (
+            (c.ontvanger_sleutel  <> '' AND c.ontvanger_sleutel  = lower(trim(l.email)))
+            OR (c.ontvanger_sleutel2 <> '' AND c.ontvanger_sleutel2 = lower(trim(l.email)))
+          )
+      )
+    ORDER BY l.kans_score DESC, l.gevonden_op ASC
     LIMIT ${limiet}
   `;
   return rijen as unknown as VerkoperLead[];

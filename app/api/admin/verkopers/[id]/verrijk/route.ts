@@ -5,6 +5,7 @@ import {
   initVerkopersDB,
   getLead,
   isGeblokkeerd,
+  isAlBenaderd,
   isGeldigNlTelefoon,
   isGeldigEmail,
 } from "@/lib/verkopers-db";
@@ -172,9 +173,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const afgekeurdEmail = ruweEmail && !nieuwEmail ? ruweEmail : lead.email && !email ? lead.email : "";
   if (afgekeurdTelefoon) afgekeurd.push(`telefoonnummer "${afgekeurdTelefoon}" leek onjuist`);
   if (afgekeurdEmail) afgekeurd.push(`e-mailadres "${afgekeurdEmail}" leek onjuist`);
-  const notitie = afgekeurd.length
+  let notitie = afgekeurd.length
     ? `Niet overgenomen uit de advertentie: ${afgekeurd.join(" en ")}. Controleer het zelf op de advertentie.`
     : lead.notitie;
+
+  // Nu de contactgegevens bekend zijn kunnen we pas zien of deze PERSOON al eerder
+  // is benaderd — bijvoorbeeld toen hij een andere auto te koop zette. Dat melden
+  // we hier al, zodat je het in de lijst ziet en er geen tijd in steekt.
+  const eerder = await isAlBenaderd(email, telefoon, id);
+  if (eerder.eerder) {
+    const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
+    notitie = `Deze verkoper is al benaderd op ${datum}${eerder.kanaal ? ` via ${eerder.kanaal}` : ""}, waarschijnlijk voor een andere auto. Er gaat geen tweede bericht uit.`;
+  }
 
   // Kwam er nu pas een e-mailadres of nummer boven water, dan moet de blokkadelijst
   // opnieuw langs — bij het zoeken viel er nog niets te controleren.

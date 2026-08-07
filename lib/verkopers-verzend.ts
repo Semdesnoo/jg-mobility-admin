@@ -1,7 +1,14 @@
 import { google } from "googleapis";
 import sql from "./db";
 import { getAuthedClient, getHandtekening } from "./gmail-client";
-import { getLead, isGeblokkeerd, isGeldigEmail, logContact, type VerkoperLead } from "./verkopers-db";
+import {
+  getLead,
+  isGeblokkeerd,
+  isGeldigEmail,
+  isAlBenaderd,
+  logContact,
+  type VerkoperLead,
+} from "./verkopers-db";
 
 /**
  * Verstuurt één bericht via Gmail (info@jgmobility.nl) en legt het vast.
@@ -147,6 +154,17 @@ export async function controleerVerzendbaar(
   if (lead.status === "verstuurd" || lead.status === "gereageerd" || lead.verstuurd_op) {
     return { reden: "Er is al een bericht naar deze verkoper gestuurd", status: 409 };
   }
+  // Dezelfde persoon, andere advertentie. De controle hierboven kijkt alleen naar
+  // déze lead; iemand die twee auto's te koop zet staat twee keer in de lijst en
+  // zou anders twee keer hetzelfde verhaal krijgen.
+  const eerder = await isAlBenaderd(lead.email, lead.telefoon, lead.id);
+  if (eerder.eerder) {
+    const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
+    return {
+      reden: `Deze verkoper is al benaderd op ${datum}${eerder.kanaal ? ` via ${eerder.kanaal}` : ""} — waarschijnlijk voor een andere auto. Niet nog een keer.`,
+      status: 409,
+    };
+  }
   // Tussen vinden en versturen kan iemand zich hebben afgemeld.
   if (await isGeblokkeerd(lead.email, lead.telefoon)) {
     return { reden: "Deze verkoper staat op de blokkadelijst", status: 403, geblokkeerd: true };
@@ -210,6 +228,8 @@ export async function verstuurBericht(
     onderwerp,
     inhoud: volledigBericht,
     advertentieUrl: lead.advertentie_url,
+    email: lead.email,
+    telefoon: lead.telefoon,
   }).catch(() => null);
 
   return { ok: true };

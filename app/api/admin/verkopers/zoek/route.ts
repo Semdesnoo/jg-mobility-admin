@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { initVerkopersDB, voegLeadToe } from "@/lib/verkopers-db";
+import { leesCriteria, criteriaAlsTekst, type Criteria } from "@/lib/verkopers-criteria";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,10 +47,13 @@ const JSON_VORM = `{
   "toelichting": "1-2 zinnen over wat je vond"
 }`;
 
-const ZOEK_PROMPT = (opdracht: string) =>
+const ZOEK_PROMPT = (opdracht: string, criteria: Criteria) =>
   `Je zoekt voor autobedrijf JG Mobility (Barendrecht) naar advertenties van PARTICULIEREN die hun auto zelf te koop hebben gezet.
 
 Zoekopdracht: "${opdracht}"
+
+VASTE ZOEKGRENZEN — deze gelden altijd, ook als de zoekopdracht hierboven iets anders suggereert:
+${criteriaAlsTekst(criteria)}
 
 Je taak in deze stap is beperkt en moet SNEL: verzamel links naar INDIVIDUELE advertenties. Je hoeft ze niet te openen en niet te controleren — een volgende stap doet dat per advertentie.
 
@@ -60,6 +64,7 @@ Wat je oplevert:
 - Neem ook overzichts-URL's NIET op — alleen pagina's van één specifieke auto.
 - Vul merk, model, bouwjaar, prijs en plaats in voor zover die uit het zoekresultaat blijken. Weet je iets niet, laat het leeg.
 - Maximaal 10 kandidaten. Liever 5 goede links dan 10 gokken.
+- Twijfel je of een advertentie binnen de zoekgrenzen valt (te ver weg, verkeerd land, buiten de prijsklasse)? Laat hem dan weg.
 
 Antwoord UITSLUITEND met dit JSON-object, zonder tekst eromheen:
 ${JSON_VORM}`;
@@ -135,15 +140,18 @@ export async function POST(req: Request) {
   }
 
   await initVerkopersDB();
+  const criteria = await leesCriteria();
   const client = new Anthropic({ apiKey });
 
   // Harde grens: Vercel kapt op 60s af. Wint de timeout, dan melden we dat eerlijk.
   // Terugvallen op modelkennis doen we hier bewust NIET — dat levert verzonnen
   // advertenties op, en die zijn schadelijker dan geen resultaat.
   const controller = new AbortController();
-  const zoeken = zoekKandidaten(client, ZOEK_PROMPT(zoekopdracht.trim()), controller.signal).catch(
-    () => ""
-  );
+  const zoeken = zoekKandidaten(
+    client,
+    ZOEK_PROMPT(zoekopdracht.trim(), criteria),
+    controller.signal
+  ).catch(() => "");
   const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 45000));
   const tekst = await Promise.race([zoeken, timeout]);
   controller.abort();
@@ -178,6 +186,20 @@ export async function POST(req: Request) {
       overgeslagen++;
       continue;
     }
+    // Prijsgrens ook hier nog eens nakijken. De AI houdt zich er meestal aan, maar
+    // een instructie is geen garantie en een lead buiten je klasse kost je tijd.
+    const prijs = Number(k.vraagprijs) || 0;
+    if (prijs > 0) {
+      if (criteria.prijsMin > 0 && prijs < criteria.prijsMin) {
+        overgeslagen++;
+        continue;
+      }
+      if (criteria.prijsMax > 0 && prijs > criteria.prijsMax) {
+        overgeslagen++;
+        continue;
+      }
+    }
+
     // De blokkadelijst wordt hier nog niet geraadpleegd: in deze fase kennen we
     // nog geen contactgegevens. De verrijkingsstap controleert het zodra die er zijn.
     const id = await voegLeadToe({

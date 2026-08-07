@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import VerkopersCriteria from "./VerkopersCriteria";
 import {
   T,
   micro,
@@ -435,6 +436,8 @@ function ZoekTab({
             </div>
           </div>
         </Panel>
+
+        <VerkopersCriteria onFout={onFout} />
 
         {resultaat && (
           <Panel title="Resultaat" icon={<Check size={14} color={T.groen} />}>

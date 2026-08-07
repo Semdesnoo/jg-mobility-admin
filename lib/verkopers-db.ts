@@ -126,6 +126,33 @@ export async function initVerkopersDB(): Promise<void> {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS verkoper_contactlog_lead_idx ON verkoper_contactlog (lead_id, verstuurd_op DESC)`.catch(() => null);
+
+  // Genormaliseerde ontvanger: het e-mailadres in kleine letters, of het
+  // telefoonnummer als kale landcode + cijfers. Dit is de sleutel waarmee we
+  // vaststellen of we een PERSOON al eens hebben benaderd.
+  //
+  // De unieke index op advertentie_url beschermt tegen dezelfde advertentie, maar
+  // niet tegen dezelfde verkoper met twee auto's te koop. Die krijgt anders twee
+  // keer een bericht van ons — precies wat je nooit wilt.
+  // Twee sleutels per regel — mail én telefoon — en niet twee regels, want dan zou
+  // één verzending twee keer in het verzendlog verschijnen.
+  await sql`ALTER TABLE verkoper_contactlog ADD COLUMN IF NOT EXISTS ontvanger_sleutel TEXT DEFAULT ''`;
+  await sql`ALTER TABLE verkoper_contactlog ADD COLUMN IF NOT EXISTS ontvanger_sleutel2 TEXT DEFAULT ''`;
+  await sql`
+    CREATE INDEX IF NOT EXISTS verkoper_contactlog_sleutel_idx
+    ON verkoper_contactlog (ontvanger_sleutel) WHERE ontvanger_sleutel <> ''
+  `.catch(() => null);
+  await sql`
+    CREATE INDEX IF NOT EXISTS verkoper_contactlog_sleutel2_idx
+    ON verkoper_contactlog (ontvanger_sleutel2) WHERE ontvanger_sleutel2 <> ''
+  `.catch(() => null);
+  // Bestaande regels alsnog van een sleutel voorzien, anders zou alles wat vóór
+  // deze wijziging is verstuurd niet meetellen in de dubbelcheck.
+  await sql`
+    UPDATE verkoper_contactlog
+    SET ontvanger_sleutel = lower(trim(ontvanger))
+    WHERE ontvanger_sleutel = '' AND ontvanger LIKE '%@%'
+  `.catch(() => null);
 }
 
 /** Telefoonnummers vergelijkbaar maken: alleen cijfers, 06… wordt 316…. */
@@ -227,6 +254,37 @@ export async function voegLeadToe(lead: Partial<VerkoperLead>): Promise<string |
   return (rijen[0]?.id as string) ?? null;
 }
 
+/**
+ * Is deze persoon al eens door ons benaderd — via welk kanaal dan ook?
+ *
+ * Kijkt naar het verzendlog en niet naar de leads, want dat log is het enige dat
+ * compleet blijft: leads worden verwijderd, en dezelfde verkoper kan met een
+ * tweede auto opnieuw in de lijst opduiken. Zonder deze controle krijgt iemand die
+ * twee auto's te koop zet gewoon twee keer hetzelfde verhaal van ons.
+ */
+export async function isAlBenaderd(
+  email: string,
+  telefoon: string,
+  negeerLeadId = ""
+): Promise<{ eerder: boolean; wanneer: string | null; kanaal: string }> {
+  const sleutels = [normaliseerEmail(email), normaliseerTelefoon(telefoon)].filter(Boolean);
+  if (sleutels.length === 0) return { eerder: false, wanneer: null, kanaal: "" };
+
+  const rijen = await sql`
+    SELECT kanaal, verstuurd_op FROM verkoper_contactlog
+    WHERE (ontvanger_sleutel = ANY(${sleutels}) OR ontvanger_sleutel2 = ANY(${sleutels}))
+      AND (${negeerLeadId} = '' OR lead_id <> ${negeerLeadId})
+    ORDER BY verstuurd_op DESC
+    LIMIT 1
+  `;
+  if (rijen.length === 0) return { eerder: false, wanneer: null, kanaal: "" };
+  return {
+    eerder: true,
+    wanneer: rijen[0].verstuurd_op as string,
+    kanaal: (rijen[0].kanaal as string) ?? "",
+  };
+}
+
 export async function logContact(data: {
   leadId: string;
   kanaal: string;
@@ -234,10 +292,25 @@ export async function logContact(data: {
   onderwerp: string;
   inhoud: string;
   advertentieUrl: string;
+  /** Mail én telefoon meegeven; beide worden vastgelegd als sleutel, zodat een
+   *  tweede advertentie van dezelfde persoon later herkend wordt. */
+  email?: string;
+  telefoon?: string;
 }): Promise<void> {
+  const email = normaliseerEmail(
+    data.email ?? (data.ontvanger.includes("@") ? data.ontvanger : "")
+  );
+  const telefoon = normaliseerTelefoon(data.telefoon ?? "");
+
   const id = `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   await sql`
-    INSERT INTO verkoper_contactlog (id, lead_id, kanaal, ontvanger, onderwerp, inhoud, advertentie_url)
-    VALUES (${id}, ${data.leadId}, ${data.kanaal}, ${data.ontvanger}, ${data.onderwerp}, ${data.inhoud}, ${data.advertentieUrl})
+    INSERT INTO verkoper_contactlog (
+      id, lead_id, kanaal, ontvanger, onderwerp, inhoud, advertentie_url,
+      ontvanger_sleutel, ontvanger_sleutel2
+    )
+    VALUES (
+      ${id}, ${data.leadId}, ${data.kanaal}, ${data.ontvanger}, ${data.onderwerp},
+      ${data.inhoud}, ${data.advertentieUrl}, ${email || telefoon}, ${email ? telefoon : ""}
+    )
   `;
 }

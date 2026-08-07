@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import sql from "@/lib/db";
-import { initVerkopersDB, getLead, blokkeer, logContact } from "@/lib/verkopers-db";
+import { initVerkopersDB, getLead, blokkeer, logContact, isAlBenaderd } from "@/lib/verkopers-db";
 
 export const dynamic = "force-dynamic";
 
@@ -49,21 +49,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (b.handmatig_verstuurd_via) {
       const kanaal = String(b.handmatig_verstuurd_via);
       const lead = await getLead(id);
+      if (!lead) return Response.json({ error: "Lead niet gevonden" }, { status: 404 });
+
+      // Ook hier de dubbelcheck. Meld je zelf een verzending, dan moet dezelfde
+      // grendel gelden als bij de mailknop — anders sluipt een dubbele benadering
+      // er alsnog via deze route in.
+      const eerder = await isAlBenaderd(lead.email, lead.telefoon, id);
+      if (eerder.eerder) {
+        const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
+        return Response.json(
+          { error: `Deze verkoper is al benaderd op ${datum} — waarschijnlijk voor een andere auto.` },
+          { status: 409 }
+        );
+      }
+
       await sql`
         UPDATE verkoper_leads
         SET status = 'verstuurd', verstuurd_op = NOW(), verstuurd_via = ${kanaal}
         WHERE id = ${id}
       `;
-      if (lead) {
-        await logContact({
-          leadId: id,
-          kanaal,
-          ontvanger: kanaal === "telefoon" ? lead.telefoon : lead.advertentie_url,
-          onderwerp: lead.onderwerp ?? "",
-          inhoud: lead.bericht_kort || lead.bericht_mail || "",
-          advertentieUrl: lead.advertentie_url,
-        }).catch(() => null);
-      }
+      await logContact({
+        leadId: id,
+        kanaal,
+        ontvanger: kanaal === "telefoon" ? lead.telefoon : lead.advertentie_url,
+        onderwerp: lead.onderwerp ?? "",
+        inhoud: lead.bericht_kort || lead.bericht_mail || "",
+        advertentieUrl: lead.advertentie_url,
+        email: lead.email,
+        telefoon: lead.telefoon,
+      }).catch(() => null);
     }
 
     return Response.json({ ok: true });
