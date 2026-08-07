@@ -6,6 +6,7 @@ import {
   getLead,
   isGeblokkeerd,
   isAlBenaderd,
+  verkoperSleutel,
   isGeldigNlTelefoon,
   isGeldigEmail,
 } from "@/lib/verkopers-db";
@@ -37,6 +38,16 @@ CONTACTGEGEVENS — harde regels:
 - Neem naam, telefoon en e-mail alleen over als ze LETTERLIJK en openbaar op de pagina staan.
 - Verzin niets en leid niets af. Staat het er niet, laat het veld leeg ("").
 - Een lege lead met een goede URL is bruikbaar; een verzonnen telefoonnummer is schadelijk.
+- BELANGRIJK: particulieren zetten hun telefoonnummer en e-mailadres vrijwel nooit in de advertentie;
+  alleen handelaren doen dat. Lege contactvelden zijn hier dus normaal en juist een aanwijzing dat je
+  met een particulier te maken hebt. Laat dat je particulier_score niet omlaag halen, en ga er niet
+  extra naar op zoek.
+
+VERKOPERSPROFIEL — dit veld doet er wél toe:
+Staat er een link naar de profiel- of verkoperspagina van deze verkoper (bijvoorbeeld
+marktplaats.nl/u/... of een "alle advertenties van deze verkoper"-link), neem die dan letterlijk
+over in "verkoper_profiel". Daarmee herkennen we dezelfde verkoper terug als hij nóg een auto te
+koop zet, zodat hij geen tweede bericht krijgt. Staat er geen link, laat het leeg.
 
 Lukt het niet om de pagina te openen of te lezen, zet dan "bereikbaar" op false en laat de rest leeg.
 
@@ -45,7 +56,7 @@ Antwoord UITSLUITEND met dit JSON-object:
   "bereikbaar": true,
   "titel": "", "merk": "", "model": "", "bouwjaar": "", "km": "", "brandstof": "",
   "vraagprijs": 0, "plaats": "",
-  "naam": "", "telefoon": "", "email": "",
+  "naam": "", "telefoon": "", "email": "", "verkoper_profiel": "",
   "particulier_score": 0, "kans_score": 0, "motivatie": ""
 }
 
@@ -189,7 +200,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // Nu de contactgegevens bekend zijn kunnen we pas zien of deze PERSOON al eerder
   // is benaderd — bijvoorbeeld toen hij een andere auto te koop zette. Dat melden
   // we hier al, zodat je het in de lijst ziet en er geen tijd in steekt.
-  const eerder = await isAlBenaderd(email, telefoon, id);
+  // Naam en plaats komen uit dit antwoord, dus de sleutel bouwen we hier op.
+  const naam = tekstveld(d.naam, lead.naam);
+  const plaats = tekstveld(d.plaats, lead.plaats);
+  const profiel = tekstveld(d.verkoper_profiel, lead.verkoper_profiel ?? "");
+  const wie = verkoperSleutel(profiel, naam, plaats);
+  const eerder = await isAlBenaderd(email, telefoon, id, wie);
   if (eerder.eerder) {
     const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
     notitie = `Deze verkoper is al benaderd op ${datum}${eerder.kanaal ? ` via ${eerder.kanaal}` : ""}, waarschijnlijk voor een andere auto. Er gaat geen tweede bericht uit.`;
@@ -213,8 +229,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       km = ${String(getal(d.km) || lead.km || "")},
       brandstof = ${tekstveld(d.brandstof, lead.brandstof)},
       vraagprijs = ${getal(d.vraagprijs) || lead.vraagprijs},
-      plaats = ${tekstveld(d.plaats, lead.plaats)},
-      naam = ${tekstveld(d.naam, lead.naam)},
+      plaats = ${plaats},
+      naam = ${naam},
+      verkoper_profiel = ${profiel},
       telefoon = ${telefoon},
       email = ${email},
       particulier_score = ${particulierScore},

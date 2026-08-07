@@ -39,10 +39,15 @@ export type VerkoperLead = {
   brandstof: string;
   vraagprijs: number;
   plaats: string;
-  // Contactgegevens zoals openbaar op de advertentie
+  // Contactgegevens zoals openbaar op de advertentie. Bij particulieren zijn telefoon
+  // en e-mail vrijwel altijd leeg — die zetten dat niet in hun advertentie.
   naam: string;
   telefoon: string;
   email: string;
+  /** Link naar de profielpagina van de verkoper op het platform, als die er stond.
+   *  Dit is de betrouwbaarste manier om dezelfde persoon bij een tweede advertentie
+   *  te herkennen. Zie {@link verkoperSleutel}. */
+  verkoper_profiel: string;
   // Beoordeling door de AI
   particulier_score: number;
   kans_score: number;
@@ -138,6 +143,16 @@ export async function initVerkopersDB(): Promise<void> {
   // één verzending twee keer in het verzendlog verschijnen.
   await sql`ALTER TABLE verkoper_contactlog ADD COLUMN IF NOT EXISTS ontvanger_sleutel TEXT DEFAULT ''`;
   await sql`ALTER TABLE verkoper_contactlog ADD COLUMN IF NOT EXISTS ontvanger_sleutel2 TEXT DEFAULT ''`;
+  // Derde sleutel: de verkoper zelf. E-mail en telefoon werken alleen bij handelaren
+  // — particulieren zetten die niet in hun advertentie, en juist die willen we niet
+  // twee keer benaderen. Deze sleutel is het profiel op het platform, of anders naam
+  // plus woonplaats.
+  await sql`ALTER TABLE verkoper_contactlog ADD COLUMN IF NOT EXISTS ontvanger_sleutel3 TEXT DEFAULT ''`;
+  await sql`ALTER TABLE verkoper_leads ADD COLUMN IF NOT EXISTS verkoper_profiel TEXT DEFAULT ''`;
+  await sql`
+    CREATE INDEX IF NOT EXISTS verkoper_contactlog_sleutel3_idx
+    ON verkoper_contactlog (ontvanger_sleutel3) WHERE ontvanger_sleutel3 <> ''
+  `.catch(() => null);
   await sql`
     CREATE INDEX IF NOT EXISTS verkoper_contactlog_sleutel_idx
     ON verkoper_contactlog (ontvanger_sleutel) WHERE ontvanger_sleutel <> ''
@@ -166,6 +181,26 @@ export function normaliseerTelefoon(nummer: string): string {
 
 export function normaliseerEmail(email: string): string {
   return (email || "").trim().toLowerCase();
+}
+
+/**
+ * Eén sleutel die deze verkoper aanwijst, ook zonder mailadres of telefoonnummer.
+ *
+ * Bij voorkeur zijn profielpagina op het platform — die is uniek en verandert niet.
+ * Staat die er niet, dan naam plus woonplaats. Dat is grover: twee keer een Jan uit
+ * Rotterdam wordt als dezelfde persoon gezien. Bewust die kant op: iemand ten
+ * onrechte overslaan kost je een lead, iemand twee keer benaderen kost je je goede
+ * naam. Bij alleen een voornaam zonder plaats geven we niets terug — dan is de kans
+ * op verwarring te groot om er iets aan op te hangen.
+ */
+export function verkoperSleutel(profielUrl: string, naam: string, plaats: string): string {
+  const profiel = (profielUrl || "").trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
+  if (profiel.startsWith("http")) return profiel;
+
+  const n = (naam || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const p = (plaats || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!n || !p) return "";
+  return `wie:${n}|${p}`;
 }
 
 /**
@@ -265,14 +300,23 @@ export async function voegLeadToe(lead: Partial<VerkoperLead>): Promise<string |
 export async function isAlBenaderd(
   email: string,
   telefoon: string,
-  negeerLeadId = ""
+  negeerLeadId = "",
+  /** De verkoper zelf — nodig bij particulieren, die geen mailadres of nummer in
+   *  hun advertentie zetten. Zie {@link verkoperSleutel}. */
+  wieSleutel = ""
 ): Promise<{ eerder: boolean; wanneer: string | null; kanaal: string }> {
-  const sleutels = [normaliseerEmail(email), normaliseerTelefoon(telefoon)].filter(Boolean);
+  const sleutels = [normaliseerEmail(email), normaliseerTelefoon(telefoon), wieSleutel].filter(
+    Boolean
+  );
   if (sleutels.length === 0) return { eerder: false, wanneer: null, kanaal: "" };
 
   const rijen = await sql`
     SELECT kanaal, verstuurd_op FROM verkoper_contactlog
-    WHERE (ontvanger_sleutel = ANY(${sleutels}) OR ontvanger_sleutel2 = ANY(${sleutels}))
+    WHERE (
+        ontvanger_sleutel  = ANY(${sleutels})
+     OR ontvanger_sleutel2 = ANY(${sleutels})
+     OR ontvanger_sleutel3 = ANY(${sleutels})
+      )
       AND (${negeerLeadId} = '' OR lead_id <> ${negeerLeadId})
     ORDER BY verstuurd_op DESC
     LIMIT 1
@@ -296,6 +340,9 @@ export async function logContact(data: {
    *  tweede advertentie van dezelfde persoon later herkend wordt. */
   email?: string;
   telefoon?: string;
+  /** De verkoper zelf, zie {@link verkoperSleutel}. Zonder dit blijft een particulier
+   *  met twee advertenties twee losse mensen, en krijgt hij twee keer een bericht. */
+  wieSleutel?: string;
 }): Promise<void> {
   const email = normaliseerEmail(
     data.email ?? (data.ontvanger.includes("@") ? data.ontvanger : "")
@@ -306,11 +353,12 @@ export async function logContact(data: {
   await sql`
     INSERT INTO verkoper_contactlog (
       id, lead_id, kanaal, ontvanger, onderwerp, inhoud, advertentie_url,
-      ontvanger_sleutel, ontvanger_sleutel2
+      ontvanger_sleutel, ontvanger_sleutel2, ontvanger_sleutel3
     )
     VALUES (
       ${id}, ${data.leadId}, ${data.kanaal}, ${data.ontvanger}, ${data.onderwerp},
-      ${data.inhoud}, ${data.advertentieUrl}, ${email || telefoon}, ${email ? telefoon : ""}
+      ${data.inhoud}, ${data.advertentieUrl}, ${email || telefoon}, ${email ? telefoon : ""},
+      ${data.wieSleutel ?? ""}
     )
   `;
 }

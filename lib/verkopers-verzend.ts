@@ -7,6 +7,7 @@ import {
   isGeldigEmail,
   isAlBenaderd,
   logContact,
+  verkoperSleutel,
   type VerkoperLead,
 } from "./verkopers-db";
 
@@ -157,7 +158,12 @@ export async function controleerVerzendbaar(
   // Dezelfde persoon, andere advertentie. De controle hierboven kijkt alleen naar
   // déze lead; iemand die twee auto's te koop zet staat twee keer in de lijst en
   // zou anders twee keer hetzelfde verhaal krijgen.
-  const eerder = await isAlBenaderd(lead.email, lead.telefoon, lead.id);
+  const eerder = await isAlBenaderd(
+    lead.email,
+    lead.telefoon,
+    lead.id,
+    verkoperSleutel(lead.verkoper_profiel ?? "", lead.naam, lead.plaats)
+  );
   if (eerder.eerder) {
     const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
     return {
@@ -230,6 +236,7 @@ export async function verstuurBericht(
     advertentieUrl: lead.advertentie_url,
     email: lead.email,
     telefoon: lead.telefoon,
+    wieSleutel: verkoperSleutel(lead.verkoper_profiel ?? "", lead.naam, lead.plaats),
   }).catch(() => null);
 
   return { ok: true };

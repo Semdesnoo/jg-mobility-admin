@@ -933,12 +933,22 @@ function AutopilotPaneel({
     >
       <p style={body(12.5)}>
         {auto.aan
-          ? "Na elke zoekopdracht schrijft en verstuurt de AI zelf, zonder tussenkomst. Alleen nieuwe verkopers die door alle controles komen."
-          : "Zet dit aan om de AI zelf te laten versturen bij nieuwe vondsten."}
+          ? "Na elke zoekopdracht mailt de AI zelf de nieuwe vondsten die door alle controles komen."
+          : "Zet dit aan om de AI zelf te laten mailen bij nieuwe vondsten."}
       </p>
-      <p className="mt-1.5" style={body(11.5, T.ink(0.45))}>
-        Wat jij met het vinkje hebt klaargezet blijft hier buiten — dat wacht op Nakijken tot jij op
-        versturen drukt.
+      <div
+        className="mt-2.5 px-3 py-2.5"
+        style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}
+      >
+        <p style={body(11.5, T.ink(0.65))}>
+          Werkt alleen bij een bekend e-mailadres, en dat hebben particulieren vrijwel nooit — die
+          zetten het niet in hun advertentie. In de praktijk gaat vrijwel alles via de berichtenbox,
+          en dat kan alleen met de hand. Verwacht hier dus weinig van.
+        </p>
+      </div>
+      <p className="mt-2" style={body(11.5, T.ink(0.45))}>
+        Wat jij met het vinkje hebt klaargezet blijft hier sowieso buiten — dat wacht op Nakijken tot
+        jij op versturen drukt.
       </p>
 
       <div className="grid grid-cols-3 gap-2.5 my-3">
@@ -1645,84 +1655,109 @@ function LeadDetail({
 
         {berichtMail && !schrijft && (
           <div className="flex flex-col gap-3">
-            <Field label="Onderwerp">
-              <input
-                value={onderwerp}
-                onChange={(e) => setOnderwerp(e.target.value)}
-                disabled={alVerstuurd}
-                style={inputStijl}
-              />
-            </Field>
-
-            <Field label="E-mailbericht" hint="Pas gerust aan — dit is precies wat verstuurd wordt.">
+            <Field
+              label={`Bericht voor de berichtenbox van ${lead.bron || "het platform"}`}
+              hint="Dit is wat je straks plakt. Pas gerust aan — er gaat precies dit heen."
+            >
               <textarea
-                value={berichtMail}
-                onChange={(e) => setBerichtMail(e.target.value)}
-                rows={12}
+                value={berichtKort}
+                onChange={(e) => setBerichtKort(e.target.value)}
+                rows={10}
                 disabled={alVerstuurd}
                 style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
               />
             </Field>
 
-            {berichtKort && (
-              <Field
-                label={`Kort bericht voor ${lead.bron || "het platform"}`}
-                hint="Voor de berichtenbox van de advertentiesite — plak dit daar handmatig in."
+            {/* De mailversie zit weggevouwen: die heb je alleen nodig als er
+                uitzonderlijk wél een adres in de advertentie stond. */}
+            <details>
+              <summary
+                className="cursor-pointer select-none py-1"
+                style={{ ...micro(T.ink(0.4)), listStyle: "revert" }}
               >
-                <textarea
-                  value={berichtKort}
-                  onChange={(e) => setBerichtKort(e.target.value)}
-                  rows={5}
-                  style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
-                />
-              </Field>
-            )}
+                Mailversie {email ? "" : "(geen adres bekend)"}
+              </summary>
+              <div className="flex flex-col gap-3 pt-2">
+                <Field label="Onderwerp">
+                  <input
+                    value={onderwerp}
+                    onChange={(e) => setOnderwerp(e.target.value)}
+                    disabled={alVerstuurd}
+                    style={inputStijl}
+                  />
+                </Field>
+                <Field label="E-mailbericht" hint="Hieronder komt automatisch je Gmail-handtekening.">
+                  <textarea
+                    value={berichtMail}
+                    onChange={(e) => setBerichtMail(e.target.value)}
+                    rows={10}
+                    disabled={alVerstuurd}
+                    style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
+                  />
+                </Field>
+              </div>
+            </details>
           </div>
         )}
       </Panel>
 
-      {/* Versturen */}
+      {/* Versturen — de berichtenbox is de hoofdroute, zie de toelichting onderaan */}
       {berichtMail && !alVerstuurd && (
         <Panel title="Versturen" icon={<Send size={14} color={T.navy} />}>
           <div className="flex flex-col gap-3">
-            <Field
-              label="E-mailadres verkoper"
-              hint={
-                email
-                  ? "De mail gaat vanaf info@jgmobility.nl; antwoorden komen in je gewone inbox."
-                  : "Niet bekend uit de advertentie. Vul in als je het hebt, of gebruik hieronder de berichtenbox van het platform."
-              }
-            >
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="nog niet bekend"
-                style={inputStijl}
-              />
-            </Field>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Btn onClick={verstuurMail} disabled={!email || verstuurt}>
-                {verstuurt ? <Spinner size={12} tone="donker" /> : <Mail size={12} />}
-                {verstuurt ? "Versturen…" : "Verstuur mail"}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Btn onClick={kopieerKort} size="lg">
+                {gekopieerd ? <Check size={13} /> : <Copy size={13} />}
+                {gekopieerd ? "Gekopieerd" : "1 · Kopieer bericht"}
               </Btn>
-
-              <Btn variant="ghost" onClick={kopieerKort}>
-                {gekopieerd ? <Check size={12} /> : <Copy size={12} />}
-                {gekopieerd ? "Gekopieerd" : "Kopieer kort bericht"}
-              </Btn>
-
+              <a href={lead.advertentie_url || undefined} target="_blank" rel="noopener noreferrer">
+                <Btn variant="ghost" size="lg" disabled={!lead.advertentie_url}>
+                  <ExternalLink size={13} /> 2 · Open advertentie
+                </Btn>
+              </a>
               <Btn
                 variant="ghost"
+                size="lg"
                 onClick={() => patch({ handmatig_verstuurd_via: "platform" })}
-                title="Gebruik dit nadat je het bericht zelf in de berichtenbox van het platform hebt geplaatst"
+                title="Klik dit nadat je het bericht in de berichtenbox hebt geplaatst"
               >
-                <Check size={12} /> Zelf verstuurd
+                <Check size={13} /> 3 · Verstuurd
               </Btn>
+            </div>
 
-              <Btn variant="ghost" onClick={geenInteresse} title="Op blokkadelijst en verwijderen">
-                <Trash2 size={12} /> Geen interesse
-              </Btn>
+            <p style={body(11.5, T.ink(0.45))}>
+              Kopieer het bericht, open de advertentie, plak het in de berichtenbox en druk daar op
+              verzenden. Klik daarna hier op <strong style={{ color: T.navy }}>Verstuurd</strong> —
+              dan komt hij in het verzendlog en krijgt deze verkoper nooit een tweede bericht.
+            </p>
+
+            <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
+              <Field
+                label="Of mailen — alleen als je een adres hebt"
+                hint={
+                  email
+                    ? "De mail gaat vanaf info@jgmobility.nl; antwoorden komen in je gewone inbox."
+                    : "Particulieren zetten hun adres niet in de advertentie. Weet je het uit een reactie, vul het dan hier in."
+                }
+              >
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="nog niet bekend"
+                  style={inputStijl}
+                />
+              </Field>
+
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                <Btn variant="ghost" onClick={verstuurMail} disabled={!email || verstuurt}>
+                  {verstuurt ? <Spinner size={12} /> : <Mail size={12} />}
+                  {verstuurt ? "Versturen…" : "Verstuur mail"}
+                </Btn>
+
+                <Btn variant="ghost" onClick={geenInteresse} title="Op blokkadelijst en verwijderen">
+                  <Trash2 size={12} /> Geen interesse
+                </Btn>
+              </div>
             </div>
           </div>
           <div className="mt-1" />

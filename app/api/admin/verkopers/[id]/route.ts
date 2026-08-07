@@ -1,6 +1,13 @@
 import { NextRequest } from "next/server";
 import sql from "@/lib/db";
-import { initVerkopersDB, getLead, blokkeer, logContact, isAlBenaderd } from "@/lib/verkopers-db";
+import {
+  initVerkopersDB,
+  getLead,
+  blokkeer,
+  logContact,
+  isAlBenaderd,
+  verkoperSleutel,
+} from "@/lib/verkopers-db";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +61,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Ook hier de dubbelcheck. Meld je zelf een verzending, dan moet dezelfde
       // grendel gelden als bij de mailknop — anders sluipt een dubbele benadering
       // er alsnog via deze route in.
-      const eerder = await isAlBenaderd(lead.email, lead.telefoon, id);
+      // De verkopersleutel is hier het belangrijkst: dit is de route die een
+      // bericht via de berichtenbox vastlegt, en daar is per definitie geen
+      // mailadres of telefoonnummer bij.
+      const wie = verkoperSleutel(lead.verkoper_profiel ?? "", lead.naam, lead.plaats);
+      const eerder = await isAlBenaderd(lead.email, lead.telefoon, id, wie);
       if (eerder.eerder) {
         const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
         return Response.json(
@@ -77,6 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         advertentieUrl: lead.advertentie_url,
         email: lead.email,
         telefoon: lead.telefoon,
+        wieSleutel: wie,
       }).catch(() => null);
     }
 

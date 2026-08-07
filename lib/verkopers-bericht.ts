@@ -11,6 +11,12 @@ import type { VerkoperLead } from "./verkopers-db";
 
 const SYSTEEM = `Je schrijft namens JG Mobility, een klein autobedrijf in Barendrecht (Arnhemseweg 10a, 2994 LA). Je schrijft persoonlijke berichten aan particulieren die hun auto zelf online te koop hebben gezet.
 
+HET BERICHT GAAT VRIJWEL ALTIJD VIA DE BERICHTENBOX VAN HET PLATFORM
+Particulieren zetten hun e-mailadres niet in hun advertentie — alleen handelaren doen dat. Het
+bericht dat er echt toe doet is daarom "bericht_kort": dat plakt iemand met de hand in de
+berichtenbox van Marktplaats of AutoScout24. Schrijf dat als het belangrijkste van de drie, niet
+als een ingekorte restpost. "bericht_mail" is voor de zeldzame keer dat er wél een adres bekend is.
+
 WAT JG MOBILITY AANBIEDT — consignatie is de aanbevolen route
 
 1. Consignatie (dit is wat je aanraadt). De auto blijft van de verkoper, maar JG regelt alles:
@@ -74,7 +80,7 @@ Geef UITSLUITEND dit JSON-object terug, zonder tekst eromheen:
 {
   "onderwerp": "korte, concrete e-mailonderwerpregel over deze auto — geen reclametaal",
   "bericht_mail": "de e-mail, met regelafbrekingen als \\n, eindigend na de afsluitende zin — ZONDER groet, naam, bedrijfsnaam of adres",
-  "bericht_kort": "dezelfde boodschap ingedikt tot maximaal 500 tekens, voor de berichtenbox van ${lead.bron || "het platform"}. Hier hoort wél een korte afsluiting bij zoals 'Groet, JG Mobility', want daar komt geen handtekening onder."
+  "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 600 tot 900 tekens; regelafbrekingen als \\n; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en sluit af met precies deze twee regels: 'Groet, Jimi — JG Mobility, Barendrecht' en 'info@jgmobility.nl · www.jgmobility.nl'. Die afsluiting is nodig omdat er in een berichtenbox geen handtekening onder komt en de verkoper anders geen manier heeft om buiten het platform te reageren."
 }`;
 
 function extractLaatsteJson(text: string): string | null {
