@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
+import AppBijwerken from "./AppBijwerken";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -43,6 +44,7 @@ export default function RootLayout({
     <html lang="nl" className={`${playfair.variable} ${inter.variable}`}>
       <body className="h-full w-full flex flex-col overflow-hidden">
         <main className="flex-1">{children}</main>
+        <AppBijwerken />
       </body>
     </html>
   );

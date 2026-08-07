@@ -34,6 +34,7 @@ import {
   Bell,
   Banknote,
   ChevronRight,
+  Radar,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -46,9 +47,10 @@ import MerkAnalyseContent from "./MerkAnalyseContent";
 import BoekhoudingContent from "./BoekhoudingContent";
 import InkoopFacturenContent from "./InkoopFacturenContent";
 import SocialContent from "./SocialContent";
+import VerkopersContent from "./VerkopersContent";
 import GmailWidget from "./GmailWidget";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers";
 
 type Auto = {
   id: number;
@@ -105,6 +107,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
+      { id: "verkopers",  label: "Verkopersradar",   icon: Radar },
       { id: "afspraken",  label: "Afspraken",        icon: Calendar },
       { id: "molibox",    label: "Molibox",          icon: LayoutGrid },
     ],
@@ -494,6 +497,7 @@ export default function DashboardHub() {
         {tab === "afspraken" && <AfsprakenContent />}
         {tab === "inkoop" && <InkoopContent />}
         {tab === "cosignatie" && <CosignatieContent />}
+        {tab === "verkopers" && <VerkopersContent />}
         {tab === "facturen" && <FacturenContent />}
         {tab === "calculator" && <CalculatorContent focus={navFocus} onFocusGebruikt={() => setNavFocus(null)} />}
         {tab === "statistieken" && <StatistiekenContent />}
