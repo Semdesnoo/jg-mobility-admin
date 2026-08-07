@@ -19,6 +19,10 @@ import {
   Plus,
   RefreshCw,
   Zap,
+  // Onder een eigen naam: `Infinity` is ook een ingebouwde waarde in JavaScript, en
+  // die wil je in dit bestand niet overschaduwen.
+  Infinity as Oneindig,
+  Square,
   ScrollText,
   GraduationCap,
   ChevronDown,
@@ -319,6 +323,29 @@ const ZOEKRONDES = 3;
  *  functie op Vercel, dus dit mag; hoger dan dit gaat de advertentiesite merken. */
 const TEGELIJK = 3;
 
+/**
+ * Doorzoeken stopt als zóveel rondes achter elkaar niets nieuws opleveren.
+ *
+ * Eén lege ronde zegt weinig: de merken wisselen per ronde, dus je kunt net een
+ * groepje treffen waar toevallig niets van te koop staat. Drie op rij betekent dat
+ * de vijver binnen jouw zoekgrenzen echt leeg is.
+ */
+const DROOG_NA = 3;
+
+/** Noodrem tegen eindeloos doorrazen als er om wat voor reden dan ook steeds nieuwe
+ *  URL's blijven komen. Elke ronde kost een AI-aanroep, dus dit moet een dak hebben. */
+const MAX_RONDES = 60;
+
+/**
+ * De stopvlag van het doorzoeken, bewust buiten React.
+ *
+ * De zoektocht draait in de takenlaag en loopt door als je naar een ander scherm
+ * gaat. Kom je terug, dan is dit paneel opnieuw opgebouwd en is elke `useRef` van
+ * daarvoor weg — een stopknop die op zo'n ref leunt zou dan niets meer doen. Deze
+ * ene gedeelde doos overleeft dat.
+ */
+const doorzoekVlag = { stop: false };
+
 function ZoekTab({
   herlaad,
   gaNaarLeads,
@@ -341,6 +368,20 @@ function ZoekTab({
   const fase = taak?.stap ?? "";
   const resultaat = taak?.bezig ? null : (taak?.resultaat ?? null);
   const autoLog = resultaat?.autoLog ?? [];
+  // Uit het etiket van de lopende taak, niet uit een eigen toestand: dit paneel kan
+  // opnieuw zijn opgebouwd terwijl de zoektocht al draaide.
+  const doorlopend = taak?.label === "Doorlopend zoeken";
+
+  // Of jij om stoppen hebt gevraagd. Alleen voor de knop; de zoektocht zelf leest de
+  // gedeelde vlag, want die overleeft het opnieuw opbouwen van dit paneel.
+  const [stopGevraagd, setStopGevraagd] = useState(false);
+
+  /** Vraagt de lopende zoektocht om na deze ronde te stoppen. Midden in een ronde
+   *  afbreken kan niet netjes — een halve uitleesronde levert leads zonder scores op. */
+  const stopZoeken = () => {
+    doorzoekVlag.stop = true;
+    setStopGevraagd(true);
+  };
 
   const laadAutopilot = useCallback(async () => {
     const res = await fetch("/api/admin/verkopers/autopilot");
@@ -399,100 +440,224 @@ function ZoekTab({
     });
   };
 
+  /** Wat één zoekronde plus het uitlezen ervan oplevert. */
+  type RondeOogst = {
+    gevonden: number;
+    weg: number;
+    mislukt: number;
+    overgeslagen: number;
+    merken: string[];
+    toelichting: string;
+    fout: string;
+  };
+
+  /**
+   * Eén ronde: zoeken naar advertentielinks, en die daarna openen en uitlezen.
+   *
+   * Het uitlezen zit hier bewust in dezelfde ronde. Doe je eerst álle zoekrondes en
+   * pas daarna het uitlezen, dan zie je bij doorzoeken uren niets in je lijst staan.
+   * Nu groeit de lijst gestaag mee terwijl hij doorwerkt.
+   */
+  const eenRonde = async (
+    stap: (t: string) => void,
+    label: string
+  ): Promise<RondeOogst> => {
+    const oogst: RondeOogst = {
+      gevonden: 0, weg: 0, mislukt: 0, overgeslagen: 0, merken: [], toelichting: "", fout: "",
+    };
+
+    stap(`${label} — zoeken`);
+    let ids: string[] = [];
+    try {
+      const res = await fetch("/api/admin/verkopers/zoek", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        oogst.fout = data.error || "Zoeken mislukt";
+        return oogst;
+      }
+      ids = Array.isArray(data.nieuwe_ids) ? data.nieuwe_ids : [];
+      oogst.gevonden = ids.length;
+      oogst.overgeslagen = data.overgeslagen ?? 0;
+      if (Array.isArray(data.merken)) oogst.merken = data.merken;
+      if (data.toelichting) oogst.toelichting = data.toelichting;
+    } catch (e) {
+      oogst.fout = String(e);
+      return oogst;
+    }
+
+    if (ids.length === 0) return oogst;
+
+    // Elke advertentie apart openen — samen past het niet binnen de tijd die Vercel
+    // per verzoek geeft — maar wel een paar tegelijk. Strikt achter elkaar duurde
+    // dertig advertenties een kwartier.
+    //
+    // Weggevallen = de lead bestaat niet meer: handelaar of geblokkeerd. Een
+    // advertentie die niet te openen was blijft wél in de lijst staan, met een
+    // aantekening, en telt dus niet als afgevallen.
+    let gedaan = 0;
+    const wachtrij = [...ids];
+
+    const werker = async () => {
+      for (;;) {
+        const id = wachtrij.shift();
+        if (!id) return;
+        try {
+          const vr = await fetch(`/api/admin/verkopers/${id}/verrijk`, { method: "POST" });
+          const vd = await vr.json().catch(() => ({}));
+          if (!vr.ok) oogst.mislukt++;
+          else if (vd?.handelaar || vd?.geblokkeerd) oogst.weg++;
+          else if (vd?.bereikbaar === false) oogst.mislukt++;
+        } catch {
+          /* één mislukte advertentie mag de rest niet blokkeren */
+          oogst.mislukt++;
+        }
+        gedaan++;
+        stap(`${label} — advertentie ${gedaan} van ${ids.length} uitlezen`);
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(TEGELIJK, ids.length) }, werker));
+    await herlaad();
+    return oogst;
+  };
+
+  /** Telt de oogst van een ronde op bij de lopende totalen. */
+  const tel = (
+    totaal: { ids: number; weg: number; mislukt: number; overgeslagen: number },
+    o: RondeOogst
+  ) => {
+    totaal.ids += o.gevonden;
+    totaal.weg += o.weg;
+    totaal.mislukt += o.mislukt;
+    totaal.overgeslagen += o.overgeslagen;
+  };
+
   const zoek = () => {
     if (bezig) return;
     onFout("");
+    doorzoekVlag.stop = false;
+    setStopGevraagd(false);
     const autopilotAan = auto?.aan ?? false;
 
     start("Verkopers zoeken", async (stap) => {
       const log: string[] = [];
-
-      // ── Fase 1 — advertentielinks verzamelen ──
-      // Meerdere rondes achter elkaar. Elke ronde krijgt van de server een ander
-      // stel merken, dus drie rondes leveren een veel bredere vangst dan één. Ze
-      // moeten na elkaar: één ronde vult al bijna de tijd die Vercel per verzoek geeft.
-      const ids: string[] = [];
+      const totaal = { ids: 0, weg: 0, mislukt: 0, overgeslagen: 0 };
       const merken: string[] = [];
-      let overgeslagen = 0;
       let toelichting = "";
       let laatsteFout = "";
 
       for (let ronde = 1; ronde <= ZOEKRONDES; ronde++) {
-        stap(`Zoekronde ${ronde} van ${ZOEKRONDES}`);
-        try {
-          const res = await fetch("/api/admin/verkopers/zoek", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            laatsteFout = data.error || "Zoeken mislukt";
-            log.push(`Ronde ${ronde}: niets gevonden`);
-            continue;
-          }
-          const nieuw: string[] = Array.isArray(data.nieuwe_ids) ? data.nieuwe_ids : [];
-          ids.push(...nieuw);
-          overgeslagen += data.overgeslagen ?? 0;
-          if (Array.isArray(data.merken)) merken.push(...data.merken);
-          if (data.toelichting) toelichting = data.toelichting;
-          log.push(`Ronde ${ronde}: ${nieuw.length} nieuwe advertenties`);
-        } catch (e) {
-          laatsteFout = String(e);
-          log.push(`Ronde ${ronde}: mislukt`);
-        }
+        if (doorzoekVlag.stop) break;
+        const o = await eenRonde(stap, `Ronde ${ronde} van ${ZOEKRONDES}`);
+        tel(totaal, o);
+        merken.push(...o.merken);
+        if (o.toelichting) toelichting = o.toelichting;
+        if (o.fout) laatsteFout = o.fout;
+        log.push(
+          o.fout ? `Ronde ${ronde}: ${o.fout}` : `Ronde ${ronde}: ${o.gevonden} nieuwe advertenties`
+        );
       }
 
       // Alleen een échte storing is een fout. Rondes die netjes verliepen maar alleen
       // al bekende advertenties opleverden zijn een normale uitkomst — daar hoort geen
       // rode melding bij, en de autopilot hieronder moet gewoon nog draaien.
-      if (ids.length === 0 && laatsteFout) throw new Error(laatsteFout);
+      if (totaal.ids === 0 && laatsteFout) throw new Error(laatsteFout);
 
-      // ── Fase 2 — elke advertentie openen en uitlezen ──
-      // Eén verzoek per advertentie (samen past het niet binnen de tijd van Vercel),
-      // maar wel een paar tegelijk. Strikt achter elkaar duurde dertig advertenties
-      // een kwartier; zo is het een kwestie van minuten.
-      // Weggevallen = de lead is er niet meer: handelaar of geblokkeerd. Een
-      // advertentie die niet te openen was blijft wél staan (met een aantekening),
-      // dus die telt niet mee — anders klopt het aantal niet met wat je in de lijst ziet.
-      let weg = 0;
-      let mislukt = 0;
-      let gedaan = 0;
-      const wachtrij = [...ids];
-
-      const werker = async () => {
-        for (;;) {
-          const id = wachtrij.shift();
-          if (!id) return;
-          try {
-            const vr = await fetch(`/api/admin/verkopers/${id}/verrijk`, { method: "POST" });
-            const vd = await vr.json().catch(() => ({}));
-            if (!vr.ok) mislukt++;
-            else if (vd?.handelaar || vd?.geblokkeerd) weg++;
-            else if (vd?.bereikbaar === false) mislukt++;
-          } catch {
-            /* één mislukte advertentie mag de rest niet blokkeren */
-            mislukt++;
-          }
-          gedaan++;
-          stap(`Advertentie ${gedaan} van ${ids.length} controleren`);
-        }
-      };
-
-      await Promise.all(Array.from({ length: Math.min(TEGELIJK, ids.length) }, werker));
-      await herlaad();
-
-      // ── Fase 3 — staat de autopilot aan, dan gaan de berichten meteen de deur uit ──
       const automatischVerstuurd = autopilotAan ? await draaiAutopilot(stap, log) : 0;
 
       return {
-        toegevoegd: Math.max(0, ids.length - weg),
-        overgeslagen,
-        gecontroleerd: ids.length,
-        afgevallen: weg,
-        nietUitgelezen: mislukt,
+        toegevoegd: Math.max(0, totaal.ids - totaal.weg),
+        overgeslagen: totaal.overgeslagen,
+        gecontroleerd: totaal.ids,
+        afgevallen: totaal.weg,
+        nietUitgelezen: totaal.mislukt,
         automatischVerstuurd,
         toelichting,
+        merken: [...new Set(merken)],
+        autoLog: log,
+      };
+    });
+  };
+
+  /**
+   * Blijven zoeken tot de vijver leeg is.
+   *
+   * Hij draait ronde na ronde door — elke ronde met andere merken — en stopt vanzelf
+   * zodra er drie keer achter elkaar niets nieuws meer bij komt. Dat is het teken dat
+   * hij binnen jouw zoekgrenzen alles heeft gehad. Je kunt hem op elk moment zelf
+   * stoppen, en ondertussen gewoon doorwerken: de lijst bij Verkopers groeit mee.
+   */
+  const blijfZoeken = () => {
+    if (bezig) return;
+    onFout("");
+    doorzoekVlag.stop = false;
+    setStopGevraagd(false);
+    const autopilotAan = auto?.aan ?? false;
+
+    start("Doorlopend zoeken", async (stap) => {
+      const log: string[] = [];
+      const totaal = { ids: 0, weg: 0, mislukt: 0, overgeslagen: 0 };
+      const merken: string[] = [];
+      let laatsteFout = "";
+      let droog = 0;
+      let ronde = 0;
+      let reden = "";
+
+      while (ronde < MAX_RONDES) {
+        if (doorzoekVlag.stop) {
+          reden = "Gestopt door jou.";
+          break;
+        }
+        ronde++;
+
+        const bruikbaar = totaal.ids - totaal.weg;
+        const o = await eenRonde(stap, `Ronde ${ronde} · ${bruikbaar} verkopers`);
+        tel(totaal, o);
+        merken.push(...o.merken);
+        // De toelichting per ronde slaan we hier niet op: aan het eind zegt de reden
+        // waaróm hij stopte je meer dan wat de laatste ronde toevallig opmerkte.
+
+        if (o.fout) {
+          laatsteFout = o.fout;
+          log.push(`Ronde ${ronde}: ${o.fout}`);
+          // Een storing telt mee als lege ronde. Blijft de sleutel geweigerd worden,
+          // dan stopt hij zo vanzelf in plaats van zestig keer hetzelfde te proberen.
+          droog++;
+        } else if (o.gevonden === 0) {
+          droog++;
+          log.push(`Ronde ${ronde}: niets nieuws (${droog}× op rij)`);
+        } else {
+          droog = 0;
+          log.push(`Ronde ${ronde}: ${o.gevonden} nieuwe advertenties`);
+        }
+
+        if (droog >= DROOG_NA) {
+          reden = laatsteFout
+            ? `Gestopt na ${DROOG_NA} rondes zonder resultaat. Laatste melding: ${laatsteFout}`
+            : `Klaar — ${DROOG_NA} rondes achter elkaar niets nieuws. Binnen deze zoekgrenzen is alles gehad.`;
+          break;
+        }
+      }
+
+      if (!reden) reden = `Gestopt bij de grens van ${MAX_RONDES} rondes.`;
+      log.push(reden);
+
+      if (totaal.ids === 0 && laatsteFout) throw new Error(laatsteFout);
+
+      const automatischVerstuurd = autopilotAan ? await draaiAutopilot(stap, log) : 0;
+
+      return {
+        toegevoegd: Math.max(0, totaal.ids - totaal.weg),
+        overgeslagen: totaal.overgeslagen,
+        gecontroleerd: totaal.ids,
+        afgevallen: totaal.weg,
+        nietUitgelezen: totaal.mislukt,
+        automatischVerstuurd,
+        toelichting: reden,
         merken: [...new Set(merken)],
         autoLog: log,
       };
@@ -529,18 +694,53 @@ function ZoekTab({
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <Btn onClick={zoek} disabled={bezig} size="lg">
-                {bezig ? <Spinner size={13} tone="donker" /> : <Radar size={13} />}
-                {bezig ? "Aan het zoeken…" : "Zoek verkopers"}
-              </Btn>
-              {bezig && (
-                <span style={body(11.5, T.ink(0.45))}>
-                  {fase} — {ZOEKRONDES} zoekrondes achter elkaar, daarna wordt elke advertentie apart
-                  geopend. Reken op een paar minuten. Je kunt gerust doorklikken; hij gaat door.
-                </span>
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              {bezig ? (
+                <>
+                  <Btn onClick={stopZoeken} variant="ghost" size="lg" disabled={stopGevraagd}>
+                    <Square size={12} /> {stopGevraagd ? "Stopt na deze ronde…" : "Stop met zoeken"}
+                  </Btn>
+                  <span className="flex items-center gap-2" style={body(12, T.navy)}>
+                    <Spinner size={13} />
+                    {fase || (doorlopend ? "Doorlopend zoeken…" : "Aan het zoeken…")}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Btn onClick={blijfZoeken} size="lg">
+                    <Oneindig size={14} /> Blijf zoeken
+                  </Btn>
+                  <Btn onClick={zoek} variant="ghost" size="lg">
+                    <Radar size={13} /> Eén ronde
+                  </Btn>
+                </>
               )}
             </div>
+
+            <p style={body(11.5, T.ink(0.45))}>
+              {bezig ? (
+                doorlopend ? (
+                  <>
+                    Hij blijft rondes draaien met steeds andere merken, en stopt vanzelf als er{" "}
+                    {DROOG_NA} keer op rij niets nieuws meer bij komt. De lijst bij Verkopers groeit
+                    ondertussen mee — je kunt daar gewoon al beginnen met beoordelen.
+                  </>
+                ) : (
+                  <>
+                    {ZOEKRONDES} rondes achter elkaar, en elke gevonden advertentie wordt apart
+                    geopend. Reken op een paar minuten. Je kunt gerust doorklikken; hij gaat door.
+                  </>
+                )
+              ) : (
+                <>
+                  <strong style={{ color: T.navy }}>Blijf zoeken</strong> gaat net zo lang door tot
+                  hij alle particulieren binnen deze grenzen heeft gehad — dat duurt lang, maar je
+                  kunt ondertussen doorwerken en op elk moment stoppen.{" "}
+                  <strong style={{ color: T.navy }}>Eén ronde</strong> is een snelle greep van een
+                  paar minuten.
+                </>
+              )}
+            </p>
           </div>
         </Panel>
 
