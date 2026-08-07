@@ -76,6 +76,40 @@ export async function getTokenInfo(): Promise<{
   }
 }
 
+/**
+ * De handtekening zoals die in Gmail zelf is ingesteld, als HTML.
+ *
+ * Bewust ophalen in plaats van in de code zetten: pas je hem in Gmail aan — nieuw
+ * telefoonnummer, andere openingstijden — dan gaat dat vanzelf mee. Een tweede
+ * versie in de code zou binnen een half jaar afwijken van de echte.
+ *
+ * `sendAs.list` geeft een verkorte weergave terug waarin de handtekening kan
+ * ontbreken; daarom halen we het adres daarna nog los op.
+ */
+export async function getHandtekening(): Promise<string> {
+  try {
+    const { google } = await import("googleapis");
+    const gmail = google.gmail({ version: "v1", auth: await getAuthedClient() });
+
+    const lijst = await gmail.users.settings.sendAs.list({ userId: "me" });
+    const adressen = lijst.data.sendAs ?? [];
+    const primair =
+      adressen.find((a) => a.isPrimary) ?? adressen.find((a) => a.isDefault) ?? adressen[0];
+    if (!primair?.sendAsEmail) return "";
+
+    if (primair.signature) return primair.signature;
+
+    const volledig = await gmail.users.settings.sendAs.get({
+      userId: "me",
+      sendAsEmail: primair.sendAsEmail,
+    });
+    return volledig.data.signature ?? "";
+  } catch {
+    // Geen handtekening kunnen ophalen mag nooit een verzending tegenhouden.
+    return "";
+  }
+}
+
 export async function saveTokens(tokens: object): Promise<void> {
   const value = JSON.stringify(tokens);
   await sql`

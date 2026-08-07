@@ -26,7 +26,12 @@ OPBOUW
 1. Eén zin: je zag de advertentie, en noem de auto concreet.
 2. Eén zin: JG heeft interesse — je wilt een bod doen of over de verkoop meedenken.
 3. Twee tot drie zinnen: consignatie uitgelegd in gewone taal, met de winst voor de verkoper (meer bereik, sneller verkocht, betere prijs, geen gedoe met bezichtigingen).
-4. Afsluiting met de vervolgstap en de ondertekening.
+4. Eén afsluitende zin met de vervolgstap. STOP DAARNA.
+
+GEEN AFSLUITING SCHRIJVEN
+Eindig na die laatste zin. Schrijf géén "Met vriendelijke groet", géén naam, géén bedrijfsnaam,
+géén adres, géén telefoonnummer en géén website eronder. De vaste handtekening van JG Mobility
+wordt automatisch onder de mail geplakt; schrijf je er zelf ook een, dan staat die er twee keer.
 
 NOOIT
 - Niet doen alsof er al contact is geweest.
@@ -50,8 +55,8 @@ Wat opviel: ${lead.motivatie || "—"}
 Geef UITSLUITEND dit JSON-object terug, zonder tekst eromheen:
 {
   "onderwerp": "korte, concrete e-mailonderwerpregel over deze auto — geen reclametaal",
-  "bericht_mail": "de volledige e-mail, met regelafbrekingen als \\n, ondertekend met JG Mobility",
-  "bericht_kort": "dezelfde boodschap ingedikt tot maximaal 500 tekens, voor de berichtenbox van ${lead.bron || "het platform"} — geen ondertekening met adres, wel de naam JG Mobility"
+  "bericht_mail": "de e-mail, met regelafbrekingen als \\n, eindigend na de afsluitende zin — ZONDER groet, naam, bedrijfsnaam of adres",
+  "bericht_kort": "dezelfde boodschap ingedikt tot maximaal 500 tekens, voor de berichtenbox van ${lead.bron || "het platform"}. Hier hoort wél een korte afsluiting bij zoals 'Groet, JG Mobility', want daar komt geen handtekening onder."
 }`;
 
 function extractLaatsteJson(text: string): string | null {

@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import sql from "./db";
-import { getAuthedClient } from "./gmail-client";
+import { getAuthedClient, getHandtekening } from "./gmail-client";
 import { getLead, isGeblokkeerd, isGeldigEmail, logContact, type VerkoperLead } from "./verkopers-db";
 
 /**
@@ -17,10 +17,94 @@ function codeerOnderwerp(onderwerp: string): string {
   return `=?UTF-8?B?${Buffer.from(onderwerp, "utf-8").toString("base64")}?=`;
 }
 
+/**
+ * De verplichte afmeldregel. Kort en onderaan, onder de handtekening: het hoort
+ * er juridisch te staan, maar het is geen onderdeel van de boodschap.
+ */
 const AFMELDREGEL = (advertentieUrl: string) =>
-  `\n\n—\nJG Mobility · Arnhemseweg 10a, 2994 LA Barendrecht · info@jgmobility.nl\nJe krijgt dit bericht eenmalig omdat je deze auto zelf openbaar te koop hebt gezet${
+  `Je krijgt dit bericht eenmalig omdat je deze auto zelf openbaar te koop hebt gezet${
     advertentieUrl ? ` (${advertentieUrl})` : ""
   }. Liever geen bericht meer? Antwoord met "geen interesse" — dan hoor je nooit meer iets van ons.`;
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** Platte tekst naar HTML-alinea's, met de regelafbrekingen intact. */
+function naarHtml(tekst: string): string {
+  return escapeHtml(tekst).replace(/\r?\n/g, "<br>");
+}
+
+/** Grove tekstversie van HTML — voor de tekstvariant van de mail. */
+function naarTekst(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Base64 in regels van 76 tekens, zoals MIME voorschrijft. */
+function base64Mime(s: string): string {
+  return (Buffer.from(s, "utf-8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
+}
+
+/**
+ * Bouwt de mail op als multipart/alternative: een nette HTML-versie mét de
+ * handtekening uit Gmail, en een tekstversie voor mailprogramma's die geen HTML
+ * tonen. Beide dragen dezelfde inhoud; alleen zo komt het logo mee én blijft de
+ * mail leesbaar als HTML geweigerd wordt.
+ */
+function bouwBericht(opts: {
+  aan: string;
+  onderwerp: string;
+  bericht: string;
+  handtekeningHtml: string;
+  afmeldregel: string;
+}): { raw: string; tekstversie: string } {
+  const grens = `jgm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+  const handtekeningTekst = opts.handtekeningHtml ? naarTekst(opts.handtekeningHtml) : "";
+  const tekstversie = [opts.bericht, handtekeningTekst, `—\n${opts.afmeldregel}`]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const htmlversie = [
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.6;">`,
+    naarHtml(opts.bericht),
+    opts.handtekeningHtml ? `<br><br>${opts.handtekeningHtml}` : "",
+    `<br><br><hr style="border:none;border-top:1px solid #dddddd;margin:16px 0;">`,
+    `<div style="font-size:11px;color:#888888;line-height:1.5;">${naarHtml(opts.afmeldregel)}</div>`,
+    `</div>`,
+  ].join("");
+
+  const raw = [
+    `To: ${opts.aan}`,
+    `Subject: ${codeerOnderwerp(opts.onderwerp)}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${grens}"`,
+    "",
+    `--${grens}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Mime(tekstversie),
+    `--${grens}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Mime(htmlversie),
+    `--${grens}--`,
+    "",
+  ].join("\r\n");
+
+  return { raw, tekstversie };
+}
 
 export type VerzendResultaat =
   | { ok: true }
@@ -90,20 +174,22 @@ export async function verstuurBericht(
     return { ok: false, ...bezwaar };
   }
 
-  const volledigBericht = `${bericht}${AFMELDREGEL(lead.advertentie_url)}`;
+  // De handtekening komt uit Gmail zelf, zodat een wijziging daar automatisch
+  // meegaat. Lukt ophalen niet, dan gaat de mail gewoon zonder — beter een mail
+  // zonder logo dan geen mail.
+  const handtekening = await getHandtekening();
+  const { raw, tekstversie } = bouwBericht({
+    aan: lead.email,
+    onderwerp,
+    bericht,
+    handtekeningHtml: handtekening,
+    afmeldregel: AFMELDREGEL(lead.advertentie_url),
+  });
+  const volledigBericht = tekstversie;
 
   try {
     const auth = await getAuthedClient();
     const gmail = google.gmail({ version: "v1", auth });
-    const raw = [
-      `To: ${lead.email}`,
-      `Subject: ${codeerOnderwerp(onderwerp)}`,
-      "Content-Type: text/plain; charset=utf-8",
-      "MIME-Version: 1.0",
-      "",
-      volledigBericht,
-    ].join("\r\n");
-
     await gmail.users.messages.send({
       userId: "me",
       requestBody: { raw: Buffer.from(raw, "utf-8").toString("base64url") },
