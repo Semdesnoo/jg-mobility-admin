@@ -451,8 +451,6 @@ function ZoekTab({
           <Foutmelding>{taak.fout}</Foutmelding>
         )}
 
-        <PlakAdvertentie herlaad={herlaad} gaNaarLeads={gaNaarLeads} onFout={onFout} />
-
         <VerkopersCriteria onFout={onFout} onGewijzigd={setCriteria} />
 
         {resultaat && (
@@ -587,107 +585,6 @@ function ZoekTab({
         </Panel>
       </div>
     </div>
-  );
-}
-
-// ── Advertentie zelf toevoegen ────────────────────────────────────
-/**
- * Plak een advertentielink en de AI doet de rest.
- *
- * Bestaat omdat het automatisch zoeken een taaie kant heeft: zoekmachines
- * indexeren van advertentiesites vooral de categoriepagina's, niet de losse
- * advertenties. Kom je er zelf een tegen tijdens het rondkijken, dan is dit de
- * snelste weg — plakken, en het uitlezen, beoordelen en schrijven gaat vanzelf.
- */
-function PlakAdvertentie({
-  herlaad,
-  gaNaarLeads,
-  onFout,
-}: {
-  herlaad: () => Promise<void>;
-  gaNaarLeads: () => void;
-  onFout: (s: string) => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [bezig, setBezig] = useState(false);
-  const [stap, setStap] = useState("");
-  const [gelukt, setGelukt] = useState("");
-
-  const voegToe = async () => {
-    const schoon = url.trim();
-    if (!/^https?:\/\//i.test(schoon) || bezig) return;
-    setBezig(true);
-    setGelukt("");
-    onFout("");
-    try {
-      setStap("Advertentie opslaan…");
-      const res = await fetch("/api/admin/verkopers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ advertentie_url: schoon, bron: "Zelf gevonden" }),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        onFout(d.error || "Toevoegen mislukt");
-        return;
-      }
-
-      setStap("Advertentie uitlezen…");
-      const vr = await fetch(`/api/admin/verkopers/${d.id}/verrijk`, { method: "POST" });
-      const vd = await vr.json().catch(() => ({}));
-      await herlaad();
-
-      if (vd?.handelaar) {
-        onFout("Dit blijkt een handelaar te zijn — de lead is niet bewaard.");
-        setUrl("");
-        return;
-      }
-      if (vd?.bereikbaar === false) {
-        onFout("De advertentie kon niet worden geopend. Hij staat wel in de lijst; probeer hem daar opnieuw uit te lezen.");
-      } else {
-        setGelukt("Toegevoegd en uitgelezen.");
-      }
-      setUrl("");
-    } catch (e) {
-      onFout(String(e));
-    } finally {
-      setBezig(false);
-      setStap("");
-    }
-  };
-
-  return (
-    <Panel title="Zelf een advertentie toevoegen" icon={<Plus size={14} color={T.navy} />}>
-      <p className="mb-3" style={body(12.5)}>
-        Zie je zelf een mooie advertentie voorbijkomen? Plak de link — de AI leest hem uit,
-        beoordeelt of het een particulier is en schrijft het bericht.
-      </p>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") voegToe();
-          }}
-          placeholder="https://www.marktplaats.nl/v/auto-s/..."
-          style={{ ...inputStijl, flex: 1 }}
-        />
-        <Btn onClick={voegToe} disabled={bezig || !/^https?:\/\//i.test(url.trim())}>
-          {bezig ? <Spinner size={12} tone="donker" /> : <Plus size={12} />}
-          {bezig ? stap || "Bezig…" : "Toevoegen"}
-        </Btn>
-      </div>
-      {gelukt && (
-        <div className="mt-3 flex items-center gap-2">
-          <span className="flex items-center gap-1.5" style={body(12.5, T.groen)}>
-            <Check size={13} /> {gelukt}
-          </span>
-          <Btn variant="ghost" size="sm" onClick={gaNaarLeads}>
-            Bekijken
-          </Btn>
-        </div>
-      )}
-    </Panel>
   );
 }
 
