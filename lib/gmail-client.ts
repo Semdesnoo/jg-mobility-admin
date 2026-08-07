@@ -39,6 +39,43 @@ export async function getAuthedClient() {
   return auth;
 }
 
+/**
+ * Is de koppeling blijvend, of heeft Google er een houdbaarheidsdatum aan gehangen?
+ *
+ * Normaal verloopt een refresh token niet en ontbreekt `refresh_token_expires_in`.
+ * Staat dat veld er wél, dan is de koppeling tijdelijk — dat gebeurt als het
+ * OAuth-toestemmingsscherm op External + Testing stond: Google geeft dan een token
+ * dat na 7 dagen sterft. Zonder deze controle merk je dat pas op het moment dat je
+ * iets wilt versturen, en dat is precies het verkeerde moment.
+ */
+export async function getTokenInfo(): Promise<{
+  gekoppeld: boolean;
+  blijvend: boolean;
+  verlooptOp: string | null;
+}> {
+  try {
+    const rijen = await sql`SELECT value FROM settings WHERE key = 'gmail_tokens'`;
+    if (rijen.length === 0) return { gekoppeld: false, blijvend: false, verlooptOp: null };
+    const t = JSON.parse(rijen[0].value as string);
+    if (!t.refresh_token) return { gekoppeld: false, blijvend: false, verlooptOp: null };
+
+    const resterend = Number(t.refresh_token_expires_in);
+    if (!Number.isFinite(resterend) || resterend <= 0) {
+      return { gekoppeld: true, blijvend: true, verlooptOp: null };
+    }
+    // `refresh_token_expires_in` is de resterende tijd op het moment van de laatste
+    // vernieuwing; het access token verliep een uur na diezelfde vernieuwing.
+    const laatsteVernieuwing = t.expiry_date ? Number(t.expiry_date) - 3600 * 1000 : Date.now();
+    return {
+      gekoppeld: true,
+      blijvend: false,
+      verlooptOp: new Date(laatsteVernieuwing + resterend * 1000).toISOString(),
+    };
+  } catch {
+    return { gekoppeld: false, blijvend: false, verlooptOp: null };
+  }
+}
+
 export async function saveTokens(tokens: object): Promise<void> {
   const value = JSON.stringify(tokens);
   await sql`
