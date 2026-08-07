@@ -97,6 +97,12 @@ function StraalKaart({
         attributionControl: true,
       });
 
+      // Eerst een beginpositie, dán pas lagen erop. Leaflet weigert een laag toe te
+      // voegen aan een kaart die nog nergens staat, en gooit er een fout uit: je zag
+      // dan wel de plus- en minknop, maar geen tegels en geen cirkel. De fitBounds
+      // hieronder zet het beeld meteen daarna goed.
+      m.setView([punt.lat, punt.lon], 9);
+
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 18,
         attribution: "&copy; OpenStreetMap",
@@ -120,6 +126,15 @@ function StraalKaart({
 
       m.fitBounds(cirkel.current.getBounds(), { padding: [12, 12] });
       kaart.current = m;
+
+      // Het paneel eromheen kan nog aan het uitvouwen zijn. Leaflet meet zijn vak bij
+      // het opbouwen; is dat dan nog nul hoog, dan laadt hij geen tegels. Eén meting
+      // na de eerstvolgende tekenbeurt lost dat op.
+      requestAnimationFrame(() => {
+        if (kaart.current !== m) return;
+        m.invalidateSize();
+        if (cirkel.current) m.fitBounds(cirkel.current.getBounds(), { padding: [12, 12] });
+      });
     })();
 
     return () => {
