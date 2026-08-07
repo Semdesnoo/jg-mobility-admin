@@ -282,8 +282,6 @@ function ZoekTab({
   onFout: (s: string) => void;
   tellers: { nieuw: number; klaar: number; verstuurd: number; reacties: number; consignatie: number };
 }) {
-  const [zoekopdracht, setZoekopdracht] = useState("");
-  const [toonExtra, setToonExtra] = useState(false);
   const [criteria, setCriteria] = useState<ZoekCriteria | null>(null);
   const [auto, setAuto] = useState<Autopilot | null>(null);
 
@@ -356,7 +354,6 @@ function ZoekTab({
   const zoek = () => {
     if (bezig) return;
     onFout("");
-    const wens = zoekopdracht;
     const autopilotAan = auto?.aan ?? false;
 
     start("Verkopers zoeken", async (stap) => {
@@ -364,10 +361,11 @@ function ZoekTab({
 
       // Fase 1 — snel advertentielinks verzamelen.
       stap("Zoeken naar advertenties");
+      // Geen los tekstveld meer: de zoekgrenzen in het criteria-paneel bepalen alles.
       const res = await fetch("/api/admin/verkopers/zoek", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ zoekopdracht: wens }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Zoeken mislukt");
@@ -439,11 +437,6 @@ function ZoekTab({
                 {bezig ? <Spinner size={13} tone="donker" /> : <Radar size={13} />}
                 {bezig ? "Aan het zoeken…" : "Zoek verkopers"}
               </Btn>
-              {!bezig && (
-                <Btn variant="ghost" size="sm" onClick={() => setToonExtra((v) => !v)}>
-                  {toonExtra ? "Extra wens verbergen" : "Extra wens toevoegen"}
-                </Btn>
-              )}
               {bezig && (
                 <span style={body(11.5, T.ink(0.45))}>
                   {fase} De AI zoekt live en opent daarna elke advertentie apart. Reken op een
@@ -451,29 +444,6 @@ function ZoekTab({
                 </span>
               )}
             </div>
-
-            {toonExtra && !bezig && (
-              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
-                <Field
-                  label="Extra wens (niet verplicht)"
-                  hint="Alleen als je deze ronde iets specifieks zoekt. Blijft binnen de grenzen hierboven."
-                >
-                  <input
-                    value={zoekopdracht}
-                    onChange={(e) => setZoekopdracht(e.target.value)}
-                    placeholder="bijv. automaat, stationwagen, weinig kilometers"
-                    style={inputStijl}
-                  />
-                </Field>
-                {zoekopdracht && (
-                  <div className="mt-2">
-                    <Btn variant="ghost" size="sm" onClick={() => setZoekopdracht("")}>
-                      Wissen
-                    </Btn>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </Panel>
 
