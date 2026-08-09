@@ -176,6 +176,10 @@ export function normaliseerTelefoon(nummer: string): string {
   if (!cijfers) return "";
   if (cijfers.startsWith("00")) return cijfers.slice(2);
   if (cijfers.startsWith("0")) return `31${cijfers.slice(1)}`;
+  // "+31 06 22 52 47 01" — landnummer én de nul die daarbij hoort te vervallen. Komt
+  // zo van AutoScout24; zonder deze regel valt zo'n nummer af als ongeldig terwijl het
+  // gewoon klopt.
+  if (/^310\d{9}$/.test(cijfers)) return `31${cijfers.slice(3)}`;
   return cijfers;
 }
 
@@ -273,13 +277,14 @@ export async function voegLeadToe(lead: Partial<VerkoperLead>): Promise<string |
   const rijen = await sql`
     INSERT INTO verkoper_leads (
       id, bron, advertentie_url, titel, merk, model, bouwjaar, km, brandstof,
-      vraagprijs, plaats, naam, telefoon, email,
+      vraagprijs, plaats, naam, telefoon, email, verkoper_profiel,
       particulier_score, kans_score, motivatie, zoekopdracht, status
     ) VALUES (
       ${id}, ${lead.bron ?? ""}, ${lead.advertentie_url ?? ""}, ${lead.titel ?? ""},
       ${lead.merk ?? ""}, ${lead.model ?? ""}, ${lead.bouwjaar ?? ""}, ${lead.km ?? ""},
       ${lead.brandstof ?? ""}, ${lead.vraagprijs ?? 0}, ${lead.plaats ?? ""},
       ${lead.naam ?? ""}, ${lead.telefoon ?? ""}, ${lead.email ?? ""},
+      ${lead.verkoper_profiel ?? ""},
       ${lead.particulier_score ?? 0}, ${lead.kans_score ?? 0}, ${lead.motivatie ?? ""},
       ${lead.zoekopdracht ?? ""}, 'nieuw'
     )

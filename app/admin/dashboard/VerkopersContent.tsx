@@ -678,6 +678,11 @@ function ZoekTab({
               <strong style={{ color: T.navy }}> alle merken doen mee</strong>, zolang het maar een
               particulier is.
             </p>
+            <p style={body(11.5, T.ink(0.45))}>
+              Doorzocht: <strong style={{ color: T.navy }}>Marktplaats</strong> en{" "}
+              <strong style={{ color: T.navy }}>AutoScout24</strong>. AutoWereld en Facebook
+              Marketplace kunnen niet: die laten hun advertenties alleen aan ingelogde bezoekers zien.
+            </p>
 
             {criteria && (
               <div className="flex flex-wrap gap-1.5">
@@ -849,7 +854,7 @@ function ZoekTab({
         <Panel title="Zo werkt het" tone="donker">
           <ol className="flex flex-col gap-3" style={{ counterReset: "stap" }}>
             {[
-              "De AI zoekt live naar advertenties van particulieren en beoordeelt per advertentie hoe kansrijk die is.",
+              "De radar loopt de overzichtspagina's van Marktplaats en AutoScout24 langs, gooit handelaren er meteen uit, en laat de AI daarna per advertentie kijken hoe kansrijk die is.",
               "Bij Verkopers klik je op een kaart om de advertentie te bekijken. Prullenbak = weg en geblokkeerd, vinkje = klaarzetten.",
               "Wat je afvinkt staat bij Nakijken. Daar schrijft de AI het bericht over díe auto en lees jij het na.",
               "Jij drukt op versturen. Nooit automatisch: wat jij hebt afgevinkt gaat pas weg als je erop klikt.",
