@@ -90,6 +90,11 @@ export type Berekening = {
   gem_prijs?: number;
   per_duizend_km?: number;
   spreiding?: number;
+  /** Hoeveel van de vergelijking dealeraanbod is, en hoeveel particulier. */
+  aantal_dealer?: number;
+  aantal_particulier?: number;
+  /** Wat particulieren gemiddeld vragen — wat de verkoper zelf zou kunnen krijgen. */
+  particulier_gemiddeld?: number;
 
   // ── Verouderd, alleen nog voor het archief ──
   /** @deprecated was per definitie gelijk aan de ingestelde marge; zegt dus niets */

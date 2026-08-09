@@ -186,6 +186,8 @@ export default function TaxatieTab({
           uitvoering: b.uitvoering, op_uitvoering: b.op_uitvoering,
           aantal: resultaat.markt.aantal_gevonden, zoekbereik: b.zoekbereik,
           gem_prijs: b.gem_prijs, gem_km: b.gem_km, per_duizend_km: b.per_duizend_km,
+          aantal_dealer: b.aantal_dealer, aantal_particulier: b.aantal_particulier,
+          particulier_gemiddeld: b.particulier_gemiddeld, bron: b.bron,
           verwachte_verkoop: b.verwachte_verkoop, btw_afdracht: b.btw_afdracht,
           geschatte_kosten: b.geschatte_kosten, gewenste_marge: b.gewenste_marge,
           max_inkoop: b.max_inkoop,
@@ -259,6 +261,8 @@ export default function TaxatieTab({
     subtotaal?: boolean;
     /** Waar deze schakel op wacht — de eerste vier hangen aan de RDW-kant, de rest aan de scan. */
     wachtOp?: string;
+    /** Tweede regel onder de uitleg, voor een detail dat er niet bij past maar wel telt. */
+    extra?: string;
   };
 
   // De koerslijst-schakels wachten op het kenteken en de stand, niet op de marktscan.
@@ -304,6 +308,14 @@ export default function TaxatieTab({
       uitleg: m
         ? `${m.aantal_gevonden ?? m.vergelijkbare?.length ?? 0} advertenties · spreiding ${fmt(m.min_prijs)} – ${fmt(m.max_prijs)}`
         : "Gemiddelde van werkelijk gevonden advertenties",
+      // Dealers vragen structureel meer dan particulieren voor dezelfde auto — gemeten
+      // twaalf procent op een Golf. De verkoopwaarde hoort dus op dealeraanbod, want daar
+      // ga jij straks zelf tussen staan.
+      extra: b?.aantal_dealer
+        ? `${b.aantal_dealer} van handelaren${
+            b.aantal_particulier ? ` · ${b.aantal_particulier} van particulieren` : ""
+          }${b.particulier_gemiddeld ? ` (die vragen gemiddeld ${fmt(b.particulier_gemiddeld)})` : ""}`
+        : undefined,
       bedrag: marktWaarde || null, van: 0, tot: marktWaarde, kleur: T.teal,
     },
     {
@@ -790,9 +802,15 @@ export default function TaxatieTab({
                           <span style={{ fontFamily: T.inter, fontSize: 9.5, color: T.ink(0.4) }}>{s.wachtOp}</span>
                         )}
                       </div>
-                      <p className="truncate mt-0.5 mb-1.5" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.42) }}>
+                      <p className="truncate mt-0.5" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.42) }}>
                         {s.uitleg}
                       </p>
+                      {!wacht && s.extra && (
+                        <p className="truncate" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.42) }}>
+                          {s.extra}
+                        </p>
+                      )}
+                      <div style={{ height: 6 }} />
                       <div className="relative w-full" style={{ height: 8, backgroundColor: "rgba(0,19,55,0.04)" }}>
                         {!wacht && (
                           <span

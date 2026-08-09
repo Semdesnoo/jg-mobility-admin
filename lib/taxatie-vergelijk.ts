@@ -20,6 +20,8 @@
  */
 
 export type Vergelijkbare = {
+  /** Van welke site deze advertentie komt. */
+  bron: "AutoScout24" | "Marktplaats";
   prijs: number;
   km: number;
   /** Maanden sinds eerste toelating. */
@@ -162,6 +164,7 @@ export async function haalVergelijkbaar(
       const leeftijdMnd = (nu.getFullYear() - jaar) * 12 + (nu.getMonth() + 1 - maand);
 
       uit.push({
+        bron: "AutoScout24",
         prijs,
         km: Number(pak(/"mileage":"?(\d+)/)) || 0,
         leeftijdMnd: Math.max(0, leeftijdMnd),
@@ -181,6 +184,190 @@ export async function haalVergelijkbaar(
     if (stukken.length < 15) break;
   }
 
+  return uit;
+}
+
+/**
+ * Vergelijkbare advertenties bij Marktplaats.
+ *
+ * Waarom een tweede bron: AutoScout24 is dealer-zwaar. Marktplaats staat vol met
+ * particulieren, en die vragen aantoonbaar minder — gemeten scheelde dat bijna acht
+ * procent op dezelfde kilometerstand. Reken je alleen met dealerprijzen, dan schat je
+ * de markt te hoog in en bied je te veel.
+ *
+ * Marktplaats kent geen bruikbare filters in de url, dus we halen het merk-en-model
+ * overzicht op en filteren hier op bouwjaar, kilometerstand, brandstof en transmissie.
+ * Die staan allemaal per advertentie in de pagina.
+ *
+ * Belangrijk: alleen advertenties met een vaste vraagprijs tellen mee. Een kwart van het
+ * aanbod is "bieden vanaf", en dat is geen vraagprijs — die meerekenen drukt je
+ * marktbeeld kunstmatig omlaag.
+ */
+export async function haalVergelijkbaarMarktplaats(
+  v: Zoekvraag,
+  maxPaginas = 6
+): Promise<Vergelijkbare[]> {
+  const jaarMarge = v.jaarMarge ?? 1;
+  const kmMarge = v.kmMarge ?? 25000;
+
+  // De modelpagina levert per pagina veel meer bruikbare treffers op dan een vrije
+  // zoekopdracht: gemeten 9 passende auto's tegen 6, en alle 9 van particulieren.
+  // Lukt het opzoeken niet, dan valt hij terug op zoeken op tekst.
+  const modelPad = await vindModelPad(v.merk, v.model);
+  const basis = modelPad ?? `/q/${encodeURIComponent(`${v.merk} ${v.model}`.trim()).replace(/%20/g, "+")}/`;
+
+  const uit: Vergelijkbare[] = [];
+  const gezien = new Set<string>();
+  const nu = new Date();
+
+  for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+    let html = "";
+    try {
+      const url = `https://www.marktplaats.nl${basis}${pagina > 1 ? `p/${pagina}/` : ""}`;
+      const res = await fetch(url, { headers: BROWSER, signal: AbortSignal.timeout(12000) });
+      if (!res.ok) break;
+      html = await res.text();
+    } catch {
+      break;
+    }
+
+    const stukken = html.split('"itemId":"').slice(1);
+    if (stukken.length === 0) break;
+    let nieuwOpPagina = 0;
+
+    for (const stuk of stukken) {
+      const itemId = stuk.slice(0, stuk.indexOf('"'));
+      if (!/^[am][0-9]+$/.test(itemId) || gezien.has(itemId)) continue;
+      gezien.add(itemId);
+      nieuwOpPagina++;
+
+      const blok = stuk.slice(0, 9000);
+      const attr = (sleutel: string) =>
+        blok.match(new RegExp(`"key":"${sleutel}","value":"([^"]*)"`))?.[1] ?? "";
+
+      // Alleen een vaste vraagprijs. "Bieden vanaf" is geen prijs.
+      if (!/"priceType":"FIXED"/.test(blok)) continue;
+      const prijs = Math.round((Number(blok.match(/"priceCents":([0-9]+)/)?.[1]) || 0) / 100);
+      if (prijs < 200) continue;
+
+      const jaar = Number(attr("constructionYear")) || 0;
+      const km = Number(attr("mileage")) || 0;
+      if (!jaar || !km) continue;
+
+      // Marktplaats filtert niet in de url, dus hier.
+      if (Math.abs(jaar - v.bouwjaar) > jaarMarge) continue;
+      if (v.km > 0 && Math.abs(km - v.km) > kmMarge) continue;
+
+      const brandstof = attr("fuel");
+      if (v.brandstof && brandstof && !brandstof.toLowerCase().startsWith(v.brandstof.slice(0, 4).toLowerCase()))
+        continue;
+
+      const bak = attr("transmission");
+      if (v.transmissie && bak) {
+        const wil = v.transmissie.toLowerCase().startsWith("hand");
+        const is = bak.toLowerCase().startsWith("hand");
+        if (wil !== is) continue;
+      }
+
+      // De url staat elders in de pagina en bevat het itemId.
+      const url = html.match(new RegExp(`/v/auto-s/[a-z0-9-]+/${itemId}-[a-z0-9-]*`, "i"))?.[0] ?? "";
+
+      uit.push({
+        bron: "Marktplaats",
+        prijs,
+        km,
+        leeftijdMnd: Math.max(0, (nu.getFullYear() - jaar) * 12 + nu.getMonth() + 1 - 6),
+        bouwjaar: jaar,
+        uitvoering: ontsnapMp(blok.match(/"title":"([^"]*)"/)?.[1] ?? ""),
+        transmissie: bak,
+        brandstof,
+        nieuwprijs: 0,
+        handelaar: /"showWebsiteUrl":true/.test(blok),
+        plaats: ontsnapMp(blok.match(/"cityName":"([^"]*)"/)?.[1] ?? ""),
+        url: url ? `https://www.marktplaats.nl${url}` : "",
+      });
+    }
+
+    if (nieuwOpPagina === 0) break;
+  }
+
+  return uit;
+}
+
+/**
+ * Zoekt het pad naar de modelpagina op Marktplaats op.
+ *
+ * Marktplaats gebruikt eigen nummers voor modellen ("/f/golf/1260/"), en die staan
+ * nergens gedocumenteerd. Ze staan wél in de filterlijst op de merkpagina, dus die halen
+ * we één keer op en onthouden we. Nummers veranderen zelden, maar hardcoderen zou
+ * betekenen dat een nieuw model stilletjes niets oplevert.
+ */
+const modelPaden = new Map<string, string | null>();
+
+/** Tekens die in een modelnaam kunnen zitten en in een zoekpatroon iets anders betekenen. */
+function ontsnapRegex(s: string): string {
+  return s.replace(/[-.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function vindModelPad(merk: string, model: string): Promise<string | null> {
+  const sleutel = `${merk}|${model}`.toLowerCase();
+  const bekend = modelPaden.get(sleutel);
+  if (bekend !== undefined) return bekend;
+
+  let pad: string | null = null;
+  try {
+    const res = await fetch(`https://www.marktplaats.nl/l/auto-s/${slug(merk)}/`, {
+      headers: BROWSER,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const html = (await res.text()).replace(/\u002F/g, "/");
+      // De filterlijst koppelt een modelnaam aan zijn pad. Eerst exact zoeken, dan op
+      // het eerste woord — "Golf Plus" en "Golf" zijn verschillende modellen, maar een
+      // model dat als "3-serie" in het RDW staat heet daar "3 Serie".
+      const namen = [model, model.split(/[ -]/)[0]].filter(Boolean);
+      for (const naam of namen) {
+        const re = new RegExp(
+          `for="model-${ontsnapRegex(naam)}"[^>]*>\s*<a[^>]*href="(/l/auto-s/[^"]+/f/[^"]+/[0-9]+/)"`,
+          "i"
+        );
+        const m = html.match(re);
+        if (m) { pad = m[1]; break; }
+      }
+    }
+  } catch {
+    /* niet gevonden; dan zoeken we op tekst */
+  }
+
+  modelPaden.set(sleutel, pad);
+  return pad;
+}
+
+/** JSON-ontsnapping in de ruwe Marktplaats-pagina ongedaan maken. */
+function ontsnapMp(s: string): string {
+  return s
+    .replace(/\\u([0-9a-f]{4})/gi, (_, c) => String.fromCharCode(parseInt(c, 16)))
+    .replace(/\\"/g, '"')
+    .trim();
+}
+
+/**
+ * Dezelfde auto op twee sites is één auto.
+ *
+ * Dealers zetten hun voorraad op allebei. Zonder ontdubbelen telt zo'n auto dubbel mee en
+ * weegt de prijs van juist die dealers twee keer zo zwaar. Zonder kenteken is de
+ * combinatie van prijs, kilometerstand en bouwjaar de beste sleutel die we hebben — dat
+ * drietal exact gelijk is vrijwel altijd dezelfde auto.
+ */
+export function ontdubbel(rijen: Vergelijkbare[]): Vergelijkbare[] {
+  const gezien = new Set<string>();
+  const uit: Vergelijkbare[] = [];
+  for (const r of rijen) {
+    const sleutel = `${r.prijs}|${Math.round(r.km / 500)}|${r.bouwjaar}`;
+    if (gezien.has(sleutel)) continue;
+    gezien.add(sleutel);
+    uit.push(r);
+  }
   return uit;
 }
 

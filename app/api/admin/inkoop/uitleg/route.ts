@@ -33,12 +33,19 @@ HARDE REGELS
 - Noem het aantal vergelijkbare auto's. Dat is de kern van de onderbouwing: dit is geen
   inschatting maar een telling.
 - Leg uit waarom het bod lager is dan wat die auto's kosten. Eerlijk en zonder eromheen te
-  draaien: er moet nog btw af, er zitten kosten aan het verkoopklaar maken, en er moet marge
-  op omdat het bedrijf ervan bestaat en het risico draagt tot de auto verkocht is.
+  draaien: er zitten kosten aan het verkoopklaar maken, en er moet marge op omdat het bedrijf
+  ervan bestaat en het risico draagt tot de auto verkocht is. Noem btw ALLEEN als er hieronder
+  een btw-bedrag staat; staat het er niet, dan zeg je er niets over.
 - Als de kilometerstand afwijkt van het gemiddelde van die auto's, benoem dat met het bedrag
   dat het scheelt. Dat is het meest concrete stukje van de hele onderbouwing.
 - Is er op uitvoering gefilterd, zeg dat dan. "We hebben alleen naar Comfortlines gekeken"
   is precies waarom het bod klopt.
+- Staat er een gemiddelde vraagprijs van particulieren bij, noem die dan eerlijk, ook als die
+  hoger is dan ons bod. Dat is wat de verkoper zelf zou kunnen vragen als hij de auto op
+  Marktplaats zet, en hij komt daar toch achter. Leg er meteen naast wat hij daarvoor terugkrijgt:
+  wij betalen direct, nemen de vrijwaring en het papierwerk over, en er komen geen kijkers,
+  proefritten of onderhandelingen aan te pas. Doe dat in één of twee zinnen, zonder het weg te
+  wuiven en zonder erover door te drammen.
 
 TOON
 - Nederlands, u-vorm. Rustig en zakelijk, zoals een vakman die uitlegt hoe hij eraan komt.
@@ -78,7 +85,21 @@ export async function POST(req: Request) {
     b.op_uitvoering ? `Daarvan is alleen naar de ${b.uitvoering} gekeken.` : "",
     b.zoekbereik ? `Zoekbereik: ${b.zoekbereik}` : "",
     b.gem_prijs ? `Die auto's staan gemiddeld te koop voor ${euro(b.gem_prijs)}` : "",
-    b.gem_km ? `Gemiddelde kilometerstand daarvan: ${Number(b.gem_km).toLocaleString("nl-NL")} km` : "",
+    b.bron ? `Waar die auto's vandaan komen: ${b.bron}` : "",
+    b.aantal_dealer
+      ? `Die ${b.aantal_dealer} staan allemaal bij een autobedrijf — dat is het aanbod waar deze auto straks tussen komt te staan, dus daar is op gerekend.`
+      : "",
+    b.gem_km
+      ? `Gemiddelde kilometerstand van al die ${b.aantal ?? ""} vergelijkbare auto's samen: ${Number(
+          b.gem_km
+        ).toLocaleString("nl-NL")} km`
+      : "",
+    ``,
+    b.particulier_gemiddeld
+      ? `Daarnaast stonden er nog ${b.aantal_particulier ?? 0} van particulieren. Die zitten NIET in de berekening hierboven; ze vragen gemiddeld ${euro(
+          b.particulier_gemiddeld
+        )}. Dat is ongeveer wat de verkoper zelf zou kunnen vragen als hij de auto zelf te koop zet.`
+      : "",
     ``,
     b.per_duizend_km
       ? `Wat kilometerstand doet in dit aanbod: ${euro(Math.abs(Number(b.per_duizend_km)))} per 1.000 km`

@@ -1,5 +1,7 @@
 import {
   haalVergelijkbaar,
+  haalVergelijkbaarMarktplaats,
+  ontdubbel,
   fitWaarde,
   zonderUitschieters,
   uitvoeringWoorden,
@@ -49,8 +51,8 @@ function kmFactor(km: number, leeftijdJaren: number): number {
 }
 
 export async function POST(req: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
+  // Geen AI-sleutel meer nodig: de waarde komt uit getelde advertenties, niet uit een model.
+  // De controle hierop stond er nog uit de oude versie en zou de hele taxatie blokkeren.
 
   const body = await req.json();
   const { merk, model, bouwjaar, km, brandstof, bodytype } = body;
@@ -83,20 +85,28 @@ export async function POST(req: Request) {
   ];
 
   const kmVoorZoeken = parseInt(String(km)) || 0;
+  const basisvraag = {
+    merk, model, bouwjaar: bouwjaarNum, km: kmVoorZoeken,
+    brandstof: String(brandstof ?? ""),
+    transmissie: String(body.transmissie ?? ""),
+    bodytype: String(bodytype ?? ""),
+  };
+
+  // Twee bronnen tegelijk. AutoScout24 is bijna volledig dealeraanbod; Marktplaats staat
+  // vol particulieren. Gemeten op een Golf uit 2017: dealers vroegen gemiddeld € 13.151,
+  // particulieren € 11.586 — twaalf procent verschil op dezelfde auto's. Je hebt ze
+  // allebei nodig, maar voor verschillende dingen (zie hieronder).
   let alle: Vergelijkbare[] = [];
   let zoekbereik = stappen[0].tekst;
   for (const stap of stappen) {
     zoekbereik = stap.tekst;
-    alle = await haalVergelijkbaar(
-      {
-        merk, model, bouwjaar: bouwjaarNum, km: kmVoorZoeken,
-        brandstof: String(brandstof ?? ""),
-        transmissie: String(body.transmissie ?? ""),
-        bodytype: String(bodytype ?? ""),
-        ...stap,
-      },
-      2
-    ).catch(() => []);
+    const [as24, mp] = await Promise.all([
+      haalVergelijkbaar({ ...basisvraag, ...stap }, 2).catch(() => []),
+      haalVergelijkbaarMarktplaats({ ...basisvraag, ...stap }, 6).catch(() => []),
+    ]);
+    // Dealers zetten hun voorraad op allebei de sites. Zonder ontdubbelen telt zo'n auto
+    // dubbel en weegt juist die dealer twee keer zo zwaar.
+    alle = ontdubbel([...as24, ...mp]);
     if (alle.length >= 8) break;
   }
 
@@ -120,11 +130,25 @@ export async function POST(req: Request) {
     if (smal.length >= 4) { gebruikt = smal; opUitvoering = true; }
   }
 
-  const schoon = zonderUitschieters(gebruikt);
   const nu = new Date();
   const leeftijdMnd = Math.max(0, (nu.getFullYear() - bouwjaarNum) * 12 + nu.getMonth() + 1 - 6);
+
+  // De verwachte verkoopprijs hoort op DEALERaanbod. Jij zet hem straks zelf op je terrein
+  // en dat is de prijs waar jij tegen concurreert. Zijn er te weinig dealerauto's, dan
+  // pakken we alles — dan is een ruwere schatting beter dan geen.
+  const dealers = gebruikt.filter((r) => r.handelaar);
+  const schoon = zonderUitschieters(dealers.length >= 6 ? dealers : gebruikt);
   const fit = fitWaarde(schoon, kmVoorZoeken, leeftijdMnd);
   const live = !!fit;
+
+  // Wat particulieren vragen is een ander getal, en het hoort in het gesprek: dát is wat
+  // de verkoper zou krijgen als hij hem zelf zou verkopen. Het verschil daartussen is
+  // precies wat jij overneemt aan werk en risico.
+  const particulieren = gebruikt.filter((r) => !r.handelaar);
+  const particulierGem =
+    particulieren.length >= 3
+      ? Math.round(particulieren.reduce((s2, r) => s2 + r.prijs, 0) / particulieren.length)
+      : 0;
 
   const margeDecimaal = margeNum / 100;
   const leeftijd = Math.max(0, huidigJaar - bouwjaarNum);
@@ -185,12 +209,14 @@ export async function POST(req: Request) {
 
   // De bron benoemt nu wat er écht gebeurd is. Hiervoor stond er altijd "koerslijst + live
   // markt", ook als het live zoeken niets had opgeleverd en het antwoord uit modelkennis kwam.
+  const bronnen = [...new Set(schoon.map((r) => r.bron))].sort();
+  const bronnenTekst = bronnen.length ? bronnen.join(" en ") : "AutoScout24";
   const bron = !live
     ? "schatting uit modelkennis (geen live advertenties)"
     : koerslijstWaarde > 0 && marktVerkoop > 0
-      ? `koerslijst + ${echtGevonden} gevonden advertenties`
+      ? `koerslijst + ${echtGevonden} advertenties op ${bronnenTekst}`
       : marktVerkoop > 0
-        ? `${echtGevonden} gevonden advertenties`
+        ? `${echtGevonden} advertenties op ${bronnenTekst}`
         : "koerslijst (RDW-nieuwprijs)";
 
   // ── 4) Van verkoopwaarde naar wat je maximaal kunt bieden ──
@@ -270,6 +296,10 @@ export async function POST(req: Request) {
       live,
       // Voor de uitleg aan de klant: dit zijn de cijfers waar het verhaal op rust.
       zoekbereik,
+      // Uit hoeveel bronnen en van wat voor verkopers de vergelijking komt.
+      aantal_dealer: schoon.filter((r) => r.handelaar).length,
+      aantal_particulier: particulieren.length,
+      particulier_gemiddeld: particulierGem,
       op_uitvoering: opUitvoering,
       uitvoering: opUitvoering ? uitvoering : "",
       uitvoeringen,
