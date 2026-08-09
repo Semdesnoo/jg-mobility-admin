@@ -19,6 +19,7 @@ export type Vergelijkbaar = {
   km?: number;
   prijs: number;
   platform?: string;
+  url?: string;
 };
 
 /**
@@ -77,6 +78,18 @@ export type Berekening = {
   live?: boolean;
   /** Gezet als de gevonden marktprijs zo ver van de koerslijst lag dat hij is genegeerd. */
   markt_afgekeurd?: string;
+  /** Hoe ruim er gezocht moest worden om genoeg vergelijkbare auto's te vinden. */
+  zoekbereik?: string;
+  /** Is er op uitvoering gefilterd, en op welke? */
+  op_uitvoering?: boolean;
+  uitvoering?: string;
+  /** Welke uitvoeringen er in dit aanbod voorkomen, met hoe vaak. */
+  uitvoeringen?: { naam: string; aantal: number }[];
+  /** Kengetallen uit de vergelijkbare auto's — dit is waar de klantuitleg op rust. */
+  gem_km?: number;
+  gem_prijs?: number;
+  per_duizend_km?: number;
+  spreiding?: number;
 
   // ── Verouderd, alleen nog voor het archief ──
   /** @deprecated was per definitie gelijk aan de ingestelde marge; zegt dus niets */

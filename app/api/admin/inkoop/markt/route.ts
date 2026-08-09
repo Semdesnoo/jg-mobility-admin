@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 42000));
   tekst = await Promise.race([webSearch, timeout]);
   controller.abort();
-  let live = !!extractLaatsteJson(tekst);
+  const live = !!extractLaatsteJson(tekst);
   if (!live) {
     tekst = await vraagMarkt(client, prompt, false);
   }

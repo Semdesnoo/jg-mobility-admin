@@ -1,52 +1,29 @@
-import Anthropic from "@anthropic-ai/sdk";
+import {
+  haalVergelijkbaar,
+  fitWaarde,
+  zonderUitschieters,
+  uitvoeringWoorden,
+  type Vergelijkbare,
+} from "@/lib/taxatie-vergelijk";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Laatste accolade-gebalanceerde JSON-object uit de tekst (robuust tegen omringende tekst).
-function extractLaatsteJson(text: string): string | null {
-  const eind = text.lastIndexOf("}");
-  if (eind === -1) return null;
-  let diepte = 0;
-  for (let i = eind; i >= 0; i--) {
-    const c = text[i];
-    if (c === "}") diepte++;
-    else if (c === "{") {
-      diepte--;
-      if (diepte === 0) return text.slice(i, eind + 1);
-    }
-  }
-  return null;
-}
-
-// Eén markt-analyse. useWebSearch=true gebruikt de server-side web_search (handelt pause_turn af);
-// false valt terug op modelkennis (een schatting zonder live advertenties).
-async function vraagMarkt(client: Anthropic, prompt: string, useWebSearch: boolean, signal?: AbortSignal): Promise<string> {
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
-  let laatsteTekst = "";
-  for (let i = 0; i < 4; i++) {
-    const resp = await client.messages.create({
-      // Sonnet + web search voor de echte taxatie; bij terugval snel Haiku zonder tools (modelkennis).
-      model: useWebSearch ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001",
-      max_tokens: useWebSearch ? 4500 : 2500,
-      ...(useWebSearch
-        ? { tools: [{ type: "web_search_20250305" as const, name: "web_search", max_uses: 3 }] }
-        : {}),
-      messages,
-    }, signal ? { signal } : undefined);
-    const rondeTekst = resp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
-    if (rondeTekst) laatsteTekst = rondeTekst;
-    if (resp.stop_reason === "pause_turn") {
-      messages.push({ role: "assistant", content: resp.content });
-      continue;
-    }
-    break;
-  }
-  return laatsteTekst;
-}
+/**
+ * De waardebepaling.
+ *
+ * Twee bronnen, die elkaar controleren:
+ *  1. de koerslijst — de RDW-nieuwprijs met afschrijving en een kilometercorrectie;
+ *  2. echte advertenties van vergelijkbare auto's, opgehaald bij AutoScout24.
+ *
+ * De tweede weegt het zwaarst zodra er genoeg auto's zijn gevonden, want dat is wat de
+ * markt vandaag vraagt. De koerslijst vangt het volledig op bij zeldzame auto's, precies
+ * waar advertenties middelen faalt.
+ *
+ * Er komt geen AI aan te pas bij het bepalen van de waarde. Dat was hiervoor wel zo, en
+ * het probleem was niet dat het model slecht rekende — het probleem was dat niets van wat
+ * het meldde te controleren viel. Zie lib/taxatie-vergelijk.ts.
+ */
 
 // ── Koerslijst-waardebepaling (afschrijvingsmodel op de RDW-catalogusprijs) ──
 // Aandeel van de nieuwprijs (incl. BTW/BPM) dat een occasion gemiddeld nog waard is per
@@ -76,7 +53,7 @@ export async function POST(req: Request) {
   if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
 
   const body = await req.json();
-  const { merk, model, bouwjaar, km, brandstof, vermogen, bodytype } = body;
+  const { merk, model, bouwjaar, km, brandstof, bodytype } = body;
   const huidigJaar = new Date().getFullYear();
   const bouwjaarNum = Number(bouwjaar);
   const catalogus = Number(body.catalogusprijs) || 0;
@@ -89,87 +66,65 @@ export async function POST(req: Request) {
     return Response.json({ error: "Merk, model en een geldig bouwjaar zijn verplicht" }, { status: 400 });
   }
 
-  const kmTxt = km ? `, kilometerstand circa ${parseInt(km).toLocaleString("nl-NL")} km` : "";
-  const specs = [brandstof, vermogen].filter(Boolean).join(", ");
-  const specsTxt = specs ? ` (${specs})` : "";
-  const bodyTxt = bodytype ? `, carrosserie ${bodytype}` : "";
+  // ── Vergelijkbare auto's ophalen ──
+  //
+  // Hier stond een AI die met web_search "wat advertenties" ging zoeken. Wat daaruit kwam
+  // was niet te controleren: het aantal en het gemiddelde waren zelfgerapporteerd, en als
+  // het zoeken niets opleverde kwam er een schatting uit modelkennis die als marktonderzoek
+  // op het scherm belandde.
+  //
+  // Nu halen we de zoekpagina van AutoScout24 zelf op en lezen we de advertenties uit. Dat
+  // duurt een seconde, kost niets, en levert getelde auto's op. Zie lib/taxatie-vergelijk.ts.
+  const uitvoering = String(body.uitvoering ?? "").trim().toLowerCase();
+  const stappen = [
+    { jaarMarge: 1, kmMarge: 25000, tekst: "bouwjaar ±1 jaar, kilometerstand ±25.000" },
+    { jaarMarge: 2, kmMarge: 40000, tekst: "bouwjaar ±2 jaar, kilometerstand ±40.000" },
+    { jaarMarge: 3, kmMarge: 60000, tekst: "bouwjaar ±3 jaar, kilometerstand ±60.000" },
+  ];
 
-  const prompt = `Je bent een professionele Nederlandse auto-taxateur. Bepaal zo nauwkeurig mogelijk de actuele marktwaarde van deze occasion:
-
-${merk} ${model}, bouwjaar ${bouwjaar}${kmTxt}${specsTxt}${bodyTxt}.
-
-Doe GRONDIG onderzoek met je web_search-tool (meerdere zoekopdrachten) en zoek ECHTE, actuele advertenties van zo vergelijkbaar mogelijke exemplaren — zelfde merk en model, bouwjaar binnen ±1 jaar, kilometerstand binnen ±25.000 km, zelfde brandstof — op meerdere platforms: Marktplaats, AutoScout24, Gaspedaal.nl, AutoWeek en ANWB Auto.
-
-Verzamel minimaal 4 (liefst 6-8) echte gevonden advertenties met hun werkelijke vraagprijs, bouwjaar, kilometerstand en het platform. Baseer het gemiddelde, minimum en maximum UITSLUITEND op die gevonden advertenties — niet op een schatting.
-
-Geef je antwoord UITSLUITEND als dit JSON-object (geen andere tekst, geen uitleg):
-{
-  "gemiddelde_prijs": 0,
-  "min_prijs": 0,
-  "max_prijs": 0,
-  "aantal_gevonden": 0,
-  "vergelijkbare": [
-    { "titel": "", "bouwjaar": 0, "km": 0, "prijs": 0, "platform": "" }
-  ],
-  "advies": "Korte conclusie van maximaal 2 zinnen."
-}
-
-Regels:
-- Vul de prijzen met gehele getallen, zonder punten of komma's. Laat ze op 0 als je niets vond.
-- aantal_gevonden: het aantal ECHTE advertenties dat je hebt gebruikt. Niet schatten.
-- vergelijkbare: die advertenties zelf (maximaal 8), elk met titel, bouwjaar, km, prijs en platform.
-  Alleen advertenties die je daadwerkelijk in de zoekresultaten hebt gezien. Verzin er nooit één.
-- Vond je niets bruikbaars? Zet dan alle prijzen op 0 en vergelijkbare op een lege lijst. Dat is een
-  eerlijk antwoord; een verzonnen gemiddelde is dat niet.
-- advies: maximaal 2 zinnen in het Nederlands, over wat je opviel aan het aanbod.
-
-Wat je NIET moet invullen: hoeveel van deze auto's er landelijk te koop staan, of de prijstrend, of
-hoe gewild het model is. Dat kun je met een handvol zoekopdrachten niet weten, en een getal dat er
-gezaghebbend uitziet maar een gok is, is schadelijker dan geen getal.`;
-
-  const client = new Anthropic({ apiKey });
-
-  // Eenvoudige, betrouwbare terugval-prompt (modelkennis) voor als het live zoeken te traag is.
-  const fallbackPrompt = `Je bent een Nederlandse auto-taxateur. Schat de marktwaarde van een ${merk} ${model}, bouwjaar ${bouwjaar}${kmTxt}${specsTxt}${bodyTxt} op de Nederlandse occasionmarkt, op basis van je eigen kennis (niet live zoeken).
-Geef UITSLUITEND dit JSON-object met realistische gehele getallen:
-{"gemiddelde_prijs": 0, "min_prijs": 0, "max_prijs": 0, "aantal_gevonden": 0, "vergelijkbare": [], "advies": "Schatting op basis van kennis; geen live advertenties opgehaald."}`;
-
-  // Live zoeken met een harde grens, want Vercel kapt de functie op 60s af. De terugval
-  // krijgt zijn eigen budget: die stond hiervoor zonder grens ná 48 seconden te beginnen,
-  // en liep dus regelmatig tegen een time-out zonder antwoord.
-  const gestart = Date.now();
-  const controller = new AbortController();
-  const webSearch = vraagMarkt(client, prompt, true, controller.signal).catch(() => "");
-  const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), 40_000));
-  let tekst = await Promise.race([webSearch, timeout]);
-  controller.abort();
-
-  // Kwam er niets bruikbaars uit het live zoeken, dan een schatting uit modelkennis. Die
-  // wordt hieronder NIET als marktdata gepresenteerd — dat was de kern van het probleem:
-  // een herinnering die als onderzoek op het scherm kwam.
-  const live = !!extractLaatsteJson(tekst);
-  if (!live) {
-    const rest = Math.max(6_000, 52_000 - (Date.now() - gestart));
-    const terugval = vraagMarkt(client, fallbackPrompt, false).catch(() => "");
-    tekst = await Promise.race([
-      terugval,
-      new Promise<string>((resolve) => setTimeout(() => resolve(""), rest)),
-    ]);
+  const kmVoorZoeken = parseInt(String(km)) || 0;
+  let alle: Vergelijkbare[] = [];
+  let zoekbereik = stappen[0].tekst;
+  for (const stap of stappen) {
+    zoekbereik = stap.tekst;
+    alle = await haalVergelijkbaar(
+      {
+        merk, model, bouwjaar: bouwjaarNum, km: kmVoorZoeken,
+        brandstof: String(brandstof ?? ""),
+        transmissie: String(body.transmissie ?? ""),
+        bodytype: String(bodytype ?? ""),
+        ...stap,
+      },
+      2
+    ).catch(() => []);
+    if (alle.length >= 8) break;
   }
 
-  const jsonText = extractLaatsteJson(tekst);
-  if (!jsonText) {
-    return Response.json({ error: "Kon marktdata niet ophalen", raw: tekst.slice(0, 300) }, { status: 422 });
+  // Welke uitvoeringen zitten er in dit aanbod? Daarmee kan het scherm een keuzelijst tonen
+  // die bij déze auto past, in plaats van een algemene lijst.
+  const telling = new Map<string, number>();
+  for (const r of alle) {
+    for (const u of uitvoeringWoorden(r.uitvoering)) telling.set(u, (telling.get(u) ?? 0) + 1);
+  }
+  const uitvoeringen = [...telling.entries()]
+    .filter(([, n]) => n >= 2)
+    .sort((x, y) => y[1] - x[1])
+    .map(([naam, aantal]) => ({ naam, aantal }));
+
+  // Op uitvoering filteren als die is opgegeven — maar alleen als er genoeg overblijft.
+  // Een scherpe schatting op drie auto's is geen scherpe schatting.
+  let gebruikt = alle;
+  let opUitvoering = false;
+  if (uitvoering) {
+    const smal = alle.filter((r) => r.uitvoering.toLowerCase().includes(uitvoering));
+    if (smal.length >= 4) { gebruikt = smal; opUitvoering = true; }
   }
 
-  // Web search voegt citatie-markup toe (<cite index="...">...</cite>); die strippen we eruit.
-  const schoon = jsonText.replace(/<cite[^>]*>/gi, "").replace(/<\/cite>/gi, "");
-  let markt: Record<string, unknown>;
-  try {
-    markt = JSON.parse(schoon);
-  } catch {
-    return Response.json({ error: "Ongeldige marktdata", raw: schoon.slice(0, 300) }, { status: 422 });
-  }
+  const schoon = zonderUitschieters(gebruikt);
+  const nu = new Date();
+  const leeftijdMnd = Math.max(0, (nu.getFullYear() - bouwjaarNum) * 12 + nu.getMonth() + 1 - 6);
+  const fit = fitWaarde(schoon, kmVoorZoeken, leeftijdMnd);
+  const live = !!fit;
 
   const margeDecimaal = margeNum / 100;
   const leeftijd = Math.max(0, huidigJaar - bouwjaarNum);
@@ -182,26 +137,19 @@ Geef UITSLUITEND dit JSON-object met realistische gehele getallen:
 
   // ── 2) Marktwaarde uit de gevonden advertenties ──
   //
-  // Tellen wat er écht in de lijst staat, niet wat het model zegt dat het gevonden heeft.
-  // Dat waren twee verschillende getallen, en juist het zelfgerapporteerde getal bepaalde
-  // hoe zwaar de marktwaarde meewoog. Een advertentie telt alleen mee als er een prijs bij
-  // staat die ergens op slaat.
-  const ruweVergelijkbare = Array.isArray(markt.vergelijkbare) ? markt.vergelijkbare : [];
-  const vergelijkbare = (ruweVergelijkbare as Record<string, unknown>[]).filter((v) => {
-    const prijs = Number(v?.prijs) || 0;
-    return prijs >= 200 && prijs <= 500_000;
-  });
-  const echtGevonden = live ? vergelijkbare.length : 0;
+  // De waarde komt uit een lijn door de gevonden auto's, niet uit een gemiddelde. Een
+  // gemiddelde husselt de auto's met veel kilometers en die met weinig door elkaar; met
+  // een lijn reken je dat verschil uit én kun je het uitleggen ("zoveel per 1.000 km").
+  const echtGevonden = schoon.length;
+  const marktGemiddeld = fit?.gemPrijs ?? 0;
 
-  const marktGemiddeld = Number(markt.gemiddelde_prijs) || 0;
   // Vraagprijzen liggen boven de verkoopprijs. De 4% hieronder is een aanname en geen
-  // meting; zie het plan in het archief — die hoort op JG's eigen verkoopcijfers geijkt
-  // te worden zodra daar genoeg van zijn.
-  let marktVerkoop = marktGemiddeld > 0 && echtGevonden > 0 ? Math.round(marktGemiddeld * 0.96) : 0;
+  // meting; die hoort geijkt te worden op JG's eigen verkoopcijfers zodra daar genoeg
+  // van zijn — hij heeft vraagprijs én verkoopprijs per kenteken in de database staan.
+  let marktVerkoop = fit ? Math.round(fit.waarde * 0.96) : 0;
 
   // Een marktwaarde die mijlenver van de koerslijst ligt is vrijwel altijd een verkeerde
-  // auto (ander model, ander bouwjaar) in plaats van een bijzondere prijs. Die gooien we
-  // weg in plaats van hem 85% van het gewicht te geven.
+  // auto (ander model, ander bouwjaar) in plaats van een bijzondere prijs.
   let marktAfgekeurd = "";
   if (marktVerkoop > 0 && koerslijstWaarde > 0) {
     const verhouding = marktVerkoop / koerslijstWaarde;
@@ -285,11 +233,23 @@ Geef UITSLUITEND dit JSON-object met realistische gehele getallen:
     // en dus ook niet meer op het scherm.
     markt: {
       gemiddelde_prijs: marktGemiddeld,
-      min_prijs: Number(markt.min_prijs) || 0,
-      max_prijs: Number(markt.max_prijs) || 0,
+      min_prijs: schoon.length ? Math.min(...schoon.map((r) => r.prijs)) : 0,
+      max_prijs: schoon.length ? Math.max(...schoon.map((r) => r.prijs)) : 0,
       aantal_gevonden: echtGevonden,
-      vergelijkbare,
-      advies: String(markt.advies ?? ""),
+      vergelijkbare: schoon
+        .slice()
+        .sort((x, y) => x.prijs - y.prijs)
+        .map((r) => ({
+          titel: r.uitvoering.slice(0, 70),
+          bouwjaar: r.bouwjaar,
+          km: r.km,
+          prijs: r.prijs,
+          platform: "AutoScout24",
+          url: r.url,
+        })),
+      advies: fit
+        ? `${echtGevonden} vergelijkbare auto's gevonden${opUitvoering ? ` met uitvoering ${uitvoering}` : ""}. In dit aanbod scheelt elke 1.000 km ongeveer € ${Math.abs(fit.perDuizendKm)}.`
+        : "Geen vergelijkbare auto's gevonden; de waarde komt uit de nieuwprijs.",
     },
     berekening: {
       max_inkoop: maxInkoop,
@@ -308,6 +268,19 @@ Geef UITSLUITEND dit JSON-object met realistische gehele getallen:
       /** Kwamen de cijfers uit echt gezochte advertenties, of uit modelkennis? Dit is het
        *  verschil tussen onderzoek en een herinnering, en dat hoort op het scherm. */
       live,
+      // Voor de uitleg aan de klant: dit zijn de cijfers waar het verhaal op rust.
+      zoekbereik,
+      op_uitvoering: opUitvoering,
+      uitvoering: opUitvoering ? uitvoering : "",
+      uitvoeringen,
+      ...(fit
+        ? {
+            gem_km: fit.gemKm,
+            gem_prijs: fit.gemPrijs,
+            per_duizend_km: fit.perDuizendKm,
+            spreiding: fit.spreiding,
+          }
+        : {}),
       ...(marktAfgekeurd ? { markt_afgekeurd: marktAfgekeurd } : {}),
     },
   });

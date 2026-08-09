@@ -59,6 +59,13 @@ export default function TaxatieTab({
   // moet de btw eerst van de verkoopprijs af voordat je je marge rekent. Dat scheelde
   // tot zeventien procent in wat je maximaal kunt bieden.
   const [btwType, setBtwType] = useState<"marge" | "btw">("marge");
+  // De uitvoering. Het RDW kent die niet — een kenteken vertelt niet of het een
+  // Comfortline of een Highline is, en dat scheelde op een Golf van dertienduizend euro
+  // ruim vierduizend. Wie de auto voor zich heeft weet het wel, dus die vraag stellen we.
+  const [uitvoering, setUitvoering] = useState("");
+  const [uitleg, setUitleg] = useState("");
+  const [uitlegBezig, setUitlegBezig] = useState(false);
+  const [uitlegFout, setUitlegFout] = useState<string | null>(null);
   const [kosten, setKosten] = useState(0);
   const [posten, setPosten] = useState<{ id: number; label: string; bedrag: number }[]>([]);
   const [scanStap, setScanStap] = useState(0);
@@ -115,7 +122,7 @@ export default function TaxatieTab({
     // Alles wat de opdracht nodig heeft nu vastleggen: hij draait straks buiten dit
     // scherm door, ook als je naar een ander tabblad klikt.
     const auto = rdw;
-    const gegevens = { kenteken, km: kmNum, marge, kosten, btwType };
+    const gegevens = { kenteken, km: kmNum, marge, kosten, btwType, uitvoering };
 
     start(`Taxatie ${auto.merk} ${auto.model}`, async () => {
       const res = await fetch("/api/admin/inkoop/taxeer", {
@@ -130,6 +137,7 @@ export default function TaxatieTab({
           gewenste_marge: gegevens.marge,
           geschatte_kosten: gegevens.kosten,
           btw_type: gegevens.btwType,
+          uitvoering: gegevens.uitvoering,
         }),
       });
       if (!res.ok) {
@@ -156,6 +164,42 @@ export default function TaxatieTab({
 
       return uit;
     });
+  };
+
+  /**
+   * Schrijft de uitleg die je aan de verkoper geeft.
+   *
+   * Alle bedragen zijn al uitgerekend; de AI zet ze alleen in gewone taal om. Een bod
+   * zonder uitleg voelt als een truc, zeker als het lager is dan gehoopt. Met de rekensom
+   * erbij is het te controleren — en dat is precies het verschil met de instant-bod-sites.
+   */
+  const maakUitleg = async () => {
+    if (!rdw || !resultaat || uitlegBezig) return;
+    setUitlegBezig(true);
+    try {
+      const b = resultaat.berekening;
+      const res = await fetch("/api/admin/inkoop/uitleg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merk: rdw.merk, model: rdw.model, bouwjaar: rdw.bouwjaar, km: kmNum,
+          uitvoering: b.uitvoering, op_uitvoering: b.op_uitvoering,
+          aantal: resultaat.markt.aantal_gevonden, zoekbereik: b.zoekbereik,
+          gem_prijs: b.gem_prijs, gem_km: b.gem_km, per_duizend_km: b.per_duizend_km,
+          verwachte_verkoop: b.verwachte_verkoop, btw_afdracht: b.btw_afdracht,
+          geschatte_kosten: b.geschatte_kosten, gewenste_marge: b.gewenste_marge,
+          max_inkoop: b.max_inkoop,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setUitlegFout(d.error ?? "Uitleg schrijven mislukt"); return; }
+      setUitleg(d.uitleg ?? "");
+      setUitlegFout(null);
+    } catch (e) {
+      setUitlegFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUitlegBezig(false);
+    }
   };
 
   const slaOp = async () => {
@@ -422,6 +466,31 @@ export default function TaxatieTab({
                 style={{ ...inputStijl, paddingRight: 34, fontFamily: T.play, fontSize: 16, fontWeight: 700 }}
               />
             </Field>
+
+            {/* De uitvoering. Verschijnt pas ná een analyse, want dan weten we welke
+                uitvoeringen er in dit aanbod voorkomen. Kies je er een, dan wordt er
+                opnieuw gerekend op alleen die auto's — dat maakt de schatting fors
+                scherper (gemeten: spreiding van € 2.192 naar € 437 op een Golf). */}
+            {(b?.uitvoeringen?.length ?? 0) > 0 && (
+              <div>
+                <p className="mb-1.5" style={micro()}>Uitvoering</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Chip active={uitvoering === ""} onClick={() => setUitvoering("")}>
+                    alle
+                  </Chip>
+                  {b!.uitvoeringen!.map((u) => (
+                    <Chip key={u.naam} active={uitvoering === u.naam} onClick={() => setUitvoering(u.naam)}>
+                      {u.naam} <span style={{ opacity: 0.55 }}>{u.aantal}</span>
+                    </Chip>
+                  ))}
+                </div>
+                <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.45), lineHeight: 1.5 }}>
+                  {uitvoering
+                    ? `Analyseer opnieuw om alleen ${uitvoering}-uitvoeringen mee te rekenen.`
+                    : "Het kenteken zegt niets over de uitvoering. Weet je hem, kies hem dan — dat scheelt vaak duizenden euro's."}
+                </p>
+              </div>
+            )}
 
             <div>
               <p className="mb-1.5" style={micro()}>BTW-regeling</p>
@@ -803,6 +872,63 @@ export default function TaxatieTab({
               <p className="mt-2" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.amber }}>
                 Dit duurt langer dan gebruikelijk — nog even geduld.
               </p>
+            )}
+          </Panel>
+        )}
+
+        {/* ── Uitleg voor de verkoper ──
+            Het bod komt uit een rekensom; hier wordt die rekensom een verhaal. Zonder
+            uitleg voelt een bod als een truc, zeker als het lager is dan gehoopt. */}
+        {m && b && (
+          <Panel
+            title="Uitleg voor de verkoper"
+            actions={
+              <Btn variant="ghost" size="sm" onClick={maakUitleg} disabled={uitlegBezig}>
+                {uitlegBezig ? <Spinner size={11} /> : null}
+                {uitlegBezig ? "Schrijven…" : uitleg ? "Opnieuw" : "Schrijf uitleg"}
+              </Btn>
+            }
+          >
+            {uitlegFout && <Foutmelding>{uitlegFout}</Foutmelding>}
+
+            {!uitleg && !uitlegBezig && !uitlegFout && (
+              <p style={body(12.5, T.ink(0.55))}>
+                Laat in gewone taal uitschrijven waarom dit bod eruit komt: hoeveel vergelijkbare
+                auto&apos;s er zijn gevonden, wat die vragen, wat de kilometerstand doet, en wat er
+                aan btw, kosten en marge af gaat. Alle bedragen komen uit de berekening hiernaast —
+                er wordt niets opnieuw geschat.
+              </p>
+            )}
+
+            {uitlegBezig && (
+              <div className="flex items-center gap-2.5 py-6">
+                <Spinner size={15} />
+                <span style={body(12.5)}>De uitleg wordt geschreven…</span>
+              </div>
+            )}
+
+            {uitleg && (
+              <div className="flex flex-col gap-3">
+                <textarea
+                  value={uitleg}
+                  onChange={(e) => setUitleg(e.target.value)}
+                  rows={10}
+                  style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Btn
+                    onClick={() => {
+                      navigator.clipboard.writeText(uitleg).catch(() => {});
+                    }}
+                  >
+                    Kopieer tekst
+                  </Btn>
+                  <span style={body(11.5, T.ink(0.45))}>
+                    Lees hem even door voor je hem gebruikt — hij staat onder voorbehoud van
+                    bezichtiging.
+                  </span>
+                </div>
+              </div>
             )}
           </Panel>
         )}
