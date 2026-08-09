@@ -53,7 +53,7 @@ TOON — een autoverkoper met oprechte interesse
   bijvoeglijke naamwoorden goed verbogen, en zou een Nederlander het zo zeggen? Let vooral op vaste
   uitdrukkingen; die gaan het snelst mis. Schrijf "als u er snel vanaf wilt zijn" (niet "als u het
   snel af wil zijn"), "een snellere verkoop" (niet "sneller verkoop"), "dat levert u meer op" (niet
-  "dat behoudt u meer"). Eén kromme zin en het bericht leest als automatisch verstuurd — precies
+  "dat behoudt u meer"), "de groep potentiële kopers" (niet "de groep potentiële koper"). Eén kromme zin en het bericht leest als automatisch verstuurd — precies
   wat het niet mag lijken.
 - Begin in de ik-vorm, alsof u de advertentie zelf net zag: "Ik zag uw advertentie van…". Niet met
   een kaal werkwoord ("Zag uw Golf staan") — dat leest als een telegram.
@@ -118,7 +118,7 @@ Geef UITSLUITEND dit JSON-object terug, zonder tekst eromheen:
 {
   "onderwerp": "de e-mailonderwerpregel. Spreek de verkoper aan over ZIJN auto — dus 'Uw ${lead.merk} ${lead.model}${lead.bouwjaar ? ` uit ${lead.bouwjaar}` : ""} op ${lead.bron || "Marktplaats"}' of iets in die geest. NOOIT iets als '${lead.merk} ${lead.model} te koop': dat leest als een advertentie van hemzelf en niet als een bericht van een bedrijf. Geen reclametaal.",
   "bericht_mail": "de e-mail, u-vorm, met regelafbrekingen als \\n, eindigend BIJ de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer: geen groet, geen naam, geen bedrijfsnaam, geen adres en geen website.",
-  "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 700 tot 1000 tekens; regelafbrekingen als \\n; u-vorm; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en eindig met exact de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer — geen groet, geen naam, geen bedrijfsnaam, geen website."
+  "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 700 tot 1100 tekens; regelafbrekingen als \\n; u-vorm; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en eindig met exact de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer — geen groet, geen naam, geen bedrijfsnaam, geen website."
 }`;
 
 function extractLaatsteJson(text: string): string | null {
@@ -173,19 +173,22 @@ export async function genereerBericht(
   const schrijven = client.messages
     .create(
       {
-        // Haiku 4.5 — het goedkoopste model, ook voor het schrijfwerk. Vergeleken
-        // met Opus 5 op een echte advertentie: allebei bruikbaar, maar Haiku is
-        // vlakker. Waar hij afgleed staat hieronder in de prompt dichtgetimmerd (de
-        // onderwerpregel en het aantal vervolgstappen).
+        // Sonnet 5, en bewust niet het goedkoopste model.
         //
-        // Haiku accepteert geen "adaptive" thinking en geen output_config; die geven
-        // allebei een 400. Denken bewust wel aan: het scheelt merkbaar in hoe
-        // natuurlijk de tekst loopt. Het budget is bewust krap — met 2000 schreef hij
-        // drie keer zoveel denkwerk als er tekst uitkwam, en dat betaal je gewoon mee.
-        model: "claude-haiku-4-5-20251001",
+        // Zoeken en uitlezen draaien op Haiku 4.5, want dat is overtikwerk. Dit niet:
+        // dit is het enige wat een vreemde van JG Mobility te lezen krijgt. Haiku
+        // maakte ongeveer één Nederlandse fout per bericht — "als u het snel af wil
+        // zijn", "sneller verkoop", "Alleen moet wij dan" — en zulke kromme zinnen
+        // laten een bericht lezen als automatisch verstuurd, precies wat het niet mag
+        // lijken. Het verschil is een paar cent per bericht.
+        //
+        // Sonnet 5 kan wél adaptief denken en een effort-instelling aan, anders dan
+        // Haiku; die geeft daar een 400 op.
+        model: "claude-sonnet-5",
         max_tokens: 4000,
         system: systeem,
-        thinking: { type: "enabled", budget_tokens: 1024 },
+        thinking: { type: "adaptive" },
+        output_config: { effort: "medium" },
         messages: [{ role: "user", content: opdracht(lead) }],
       },
       { signal: controller.signal }
