@@ -41,7 +41,16 @@ TOON
 - Kort. Iemand die zijn auto verkoopt krijgt veel berichten; die van jou moet in tien seconden te lezen zijn.
 - Concreet over DEZE auto: noem merk, model, bouwjaar en iets specifieks (kilometerstand, prijs, uitvoering). Zo blijkt dat je de advertentie echt gezien hebt.
 - Geen overdrijving, geen uitroeptekens, geen "GRATIS", geen loze superlatieven. Geen beloftes over bedragen die je niet kunt waarmaken.
-- Sluit af met één makkelijke vervolgstap (bellen of terugmailen), niet met drie opties.
+- Sluit af met PRECIES ÉÉN vervolgstap. Niet "bel of mail", niet "laat het weten of neem contact
+  op" — kies er één en stel die als vraag. Bijvoorbeeld: "Zal ik je even bellen om het kort door te
+  nemen?" Twee opties dwingen de lezer te kiezen, en dan kiest hij niets.
+- Begin het bericht in de ik-vorm, alsof je de advertentie zelf net zag: "Ik zag je advertentie
+  van…". Niet met een kaal werkwoord ("Zag je Golf staan") — dat leest als een telegram.
+- Noem de vraagprijs. Dat is het duidelijkste bewijs dat je de advertentie echt hebt bekeken en niet
+  massaal hetzelfde rondstuurt. Maar geef er GEEN oordeel over: niet "scherp geprijsd", niet "aan de
+  hoge kant", niet "netjes geprijsd". Je weet niet wat de auto waard is zonder hem te zien, en je
+  verhaal is juist dat je er meer uit kunt halen — dan moet je niet eerst zeggen dat de prijs al
+  goed is. Noem het bedrag en laat het daarbij.
 
 OPBOUW
 1. Eén zin: je zag de advertentie, en noem de auto concreet.
@@ -78,7 +87,7 @@ Wat opviel: ${lead.motivatie || "—"}
 
 Geef UITSLUITEND dit JSON-object terug, zonder tekst eromheen:
 {
-  "onderwerp": "korte, concrete e-mailonderwerpregel over deze auto — geen reclametaal",
+  "onderwerp": "de e-mailonderwerpregel. Spreek de verkoper aan over ZIJN auto — dus 'Je ${lead.merk} ${lead.model}${lead.bouwjaar ? ` uit ${lead.bouwjaar}` : ""} op ${lead.bron || "Marktplaats"}' of iets in die geest. NOOIT iets als '${lead.merk} ${lead.model} te koop': dat leest als een advertentie van hemzelf en niet als een bericht van een bedrijf. Geen reclametaal.",
   "bericht_mail": "de e-mail, met regelafbrekingen als \\n, eindigend na de afsluitende zin — ZONDER groet, naam, bedrijfsnaam of adres",
   "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 600 tot 900 tekens; regelafbrekingen als \\n; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en sluit af met precies deze twee regels: 'Groet, Jimi — JG Mobility, Barendrecht' en 'info@jgmobility.nl · www.jgmobility.nl'. Die afsluiting is nodig omdat er in een berichtenbox geen handtekening onder komt en de verkoper anders geen manier heeft om buiten het platform te reageren."
 }`;
@@ -135,11 +144,19 @@ export async function genereerBericht(
   const schrijven = client.messages
     .create(
       {
-        model: "claude-opus-5",
+        // Haiku 4.5 — het goedkoopste model, ook voor het schrijfwerk. Vergeleken
+        // met Opus 5 op een echte advertentie: allebei bruikbaar, maar Haiku is
+        // vlakker. Waar hij afgleed staat hieronder in de prompt dichtgetimmerd (de
+        // onderwerpregel en het aantal vervolgstappen).
+        //
+        // Haiku accepteert geen "adaptive" thinking en geen output_config; die geven
+        // allebei een 400. Denken bewust wel aan: het scheelt merkbaar in hoe
+        // natuurlijk de tekst loopt. Het budget is bewust krap — met 2000 schreef hij
+        // drie keer zoveel denkwerk als er tekst uitkwam, en dat betaal je gewoon mee.
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 4000,
         system: systeem,
-        thinking: { type: "adaptive" },
-        output_config: { effort: "medium" },
+        thinking: { type: "enabled", budget_tokens: 1024 },
         messages: [{ role: "user", content: opdracht(lead) }],
       },
       { signal: controller.signal }
