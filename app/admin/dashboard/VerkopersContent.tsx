@@ -1700,17 +1700,62 @@ function NakijkenTab({
   gekozenId: string | null;
   setGekozenId: (id: string | null) => void;
 }) {
+  // Welke lijst je bekijkt: wat er nog te doen is, of wat er al gedaan is.
+  const [blad, setBlad] = useState<"klaar" | "archief">("klaar");
+  // Welke rij op dit moment wordt afgevinkt.
+  const [vinkBezig, setVinkBezig] = useState<string | null>(null);
+
   const alle = useMemo(() => leads ?? [], [leads]);
   // De wachtrij: alles wat jij hebt afgevinkt en nog gemaild moet worden.
   const wachtrij = useMemo(() => alle.filter((l) => l.status === "goedgekeurd"), [alle]);
+  // Het archief: alles wat de deur uit is. Blijft staan, zodat je kunt terugzien wie je
+  // benaderd hebt en wie er heeft gereageerd.
+  const archief = useMemo(
+    () =>
+      alle.filter(
+        (l) => l.status === "verstuurd" || l.status === "gereageerd" || l.status === "cosignatie"
+      ),
+    [alle]
+  );
+  const lijst = blad === "klaar" ? wachtrij : archief;
+
+  /**
+   * Afvinken: je hebt het bericht zelf verstuurd, dus hier alleen vastleggen.
+   *
+   * Dat vastleggen is niet alleen administratie — het verzendlog is waar de "nooit
+   * twee keer"-controle op kijkt. Vink je hier niet af, dan kan dezelfde verkoper bij
+   * een volgende ronde opnieuw in je wachtrij belanden.
+   */
+  const vinkAf = async (lead: Lead) => {
+    if (vinkBezig) return;
+    setVinkBezig(lead.id);
+    onFout("");
+    try {
+      const res = await fetch(`/api/admin/verkopers/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handmatig_verstuurd_via: "platform" }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        onFout(d.error || "Afvinken mislukt");
+        return;
+      }
+      await herlaad();
+    } catch (e) {
+      onFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVinkBezig(null);
+    }
+  };
   // Welke verkoper er openstaat. Wijs je er zelf één aan — met het vinkje, of met de
   // pijl bij een al verstuurde — dan is dat leidend. Alleen als er niets is
   // aangewezen valt hij terug op de eerste uit de wachtrij, zodat het scherm niet
   // leeg staat terwijl er werk ligt.
   const gekozen = useMemo(() => {
     const aangewezen = alle.find((l) => l.id === gekozenId) ?? null;
-    return aangewezen ?? wachtrij[0] ?? null;
-  }, [alle, gekozenId, wachtrij]);
+    return aangewezen ?? lijst[0] ?? null;
+  }, [alle, gekozenId, lijst]);
 
   const metTekst = useMemo(
     () => wachtrij.filter((l) => l.bericht_kort || l.bericht_mail).length,
@@ -1724,7 +1769,7 @@ function NakijkenTab({
         <div className="flex items-center justify-center py-16">
           <Spinner size={22} />
         </div>
-      ) : gekozen === null ? (
+      ) : gekozen === null && wachtrij.length === 0 && archief.length === 0 ? (
         <Empty
           icon={<Users size={30} color={T.ink(0.2)} />}
           title="Niets klaargezet"
@@ -1734,30 +1779,52 @@ function NakijkenTab({
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5 items-start">
           {/* Links: de lijst. Rechts: alles over de aangeklikte advertentie. */}
           <div className="xl:col-span-2 flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between gap-2 mb-1">
-              <p style={micro(T.ink(0.4))}>
-                {wachtrij.length > 0 ? `${wachtrij.length} klaargezet` : "Wachtrij leeg"}
-              </p>
-              {metTekst > 0 && (
-                <p style={{ ...micro(T.groen), fontSize: 9 }}>{metTekst} met tekst</p>
+            {/* Twee lijsten: wat er nog te doen is, en wat er al de deur uit is. */}
+            <div className="flex gap-1.5 mb-1">
+              <Chip active={blad === "klaar"} onClick={() => setBlad("klaar")}>
+                Klaargezet {wachtrij.length > 0 && <span style={{ opacity: 0.6 }}>{wachtrij.length}</span>}
+              </Chip>
+              <Chip active={blad === "archief"} onClick={() => setBlad("archief")}>
+                Archief {archief.length > 0 && <span style={{ opacity: 0.6 }}>{archief.length}</span>}
+              </Chip>
+              {blad === "klaar" && metTekst > 0 && (
+                <span className="ml-auto self-center" style={{ ...micro(T.groen), fontSize: 9 }}>
+                  {metTekst} met tekst
+                </span>
               )}
             </div>
 
-            {wachtrij.map((l) => (
+            {lijst.map((l) => (
               <WachtrijKaart
                 key={l.id}
                 lead={l}
                 actief={l.id === gekozen.id}
+                afvinkbaar={blad === "klaar"}
+                vinkt={vinkBezig === l.id}
                 onClick={() => setGekozenId(l.id)}
+                onAfvinken={() => vinkAf(l)}
               />
             ))}
 
-            {wachtrij.length === 0 && (
-              <Empty compact title="Wachtrij leeg" body="Vink op het tabblad Verkopers de volgende aan." />
+            {lijst.length === 0 && (
+              <Empty
+                compact
+                title={blad === "klaar" ? "Wachtrij leeg" : "Archief leeg"}
+                body={
+                  blad === "klaar"
+                    ? "Vink op het tabblad Verkopers de volgende aan."
+                    : "Zodra je iemand afvinkt als verstuurd, komt hij hier te staan."
+                }
+              />
             )}
           </div>
 
           <div className="xl:col-span-3 xl:sticky" style={{ top: 112 }}>
+            {gekozen === null ? (
+              <Panel>
+                <Empty compact title="Niets geselecteerd" body="Kies links een verkoper." />
+              </Panel>
+            ) : (
             <NakijkPaneel
               key={gekozen.id}
               lead={gekozen}
@@ -1766,6 +1833,7 @@ function NakijkenTab({
               onFout={onFout}
               onVerwijderd={() => setGekozenId(null)}
             />
+            )}
           </div>
         </div>
       )}
@@ -1775,61 +1843,105 @@ function NakijkenTab({
 }
 
 /** Compacte rij in de wachtrij van Nakijken. */
-function WachtrijKaart({ lead, actief, onClick }: { lead: Lead; actief: boolean; onClick: () => void }) {
+function WachtrijKaart({
+  lead,
+  actief,
+  afvinkbaar,
+  vinkt,
+  onClick,
+  onAfvinken,
+}: {
+  lead: Lead;
+  actief: boolean;
+  /** Alleen in de wachtrij; in het archief is er niets meer af te vinken. */
+  afvinkbaar: boolean;
+  vinkt: boolean;
+  onClick: () => void;
+  onAfvinken: () => void;
+}) {
   const heeftTekst = !!(lead.bericht_kort || lead.bericht_mail);
   const feiten = [
     lead.bouwjaar,
     lead.km ? `${Math.round(Number(lead.km) / 1000)}dkm` : "",
     lead.plaats,
   ].filter(Boolean);
+  const st = STATUS_LABEL[lead.status];
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-left w-full transition-all hover:opacity-85"
+    <div
+      className="relative flex items-stretch transition-all"
       style={{
         backgroundColor: actief ? T.navy : T.paper,
         border: `1px solid ${actief ? T.navy : T.line}`,
-        padding: "10px 12px",
-        // Een streepje links dat meteen laat zien of er al een tekst ligt. Met twintig
-        // in de rij wil je dat zien zonder te lezen.
-        borderLeft: `3px solid ${heeftTekst ? T.groen : T.amber}`,
+        // Streepje links: in de wachtrij of er al een tekst ligt, in het archief of er
+        // al gereageerd is. Met twintig in de rij wil je dat zien zonder te lezen.
+        borderLeft: `3px solid ${
+          afvinkbaar ? (heeftTekst ? T.groen : T.amber) : st.kleur
+        }`,
       }}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className="flex-1 min-w-0 truncate"
-          style={{
-            fontFamily: T.play,
-            fontSize: 13.5,
-            fontWeight: 700,
-            color: actief ? "#ffffff" : T.navy,
-          }}
-        >
-          {`${lead.merk} ${lead.model}`.trim() || lead.titel}
-        </span>
-        {lead.vraagprijs > 0 && (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex-1 min-w-0 text-left hover:opacity-85 transition-all"
+        style={{ padding: "10px 12px" }}
+      >
+        <div className="flex items-center gap-2">
           <span
+            className="flex-1 min-w-0 truncate"
             style={{
-              ...num(12, actief ? "#ffffff" : T.navy),
-              flexShrink: 0,
+              fontFamily: T.play,
+              fontSize: 13.5,
+              fontWeight: 700,
+              color: actief ? "#ffffff" : T.navy,
             }}
           >
-            € {lead.vraagprijs.toLocaleString("nl-NL")}
+            {`${lead.merk} ${lead.model}`.trim() || lead.titel}
           </span>
-        )}
-      </div>
-      <div
-        className="flex items-center gap-2 mt-0.5"
-        style={body(11, actief ? "rgba(255,255,255,0.65)" : T.ink(0.45))}
-      >
-        <span className="flex-1 min-w-0 truncate">{feiten.join(" · ") || lead.bron}</span>
-        <span style={{ flexShrink: 0, color: heeftTekst ? T.groen : T.amber, fontWeight: 600 }}>
-          {heeftTekst ? "tekst klaar" : "geen tekst"}
-        </span>
-      </div>
-    </button>
+          {lead.vraagprijs > 0 && (
+            <span style={{ ...num(12, actief ? "#ffffff" : T.navy), flexShrink: 0 }}>
+              € {lead.vraagprijs.toLocaleString("nl-NL")}
+            </span>
+          )}
+        </div>
+        <div
+          className="flex items-center gap-2 mt-0.5"
+          style={body(11, actief ? "rgba(255,255,255,0.65)" : T.ink(0.45))}
+        >
+          <span className="flex-1 min-w-0 truncate">{feiten.join(" · ") || lead.bron}</span>
+          <span
+            style={{
+              flexShrink: 0,
+              color: afvinkbaar ? (heeftTekst ? T.groen : T.amber) : st.kleur,
+              fontWeight: 600,
+            }}
+          >
+            {afvinkbaar ? (heeftTekst ? "tekst klaar" : "geen tekst") : st.label.toLowerCase()}
+          </span>
+        </div>
+      </button>
+
+      {/* Afvinken zodra je het bericht zelf hebt verstuurd. Hier in de rij, zodat je er
+          een reeks achter elkaar kunt wegwerken zonder telkens naar rechts te hoeven. */}
+      {afvinkbaar && (
+        <button
+          type="button"
+          onClick={onAfvinken}
+          disabled={vinkt}
+          title="Verstuurd — zet in het archief"
+          aria-label="Markeer als verstuurd"
+          className="flex items-center justify-center transition-all hover:opacity-70 disabled:opacity-40"
+          style={{
+            width: 40,
+            flexShrink: 0,
+            borderLeft: `1px solid ${actief ? "rgba(255,255,255,0.2)" : T.line}`,
+            color: actief ? "#ffffff" : T.groen,
+          }}
+        >
+          {vinkt ? <Spinner size={13} tone={actief ? "donker" : undefined} /> : <Check size={16} />}
+        </button>
+      )}
+    </div>
   );
 }
 
