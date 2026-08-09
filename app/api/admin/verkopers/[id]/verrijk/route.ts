@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import sql from "@/lib/db";
+import { magUitgeven, boekVerbruik, BUDGET_OP } from "@/lib/verkopers-budget";
 import {
   initVerkopersDB,
   getLead,
@@ -81,6 +82,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
 
+  // De uitgavenrem. Staat vóór alles wat geld kost, zodat een lopende ronde vanzelf
+  // stilvalt zodra het vrijgegeven bedrag op is.
+  const { mag } = await magUitgeven();
+  if (!mag) return Response.json({ error: BUDGET_OP, budgetOp: true }, { status: 429 });
+
   const { id } = await params;
   await initVerkopersDB();
   const lead = await getLead(id);
@@ -148,6 +154,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n");
+      // Werkelijk verbruik afboeken, niet een schatting: een grote advertentiepagina
+      // kost meer dan een kleine en dat weet je pas achteraf.
+      await boekVerbruik(resp.usage).catch(() => null);
       if (rondeTekst) laatsteTekst = rondeTekst;
       if (resp.stop_reason === "pause_turn") {
         messages.push({ role: "assistant", content: resp.content });
@@ -232,7 +241,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // Kwam er nu pas een e-mailadres of nummer boven water, dan moet de blokkadelijst
   // opnieuw langs — bij het zoeken viel er nog niets te controleren.
   if (await isGeblokkeerd(email, telefoon)) {
-    await sql`DELETE FROM verkoper_leads WHERE id = ${id}`;
+    // Opzij zetten, niet weggooien. Een automatisch proces hoort niets te vernietigen:
+    // een verkeerd geraden beoordeling zou dan een goede lead voorgoed kosten, zonder
+    // dat iemand het merkt. Op 'afgewezen' verdwijnt hij uit je werklijst, maar hij
+    // blijft terug te vinden en terug te zetten.
+    await sql`
+      UPDATE verkoper_leads
+      SET status = 'afgewezen', notitie = 'Staat op de blokkadelijst'
+      WHERE id = ${id}
+    `;
     return Response.json({ ok: true, geblokkeerd: true });
   }
 
@@ -259,10 +276,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     WHERE id = ${id}
   `;
 
-  // Handelaren zijn voor deze radar niet interessant; die halen we meteen weg
-  // zodat de wachtrij schoon blijft.
+  // Handelaren zijn voor deze radar niet interessant. Opzij zetten in plaats van
+  // weggooien: dit is een inschatting van een model, en die kan ernaast zitten. Zou
+  // hij hier verwijderen, dan raak je een echte particulier kwijt zonder dat je het
+  // ooit ziet. Op 'afgewezen' is hij uit je werklijst én terug te halen.
   if (particulierScore > 0 && particulierScore < 6) {
-    await sql`DELETE FROM verkoper_leads WHERE id = ${id}`;
+    await sql`
+      UPDATE verkoper_leads
+      SET status = 'afgewezen',
+          notitie = ${`Beoordeeld als handelaar (${particulierScore}/10 particulier). Klopt dat niet? Zet hem terug op nieuw.`}
+      WHERE id = ${id}
+    `;
     return Response.json({ ok: true, handelaar: true });
   }
 

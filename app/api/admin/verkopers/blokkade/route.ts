@@ -29,13 +29,18 @@ export async function POST(req: Request) {
     const soort = waarde.includes("@") ? "email" : "telefoon";
     await blokkeer(waarde, soort, reden || "Handmatig geblokkeerd");
 
-    // Meteen opruimen: openstaande leads van deze persoon horen niet in de wachtrij.
+    // Openstaande leads van deze persoon uit de wachtrij halen — maar opzij zetten,
+    // niet weggooien. Blokkeer je per ongeluk het verkeerde adres, dan zijn zijn
+    // advertenties anders in één klap weg.
     const genormaliseerd = soort === "email" ? normaliseerEmail(waarde) : normaliseerTelefoon(waarde);
     if (soort === "email") {
-      await sql`DELETE FROM verkoper_leads WHERE lower(email) = ${genormaliseerd} AND status IN ('nieuw','goedgekeurd')`;
+      await sql`
+        UPDATE verkoper_leads SET status = 'afgewezen', notitie = 'Staat op de blokkadelijst'
+        WHERE lower(email) = ${genormaliseerd} AND status IN ('nieuw','goedgekeurd')
+      `;
     } else {
       await sql`
-        DELETE FROM verkoper_leads
+        UPDATE verkoper_leads SET status = 'afgewezen', notitie = 'Staat op de blokkadelijst'
         WHERE regexp_replace(telefoon, '\\D', '', 'g') <> ''
           AND right(regexp_replace(telefoon, '\\D', '', 'g'), 9) = right(${genormaliseerd}, 9)
           AND status IN ('nieuw','goedgekeurd')

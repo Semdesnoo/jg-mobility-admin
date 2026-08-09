@@ -743,6 +743,23 @@ const STATUS_KORT: Record<string, string> = {
 };
 const STATUS_BREEDTE = 230;
 
+/**
+ * Breedte van de actiekolom, in de kop én in de rij hetzelfde.
+ *
+ * Hier ging het mis: de kop reserveerde 200 en de rij gebruikte minWidth 200, terwijl
+ * Bewerken + Bekijk + Verwijder samen ruim 240 breed zijn. De rij werd daardoor breder
+ * dan de kop, hield minder ruimte over voor de autonaam, en alles ernaast schoof naar
+ * links weg onder de verkeerde kolomkop.
+ *
+ * LET OP: de rij zelf gebruikt hiervoor de klasse `md:w-[250px]`, omdat die breedte
+ * daar alleen op desktop mag gelden. Verander je dit getal, verander die klasse dan mee.
+ */
+const ACTIE_BREEDTE = 250;
+
+/** Kolommen mogen niet krimpen: doen ze dat wel, dan krimpen kop en rij verschillend
+ *  (een kop als "STANDTIJD" is nu eenmaal breder dan "4 dgn") en loopt het scheef. */
+const VAST = { flexShrink: 0 } as const;
+
 /** Sorteerbare kolomkop. Buiten de tabel gedefinieerd zodat React hem niet bij
  *  elke render als nieuw componenttype ziet (dat remount de hele kop). */
 function SorteerKop({
@@ -869,16 +886,16 @@ function VoorraadTabel({
         className="hidden md:flex items-center gap-3 px-4 py-2"
         style={{ borderBottom: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fafbfc" }}
       >
-        <div style={{ width: 48 }} />
+        <div style={{ width: 48, ...VAST }} />
         <div className="flex-1 min-w-0"><SorteerKop veld="auto" label="Auto" actief={sorteer === "auto"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 60 }}><SorteerKop veld="bouwjaar" label="Jaar" actief={sorteer === "bouwjaar"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 90 }}><SorteerKop veld="km" label="Km" actief={sorteer === "km"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 80 }}><SorteerKop veld="standtijd" label="Standtijd" actief={sorteer === "standtijd"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 100 }} className="flex"><SorteerKop veld="prijs" label="Prijs" actief={sorteer === "prijs"} oplopend={oplopend} onClick={sorteerOp} rechts /></div>
-        <div style={{ width: STATUS_BREEDTE }}>
+        <div style={{ width: 60, ...VAST }}><SorteerKop veld="bouwjaar" label="Jaar" actief={sorteer === "bouwjaar"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 90, ...VAST }}><SorteerKop veld="km" label="Km" actief={sorteer === "km"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 80, ...VAST }}><SorteerKop veld="standtijd" label="Standtijd" actief={sorteer === "standtijd"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div style={{ width: 100, ...VAST }} className="flex"><SorteerKop veld="prijs" label="Prijs" actief={sorteer === "prijs"} oplopend={oplopend} onClick={sorteerOp} rechts /></div>
+        <div style={{ width: STATUS_BREEDTE, ...VAST }}>
           <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Status</p>
         </div>
-        {!alleenLezen && <div style={{ width: 200 }} />}
+        {!alleenLezen && <div style={{ width: ACTIE_BREEDTE, ...VAST }} />}
       </div>
 
       {/* Rijen */}
@@ -907,7 +924,7 @@ function VoorraadTabel({
             >
               {/* Foto */}
               <div className="flex items-center gap-3 md:contents">
-                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: 48, height: 34, backgroundColor: "#001337" }}>
+                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: 48, height: 34, backgroundColor: "#001337", ...VAST }}>
                   {auto.fotos?.length > 0 ? (
                     <Image src={auto.fotos[0]} alt="" fill sizes="48px" className="object-cover" />
                   ) : (
@@ -929,26 +946,26 @@ function VoorraadTabel({
               </div>
 
               {/* Kolommen — desktop */}
-              <p className="hidden md:block text-xs" style={{ width: 60, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+              <p className="hidden md:block text-xs" style={{ width: 60, ...VAST, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
                 {auto.bouwjaar}
               </p>
-              <p className="hidden md:block text-xs" style={{ width: 90, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+              <p className="hidden md:block text-xs" style={{ width: 90, ...VAST, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
                 {auto.km.toLocaleString("nl-NL")}
               </p>
               <p
                 className="hidden md:block text-xs font-semibold"
-                style={{ width: 80, color: lang ? "#b45309" : "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}
+                style={{ width: 80, ...VAST, color: lang ? "#b45309" : "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}
               >
                 {dagen != null ? `${dagen} dgn` : "—"}
               </p>
 
               {/* Prijs */}
-              <p className="hidden md:block text-sm font-bold text-right" style={{ width: 100, color: "#001337", fontFamily: "var(--font-playfair)" }}>
+              <p className="hidden md:block text-sm font-bold text-right" style={{ width: 100, ...VAST, color: "#001337", fontFamily: "var(--font-playfair)" }}>
                 €{auto.prijs.toLocaleString("nl-NL")}
               </p>
 
               {/* Status — klikbaar: dit is de handeling die het vaakst nodig is */}
-              <div style={{ width: STATUS_BREEDTE }} className="hidden md:flex items-center gap-1">
+              <div style={{ width: STATUS_BREEDTE, ...VAST }} className="hidden md:flex items-center gap-1">
                 {alleenLezen ? (
                   <span
                     className="inline-block px-2 py-1 text-[10px] font-semibold uppercase tracking-wide"
@@ -1016,9 +1033,12 @@ function VoorraadTabel({
                 )}
               </div>
 
-              {/* Acties — één bewerkknop, die naar de bewerkpagina gaat */}
+              {/* Acties — één bewerkknop, die naar de bewerkpagina gaat.
+                  Alleen op desktop een vaste breedte: op mobiel staat de rij onder
+                  elkaar en zou die uitsteken. De 250 hieronder moet gelijk blijven aan
+                  ACTIE_BREEDTE in de kolomkop. */}
               {!alleenLezen && (
-                <div className="flex items-center gap-1.5 flex-wrap md:flex-nowrap md:justify-end" style={{ minWidth: 200 }}>
+                <div className="flex items-center gap-1.5 flex-wrap w-full md:w-[250px] md:flex-none md:flex-nowrap md:justify-end">
                   <Link
                     href={`/admin/auto-bewerken/${auto.id}`}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-90"

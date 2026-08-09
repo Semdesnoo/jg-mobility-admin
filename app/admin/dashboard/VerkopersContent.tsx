@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
+  Euro,
   ScrollText,
   ChevronRight,
 } from "lucide-react";
@@ -394,6 +395,8 @@ function ZoekTab({
           <Foutmelding>{taak.fout}</Foutmelding>
         )}
 
+        <BudgetPaneel onFout={onFout} />
+
         <VerkopersCriteria onFout={onFout} onGewijzigd={setCriteria} />
 
         {resultaat && (
@@ -454,6 +457,75 @@ function ZoekTab({
   );
 }
 
+/**
+ * De uitgavenrem, in beeld.
+ *
+ * De rem zelf zit in de server en geldt dus altijd — ook als je met een oud tabblad
+ * werkt. Dit paneel laat alleen zien hoeveel er nog in het potje zit en geeft je de
+ * knop om er weer wat bij te doen.
+ */
+function BudgetPaneel({ onFout }: { onFout: (s: string) => void }) {
+  const [budget, setBudget] = useState<{ besteed: number; potje: number; over: number } | null>(null);
+  const [bezig, setBezig] = useState(false);
+
+  const laad = useCallback(async () => {
+    try {
+      const r = await fetch("/api/admin/verkopers/budget");
+      if (r.ok) setBudget(await r.json());
+    } catch {
+      /* een onbereikbaar potje mag het scherm niet blokkeren */
+    }
+  }, []);
+
+  useEffect(() => {
+    laad();
+  }, [laad]);
+
+  const vrijgeven = async () => {
+    setBezig(true);
+    onFout("");
+    try {
+      const r = await fetch("/api/admin/verkopers/budget", { method: "POST" });
+      if (r.ok) setBudget(await r.json());
+      else onFout("Vrijgeven mislukt");
+    } finally {
+      setBezig(false);
+    }
+  };
+
+  const over = (budget?.over ?? 0) / 100;
+  const besteed = (budget?.besteed ?? 0) / 100;
+  const leeg = over <= 0;
+
+  return (
+    <Panel title="Uitgaven" icon={<Euro size={14} color={T.navy} />}>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1" style={{ minWidth: 180 }}>
+          <p style={body(12.5)}>
+            Nog te besteden:{" "}
+            <strong style={{ color: leeg ? T.rood : T.groen, fontSize: 15 }}>
+              € {over.toFixed(2)}
+            </strong>
+          </p>
+          <p style={body(11.5, T.ink(0.45))}>
+            {budget === null
+              ? "Ophalen…"
+              : `Tot nu toe uitgegeven: € ${besteed.toFixed(2)}. Zoeken is gratis; alleen het uitlezen van een advertentie en het schrijven van een tekst kosten iets.`}
+          </p>
+        </div>
+        <Btn onClick={vrijgeven} disabled={bezig} size="lg">
+          {bezig ? <Spinner size={13} tone="donker" /> : <Euro size={13} />}
+          Geef € 2,50 vrij
+        </Btn>
+      </div>
+      <PanelVoet>
+        Zodra dit op is stopt alles wat geld kost, ook een ronde die al loopt. Wil je verder, dan
+        druk je hier opnieuw. Zo kan er nooit meer weglopen dan je zelf hebt goedgekeurd.
+      </PanelVoet>
+    </Panel>
+  );
+}
+
 // ── Tab: leads ────────────────────────────────────────────────────
 /**
  * Het tabblad Verkopers is de sorteertafel.
@@ -483,6 +555,7 @@ const FILTERS: { id: "alle" | Status; label: string }[] = [
   { id: "verstuurd", label: "Verstuurd" },
   { id: "gereageerd", label: "Reactie" },
   { id: "cosignatie", label: "Consignatie" },
+  { id: "afgewezen", label: "Opzij gezet" },
 ];
 
 function LeadsTab({
@@ -501,13 +574,20 @@ function LeadsTab({
   aantalKlaar: number;
 }) {
   const [filter, setFilter] = useState<"alle" | Status>("alle");
+  // Filters op de lijst zelf. Met tweehonderd kaarten is scrollen geen doen.
+  const [zoekterm, setZoekterm] = useState("");
+  const [merkFilter, setMerkFilter] = useState("");
+  const [bronFilter, setBronFilter] = useState("");
+  const [prijsVan, setPrijsVan] = useState("");
+  const [prijsTot, setPrijsTot] = useState("");
+  const [sortering, setSortering] = useState<"nieuwste" | "prijs-op" | "prijs-af" | "kans">("nieuwste");
   // Loopt er een zoekronde? Dan hoort hier niet "ga eerst zoeken" te staan. De takenlaag
   // ligt boven de tabbladen, dus dit tabblad kan er gewoon naar kijken.
   const { taak: zoekTaak } = useAiTaak<unknown>("verkopers-zoek");
   const zoektNu = zoekTaak?.bezig ?? false;
   // Welke rijen op dit moment een knop verwerken. Per lead, zodat de rest
   // aanklikbaar blijft terwijl er eentje bezig is.
-  const [bezig, setBezig] = useState<Record<string, "weg" | "klaar" | "lezen">>({});
+  const [bezig, setBezig] = useState<Record<string, "weg" | "klaar" | "lezen" | "terug">>({});
   // Wie je hebt aangevinkt om een bericht voor te laten schrijven.
   const [gekozen, setGekozen] = useState<Set<string>>(new Set());
 
@@ -588,18 +668,75 @@ function LeadsTab({
     [leads]
   );
 
-  const zichtbaar = useMemo(
-    () => teBeoordelen.filter((l) => filter === "alle" || l.status === filter),
-    [teBeoordelen, filter]
+  // Alle merken die er echt in de lijst zitten, voor het keuzemenu. Geen vaste lijst:
+  // dan zou je kunnen filteren op merken waar niets van te koop staat.
+  const merkenInLijst = useMemo(
+    () => [...new Set(teBeoordelen.map((l) => l.merk).filter(Boolean))].sort(),
+    [teBeoordelen]
   );
 
-  const zetBezig = (id: string, wat: "weg" | "klaar" | "lezen" | null) =>
+  const zichtbaar = useMemo(() => {
+    const term = zoekterm.trim().toLowerCase();
+    const min = Number(prijsVan) || 0;
+    const max = Number(prijsTot) || 0;
+
+    const uit = teBeoordelen.filter((l) => {
+      if (filter !== "alle" && l.status !== filter) return false;
+      if (merkFilter && l.merk !== merkFilter) return false;
+      if (bronFilter && l.bron !== bronFilter) return false;
+      if (min > 0 && (l.vraagprijs === 0 || l.vraagprijs < min)) return false;
+      if (max > 0 && (l.vraagprijs === 0 || l.vraagprijs > max)) return false;
+      if (term) {
+        const hooi = `${l.merk} ${l.model} ${l.titel} ${l.plaats} ${l.naam}`.toLowerCase();
+        if (!hooi.includes(term)) return false;
+      }
+      return true;
+    });
+
+    const gesorteerd = [...uit];
+    if (sortering === "prijs-op") gesorteerd.sort((a, b) => a.vraagprijs - b.vraagprijs);
+    else if (sortering === "prijs-af") gesorteerd.sort((a, b) => b.vraagprijs - a.vraagprijs);
+    else if (sortering === "kans") gesorteerd.sort((a, b) => b.kans_score - a.kans_score);
+    // "nieuwste" is de volgorde waarin de server ze al aanlevert.
+    return gesorteerd;
+  }, [teBeoordelen, filter, merkFilter, bronFilter, prijsVan, prijsTot, zoekterm, sortering]);
+
+  const zetBezig = (id: string, wat: "weg" | "klaar" | "lezen" | "terug" | null) =>
     setBezig((v) => {
       const n = { ...v };
       if (wat) n[id] = wat;
       else delete n[id];
       return n;
     });
+
+  /**
+   * Zet een opzij gelegde verkoper terug in de lijst.
+   *
+   * Het uitlezen zet handelaren automatisch opzij, maar dat is een inschatting en die
+   * kan ernaast zitten. Daarom gooit niets in dit systeem nog automatisch iets weg —
+   * en kun je zo'n oordeel met één klik terugdraaien.
+   */
+  const zetTerug = async (lead: Lead) => {
+    zetBezig(lead.id, "terug");
+    onFout("");
+    try {
+      const res = await fetch(`/api/admin/verkopers/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "nieuw", notitie: "" }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        onFout(d.error || "Terugzetten mislukt");
+        return;
+      }
+      await herlaad();
+    } catch (e) {
+      onFout(String(e));
+    } finally {
+      zetBezig(lead.id, null);
+    }
+  };
 
   /** Advertentie (opnieuw) openen en uitlezen. Nodig als dat tijdens de zoekronde
    *  misging: zonder scores weet je niets van deze verkoper. */
@@ -716,6 +853,99 @@ function LeadsTab({
         })}
       </div>
 
+      {/* Filters. Met tweehonderd kaarten is doorscrollen geen doen; hiermee ga je
+          gericht op zoek naar wat je wilt benaderen. */}
+      <div
+        className="flex flex-wrap items-center gap-2 px-3 py-2.5"
+        style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
+      >
+        <div className="relative flex-1" style={{ minWidth: 190 }}>
+          <Search
+            size={13}
+            color={T.ink(0.3)}
+            style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)" }}
+          />
+          <input
+            value={zoekterm}
+            onChange={(e) => setZoekterm(e.target.value)}
+            placeholder="Zoek op merk, model, plaats of naam…"
+            style={{ ...inputStijl, paddingLeft: 28, height: 32 }}
+          />
+        </div>
+
+        <select
+          value={merkFilter}
+          onChange={(e) => setMerkFilter(e.target.value)}
+          style={{ ...inputStijl, width: "auto", height: 32, minWidth: 120 }}
+        >
+          <option value="">Alle merken</option>
+          {merkenInLijst.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={bronFilter}
+          onChange={(e) => setBronFilter(e.target.value)}
+          style={{ ...inputStijl, width: "auto", height: 32, minWidth: 110 }}
+        >
+          <option value="">Beide sites</option>
+          <option value="Marktplaats">Marktplaats</option>
+          <option value="AutoScout24">AutoScout24</option>
+        </select>
+
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            value={prijsVan}
+            onChange={(e) => setPrijsVan(e.target.value)}
+            placeholder="€ van"
+            style={{ ...inputStijl, width: 82, height: 32 }}
+          />
+          <span style={body(12, T.ink(0.3))}>–</span>
+          <input
+            type="number"
+            value={prijsTot}
+            onChange={(e) => setPrijsTot(e.target.value)}
+            placeholder="€ tot"
+            style={{ ...inputStijl, width: 82, height: 32 }}
+          />
+        </div>
+
+        <select
+          value={sortering}
+          onChange={(e) => setSortering(e.target.value as typeof sortering)}
+          style={{ ...inputStijl, width: "auto", height: 32, minWidth: 130 }}
+        >
+          <option value="nieuwste">Nieuwste eerst</option>
+          <option value="prijs-af">Prijs hoog → laag</option>
+          <option value="prijs-op">Prijs laag → hoog</option>
+          <option value="kans">Beste kans eerst</option>
+        </select>
+
+        <span style={{ ...micro(T.ink(0.4)), marginLeft: "auto" }}>
+          {zichtbaar.length} van {teBeoordelen.length}
+        </span>
+
+        {(zoekterm || merkFilter || bronFilter || prijsVan || prijsTot) && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setZoekterm("");
+              setMerkFilter("");
+              setBronFilter("");
+              setPrijsVan("");
+              setPrijsTot("");
+            }}
+          >
+            Wis filters
+          </Btn>
+        )}
+      </div>
+
       {gekozen.size > 0 && (
         <SelectieBalk
           aantal={gekozen.size}
@@ -727,7 +957,11 @@ function LeadsTab({
       )}
 
       {zichtbaar.length === 0 ? (
-        <Empty compact title="Niets in dit filter" body="Kies een ander filter." />
+        <Empty
+          compact
+          title="Niets gevonden"
+          body="Geen verkoper voldoet aan deze filters. Verruim de prijs of kies een ander merk."
+        />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-2.5">
           {zichtbaar.map((lead) => (
@@ -741,6 +975,7 @@ function LeadsTab({
               onKlaar={() => zetKlaar(lead)}
               onOpenen={() => naarNakijken(lead.id, true)}
               onLezen={() => leesUit(lead)}
+              onTerug={() => zetTerug(lead)}
             />
           ))}
         </div>
@@ -853,15 +1088,17 @@ function LeadKaart({
   onKlaar,
   onOpenen,
   onLezen,
+  onTerug,
 }: {
   lead: Lead;
-  bezig: "weg" | "klaar" | "lezen" | null;
+  bezig: "weg" | "klaar" | "lezen" | "terug" | null;
   aangevinkt: boolean;
   onVink: () => void;
   onWeg: () => void;
   onKlaar: () => void;
   onOpenen: () => void;
   onLezen: () => void;
+  onTerug: () => void;
 }) {
   const st = STATUS_LABEL[lead.status];
   // Afgewezen zit erbij: die verkoper staat op de blokkadelijst, dus klaarzetten om
@@ -986,7 +1223,19 @@ function LeadKaart({
               <RefreshCw size={13} />
             </RijKnop>
           )}
-          {afgerond ? (
+          {lead.status === "afgewezen" ? (
+            <RijKnop
+              titel="Toch een particulier? Zet hem terug in de lijst"
+              kleur={T.amber}
+              bezig={bezig === "terug"}
+              onClick={(e) => {
+                stop(e);
+                onTerug();
+              }}
+            >
+              <RefreshCw size={13} />
+            </RijKnop>
+          ) : afgerond ? (
             <RijKnop
               titel="Bekijk op Nakijken"
               kleur={T.navy}

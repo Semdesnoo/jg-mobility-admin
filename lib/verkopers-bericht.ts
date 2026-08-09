@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sql from "./db";
+import { boekVerbruik } from "./verkopers-budget";
 import type { VerkoperLead } from "./verkopers-db";
 
 /**
@@ -161,12 +162,15 @@ export async function genereerBericht(
       },
       { signal: controller.signal }
     )
-    .then((r) =>
-      r.content
+    .then(async (r) => {
+      // Werkelijk verbruik afboeken bij de uitgavenrem (lib/verkopers-budget.ts), niet
+      // een schatting: pas achteraf weet je wat deze aanroep echt gekost heeft.
+      await boekVerbruik(r.usage).catch(() => null);
+      return r.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
-        .join("\n")
-    )
+        .join("\n");
+    })
     .catch(() => "");
   const timeout = new Promise<string>((resolve) => setTimeout(() => resolve(""), timeoutMs));
   const tekst = await Promise.race([schrijven, timeout]);
