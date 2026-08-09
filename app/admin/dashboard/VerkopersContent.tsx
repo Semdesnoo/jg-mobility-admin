@@ -549,6 +549,13 @@ function korteTitel(lead: Lead): string {
   return zonderMerk.split(/\s+/).slice(0, 2).join(" ");
 }
 
+/**
+ * De velden in de filterbalk. Compacter dan het standaardveld, maar zonder vaste
+ * hoogte — die knipte de tekst af. De padding doet het werk, dan sluiten een
+ * invoerveld en een keuzemenu vanzelf op elkaar aan.
+ */
+const FILTER_VELD = { ...inputStijl, padding: "7px 10px", fontSize: 12.5 } as const;
+
 const FILTERS: { id: "alle" | Status; label: string }[] = [
   { id: "alle", label: "Alles" },
   { id: "nieuw", label: "Nieuw" },
@@ -839,7 +846,11 @@ function LeadsTab({
       </div>
 
       {/* Filters. Met tweehonderd kaarten is doorscrollen geen doen; hiermee ga je
-          gericht op zoek naar wat je wilt benaderen. */}
+          gericht op zoek naar wat je wilt benaderen.
+
+          Geen vaste hoogte op de velden: die botste met de padding van het
+          standaardveld en knipte de tekst onderaan af. De padding bepaalt de hoogte,
+          dan zijn ze vanzelf allemaal gelijk. */}
       <div
         className="flex flex-wrap items-center gap-2 px-3 py-2.5"
         style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
@@ -848,20 +859,20 @@ function LeadsTab({
           <Search
             size={13}
             color={T.ink(0.3)}
-            style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)" }}
+            style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
           />
           <input
             value={zoekterm}
             onChange={(e) => setZoekterm(e.target.value)}
             placeholder="Zoek op merk, model, plaats of naam…"
-            style={{ ...inputStijl, paddingLeft: 28, height: 32 }}
+            style={{ ...FILTER_VELD, paddingLeft: 28 }}
           />
         </div>
 
         <select
           value={merkFilter}
           onChange={(e) => setMerkFilter(e.target.value)}
-          style={{ ...inputStijl, width: "auto", height: 32, minWidth: 120 }}
+          style={{ ...FILTER_VELD, width: "auto", minWidth: 130, paddingRight: 26 }}
         >
           <option value="">Alle merken</option>
           {merkenInLijst.map((m) => (
@@ -874,7 +885,7 @@ function LeadsTab({
         <select
           value={bronFilter}
           onChange={(e) => setBronFilter(e.target.value)}
-          style={{ ...inputStijl, width: "auto", height: 32, minWidth: 110 }}
+          style={{ ...FILTER_VELD, width: "auto", minWidth: 120, paddingRight: 26 }}
         >
           <option value="">Beide sites</option>
           <option value="Marktplaats">Marktplaats</option>
@@ -887,7 +898,7 @@ function LeadsTab({
             value={prijsVan}
             onChange={(e) => setPrijsVan(e.target.value)}
             placeholder="€ van"
-            style={{ ...inputStijl, width: 82, height: 32 }}
+            style={{ ...FILTER_VELD, width: 84 }}
           />
           <span style={body(12, T.ink(0.3))}>–</span>
           <input
@@ -895,14 +906,14 @@ function LeadsTab({
             value={prijsTot}
             onChange={(e) => setPrijsTot(e.target.value)}
             placeholder="€ tot"
-            style={{ ...inputStijl, width: 82, height: 32 }}
+            style={{ ...FILTER_VELD, width: 84 }}
           />
         </div>
 
         <select
           value={sortering}
           onChange={(e) => setSortering(e.target.value as typeof sortering)}
-          style={{ ...inputStijl, width: "auto", height: 32, minWidth: 130 }}
+          style={{ ...FILTER_VELD, width: "auto", minWidth: 145, paddingRight: 26 }}
         >
           <option value="nieuwste">Nieuwste eerst</option>
           <option value="prijs-af">Prijs hoog → laag</option>
