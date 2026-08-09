@@ -1351,12 +1351,18 @@ function RijKnop({
  */
 function NakijkPaneel({
   lead,
+  schrijft,
+  onSchrijf,
   herlaad,
   herlaadBlokkade,
   onFout,
   onVerwijderd,
 }: {
   lead: Lead;
+  /** Draait er op dit moment een schrijfopdracht? Komt uit de takenlaag, niet uit dit
+   *  component: die loopt door als je naar een ander tabblad gaat. */
+  schrijft: boolean;
+  onSchrijf: () => void;
   herlaad: () => Promise<void>;
   herlaadBlokkade: () => Promise<void>;
   onFout: (s: string) => void;
@@ -1368,7 +1374,6 @@ function NakijkPaneel({
   // die je net zelf hebt aangepast.
   const [bericht, setBericht] = useState(lead.bericht_kort || lead.bericht_mail);
   const [email, setEmail] = useState(lead.email);
-  const [schrijft, setSchrijft] = useState(false);
   const [bezig, setBezig] = useState<"" | "versturen" | "lezen">("");
   const [gekopieerd, setGekopieerd] = useState(false);
 
@@ -1388,45 +1393,6 @@ function NakijkPaneel({
     }
     await herlaad();
     return true;
-  };
-
-  /**
-   * De knop waar het hier om draait. Leest zo nodig eerst de advertentie uit — zonder
-   * bouwjaar en kilometerstand wordt de tekst algemeen, en juist het concrete maakt
-   * hem persoonlijk — en laat er daarna een bericht bij schrijven.
-   */
-  const genereer = async () => {
-    if (schrijft) return;
-    setSchrijft(true);
-    onFout("");
-    try {
-      if (!lead.bouwjaar) {
-        const vr = await fetch(`/api/admin/verkopers/${lead.id}/verrijk`, { method: "POST" });
-        const vd = await vr.json().catch(() => ({}));
-        if (vd?.handelaar) {
-          onFout("Dit blijkt een handelaar te zijn — de verkoper is uit de lijst gehaald.");
-          onVerwijderd();
-          await herlaad();
-          return;
-        }
-        if (vd?.bereikbaar === false) {
-          onFout("De advertentie kon niet worden geopend. De tekst wordt geschreven met wat we al wisten.");
-        }
-      }
-
-      const res = await fetch(`/api/admin/verkopers/${lead.id}/bericht`, { method: "POST" });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        onFout(d.error || "Tekst schrijven mislukt");
-        return;
-      }
-      setBericht(d.bericht_kort || d.bericht_mail || "");
-      await herlaad();
-    } catch (e) {
-      onFout(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSchrijft(false);
-    }
   };
 
   const kopieer = async () => {
@@ -1571,7 +1537,7 @@ function NakijkPaneel({
               díe auto — met het aanbod dat wij hem waarschijnlijk sneller en voor een betere prijs
               kunnen verkopen.
             </p>
-            <Btn onClick={genereer} size="lg">
+            <Btn onClick={onSchrijf} size="lg">
               <Sparkles size={13} /> Genereer tekst
             </Btn>
             <span style={body(11, T.ink(0.35))}>Kost ongeveer 2 cent</span>
@@ -1583,7 +1549,7 @@ function NakijkPaneel({
                 Bericht voor de berichtenbox van {lead.bron || "het platform"}
               </p>
               {!alVerstuurd && (
-                <Btn variant="ghost" size="sm" onClick={genereer}>
+                <Btn variant="ghost" size="sm" onClick={onSchrijf}>
                   <RefreshCw size={11} /> Opnieuw
                 </Btn>
               )}
@@ -1703,6 +1669,15 @@ function NakijkenTab({
 }) {
   // Welke lijst je bekijkt: wat er nog te doen is, of wat er al gedaan is.
   const [blad, setBlad] = useState<"klaar" | "archief">("klaar");
+
+  // Het schrijven draait in de takenlaag boven de tabbladen. Dat moet, om twee redenen:
+  // het duurt tientallen seconden en dit tabblad wordt uit het geheugen gegooid zodra je
+  // ergens anders klikt — en die laag heeft een grendel die voorkomt dat je bij
+  // terugkomen per ongeluk een tweede keer op de knop drukt en dus dubbel betaalt.
+  const { taak: schrijfTaak, start: startSchrijven } = useAiTaak<{ leadId: string }>(
+    "verkopers-tekst"
+  );
+  const schrijftVoor = schrijfTaak?.bezig ? (schrijfTaak.resultaat?.leadId ?? null) : null;
   // Welke rij op dit moment wordt afgevinkt.
   const [vinkBezig, setVinkBezig] = useState<string | null>(null);
 
@@ -1719,6 +1694,38 @@ function NakijkenTab({
     [alle]
   );
   const lijst = blad === "klaar" ? wachtrij : archief;
+
+  /**
+   * Laat de AI een tekst schrijven voor één advertentie.
+   *
+   * Leest zo nodig eerst de advertentie uit — zonder bouwjaar en kilometerstand wordt
+   * de tekst algemeen, en juist het concrete maakt hem persoonlijk.
+   */
+  const schrijfTekst = (lead: Lead) => {
+    if (schrijfTaak?.bezig) return;
+    onFout("");
+    const naam = `${lead.merk} ${lead.model}`.trim() || lead.titel.slice(0, 30);
+
+    startSchrijven(`Tekst voor ${naam}`, async (stap) => {
+      if (!lead.bouwjaar) {
+        stap("Advertentie lezen");
+        const vr = await fetch(`/api/admin/verkopers/${lead.id}/verrijk`, { method: "POST" });
+        const vd = await vr.json().catch(() => ({}));
+        if (vd?.handelaar) {
+          await herlaad().catch(() => null);
+          throw new Error("Dit blijkt een handelaar te zijn — de verkoper is uit de lijst gehaald.");
+        }
+      }
+
+      stap("Bericht schrijven");
+      const res = await fetch(`/api/admin/verkopers/${lead.id}/bericht`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Tekst schrijven mislukt");
+
+      await herlaad().catch(() => null);
+      return { leadId: lead.id };
+    });
+  };
 
   /**
    * Afvinken: je hebt het bericht zelf verstuurd, dus hier alleen vastleggen.
@@ -1827,8 +1834,14 @@ function NakijkenTab({
               </Panel>
             ) : (
             <NakijkPaneel
-              key={gekozen.id}
+              // De sleutel bevat of er al een tekst is. Komt die binnen terwijl je op
+              // dit scherm staat, dan wordt het paneel opnieuw opgebouwd en pikt het
+              // de nieuwe tekst op — zonder dat een herlaadactie je eigen aanpassingen
+              // overschrijft zolang die sleutel niet verandert.
+              key={`${gekozen.id}-${gekozen.bericht_kort || gekozen.bericht_mail ? "tekst" : "leeg"}`}
               lead={gekozen}
+              schrijft={schrijftVoor === gekozen.id || (schrijfTaak?.bezig ?? false)}
+              onSchrijf={() => schrijfTekst(gekozen)}
               herlaad={herlaad}
               herlaadBlokkade={herlaadBlokkade}
               onFout={onFout}
