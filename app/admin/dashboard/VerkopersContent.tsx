@@ -11,17 +11,12 @@ import {
   Phone,
   Copy,
   Check,
-  Send,
   Sparkles,
   Trash2,
   Handshake,
   MessageSquare,
   Plus,
   RefreshCw,
-  // Onder een eigen naam: `Infinity` is ook een ingebouwde waarde in JavaScript, en
-  // die wil je in dit bestand niet overschaduwen.
-  Infinity as Oneindig,
-  Square,
   ScrollText,
   GraduationCap,
   ChevronDown,
@@ -298,45 +293,6 @@ export default function VerkopersContent() {
 }
 
 // ── Tab: zoeken ───────────────────────────────────────────────────
-/**
- * Hoeveel keer er per klik gezocht wordt. De server geeft elke ronde een ander stel
- * merken mee, dus meer rondes = een bredere vangst. Drie is een afweging: één ronde
- * duurt tot bijna een minuut, en langer dan een paar minuten wachten is niet fijn —
- * al kun je ondertussen gewoon doorwerken, de ronde loopt in de achtergrond door.
- */
-const ZOEKRONDES = 3;
-
-/** Hoeveel advertenties er tegelijk worden uitgelezen. Elk verzoek is een eigen
- *  functie op Vercel, dus dit mag; hoger dan dit gaat de advertentiesite merken. */
-const TEGELIJK = 3;
-
-/**
- * Doorzoeken stopt als zóveel rondes achter elkaar niets nieuws opleveren.
- *
- * Eén lege ronde zegt weinig: de merken wisselen per ronde, dus je kunt net een
- * groepje treffen waar toevallig niets van te koop staat. Drie op rij betekent dat
- * de vijver binnen jouw zoekgrenzen echt leeg is.
- */
-const DROOG_NA = 3;
-
-/**
- * Noodrem tegen eindeloos doorrazen. Elke ronde kost een AI-aanroep plus het uitlezen
- * van elke gevonden advertentie, dus dit moet een dak hebben — en dat dak stond te
- * hoog. In de praktijk stopt hij ruim eerder omdat er niets nieuws meer bij komt;
- * de rondes daarna leveren vooral advertenties op die je al had.
- */
-const MAX_RONDES = 20;
-
-/**
- * De stopvlag van het doorzoeken, bewust buiten React.
- *
- * De zoektocht draait in de takenlaag en loopt door als je naar een ander scherm
- * gaat. Kom je terug, dan is dit paneel opnieuw opgebouwd en is elke `useRef` van
- * daarvoor weg — een stopknop die op zo'n ref leunt zou dan niets meer doen. Deze
- * ene gedeelde doos overleeft dat.
- */
-const doorzoekVlag = { stop: false };
-
 function ZoekTab({
   herlaad,
   gaNaarLeads,
@@ -357,231 +313,34 @@ function ZoekTab({
   const bezig = taak?.bezig ?? false;
   const fase = taak?.stap ?? "";
   const resultaat = taak?.bezig ? null : (taak?.resultaat ?? null);
-  // Uit het etiket van de lopende taak, niet uit een eigen toestand: dit paneel kan
-  // opnieuw zijn opgebouwd terwijl de zoektocht al draaide.
-  const doorlopend = taak?.label === "Doorlopend zoeken";
-
-  // Of jij om stoppen hebt gevraagd. Alleen voor de knop; de zoektocht zelf leest de
-  // gedeelde vlag, want die overleeft het opnieuw opbouwen van dit paneel.
-  const [stopGevraagd, setStopGevraagd] = useState(false);
-
-  /** Vraagt de lopende zoektocht om na deze ronde te stoppen. Midden in een ronde
-   *  afbreken kan niet netjes — een halve uitleesronde levert leads zonder scores op. */
-  const stopZoeken = () => {
-    doorzoekVlag.stop = true;
-    setStopGevraagd(true);
-  };
-
-  /** Wat één zoekronde plus het uitlezen ervan oplevert. */
-  type RondeOogst = {
-    gevonden: number;
-    weg: number;
-    mislukt: number;
-    overgeslagen: number;
-    merken: string[];
-    toelichting: string;
-    fout: string;
-  };
-
   /**
-   * Eén ronde: zoeken naar advertentielinks, en die daarna openen en uitlezen.
+   * Alles ophalen van Marktplaats en AutoScout24.
    *
-   * Het uitlezen zit hier bewust in dezelfde ronde. Doe je eerst álle zoekrondes en
-   * pas daarna het uitlezen, dan zie je bij doorzoeken uren niets in je lijst staan.
-   * Nu groeit de lijst gestaag mee terwijl hij doorwerkt.
+   * Eén verzoek, alle merken, en er komt geen AI aan te pas — dit kost dus niets.
+   * Ook het uitlezen van elke advertentie gebeurt hier bewust NIET meer: dat was de
+   * enige kostenpost, en het is zonde om ervoor te betalen bij advertenties die je
+   * toch niet gaat benaderen. Je ziet in de lijst zelf wel of het een particulier is;
+   * pas als jij iemand aanvinkt wordt er iets uitgelezen en geschreven.
    */
-  const eenRonde = async (
-    stap: (t: string) => void,
-    label: string
-  ): Promise<RondeOogst> => {
-    const oogst: RondeOogst = {
-      gevonden: 0, weg: 0, mislukt: 0, overgeslagen: 0, merken: [], toelichting: "", fout: "",
-    };
-
-    stap(`${label} — zoeken`);
-    let ids: string[] = [];
-    try {
-      const res = await fetch("/api/admin/verkopers/zoek", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        oogst.fout = data.error || "Zoeken mislukt";
-        return oogst;
-      }
-      ids = Array.isArray(data.nieuwe_ids) ? data.nieuwe_ids : [];
-      oogst.gevonden = ids.length;
-      oogst.overgeslagen = data.overgeslagen ?? 0;
-      if (Array.isArray(data.merken)) oogst.merken = data.merken;
-      if (data.toelichting) oogst.toelichting = data.toelichting;
-    } catch (e) {
-      oogst.fout = String(e);
-      return oogst;
-    }
-
-    if (ids.length === 0) return oogst;
-
-    // Elke advertentie apart openen — samen past het niet binnen de tijd die Vercel
-    // per verzoek geeft — maar wel een paar tegelijk. Strikt achter elkaar duurde
-    // dertig advertenties een kwartier.
-    //
-    // Weggevallen = de lead bestaat niet meer: handelaar of geblokkeerd. Een
-    // advertentie die niet te openen was blijft wél in de lijst staan, met een
-    // aantekening, en telt dus niet als afgevallen.
-    let gedaan = 0;
-    const wachtrij = [...ids];
-
-    const werker = async () => {
-      for (;;) {
-        const id = wachtrij.shift();
-        if (!id) return;
-        try {
-          const vr = await fetch(`/api/admin/verkopers/${id}/verrijk`, { method: "POST" });
-          const vd = await vr.json().catch(() => ({}));
-          if (!vr.ok) oogst.mislukt++;
-          else if (vd?.handelaar || vd?.geblokkeerd) oogst.weg++;
-          else if (vd?.bereikbaar === false) oogst.mislukt++;
-        } catch {
-          /* één mislukte advertentie mag de rest niet blokkeren */
-          oogst.mislukt++;
-        }
-        gedaan++;
-        stap(`${label} — advertentie ${gedaan} van ${ids.length} uitlezen`);
-      }
-    };
-
-    await Promise.all(Array.from({ length: Math.min(TEGELIJK, ids.length) }, werker));
-    await herlaad();
-    return oogst;
-  };
-
-  /** Telt de oogst van een ronde op bij de lopende totalen. */
-  const tel = (
-    totaal: { ids: number; weg: number; mislukt: number; overgeslagen: number },
-    o: RondeOogst
-  ) => {
-    totaal.ids += o.gevonden;
-    totaal.weg += o.weg;
-    totaal.mislukt += o.mislukt;
-    totaal.overgeslagen += o.overgeslagen;
-  };
-
   const zoek = () => {
     if (bezig) return;
     onFout("");
-    doorzoekVlag.stop = false;
-    setStopGevraagd(false);
 
     start("Verkopers zoeken", async (stap) => {
-      const log: string[] = [];
-      const totaal = { ids: 0, weg: 0, mislukt: 0, overgeslagen: 0 };
-      const merken: string[] = [];
-      let toelichting = "";
-      let laatsteFout = "";
+      stap("Marktplaats en AutoScout24 langslopen");
+      const res = await fetch("/api/admin/verkopers/zoek", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Zoeken mislukt");
 
-      for (let ronde = 1; ronde <= ZOEKRONDES; ronde++) {
-        if (doorzoekVlag.stop) break;
-        const o = await eenRonde(stap, `Ronde ${ronde} van ${ZOEKRONDES}`);
-        tel(totaal, o);
-        merken.push(...o.merken);
-        if (o.toelichting) toelichting = o.toelichting;
-        if (o.fout) laatsteFout = o.fout;
-        log.push(
-          o.fout ? `Ronde ${ronde}: ${o.fout}` : `Ronde ${ronde}: ${o.gevonden} nieuwe advertenties`
-        );
-      }
-
-      // Alleen een échte storing is een fout. Rondes die netjes verliepen maar alleen
-      // al bekende advertenties opleverden zijn een normale uitkomst — daar hoort geen
-      // rode melding bij.
-      if (totaal.ids === 0 && laatsteFout) throw new Error(laatsteFout);
+      await herlaad();
 
       return {
-        toegevoegd: Math.max(0, totaal.ids - totaal.weg),
-        overgeslagen: totaal.overgeslagen,
-        gecontroleerd: totaal.ids,
-        afgevallen: totaal.weg,
-        nietUitgelezen: totaal.mislukt,
-        toelichting,
-        merken: [...new Set(merken)],
-      };
-    });
-  };
-
-  /**
-   * Blijven zoeken tot de vijver leeg is.
-   *
-   * Hij draait ronde na ronde door — elke ronde met andere merken — en stopt vanzelf
-   * zodra er drie keer achter elkaar niets nieuws meer bij komt. Dat is het teken dat
-   * hij binnen jouw zoekgrenzen alles heeft gehad. Je kunt hem op elk moment zelf
-   * stoppen, en ondertussen gewoon doorwerken: de lijst bij Verkopers groeit mee.
-   */
-  const blijfZoeken = () => {
-    if (bezig) return;
-    onFout("");
-    doorzoekVlag.stop = false;
-    setStopGevraagd(false);
-
-    start("Doorlopend zoeken", async (stap) => {
-      const log: string[] = [];
-      const totaal = { ids: 0, weg: 0, mislukt: 0, overgeslagen: 0 };
-      const merken: string[] = [];
-      let laatsteFout = "";
-      let droog = 0;
-      let ronde = 0;
-      let reden = "";
-
-      while (ronde < MAX_RONDES) {
-        if (doorzoekVlag.stop) {
-          reden = "Gestopt door jou.";
-          break;
-        }
-        ronde++;
-
-        const bruikbaar = totaal.ids - totaal.weg;
-        const o = await eenRonde(stap, `Ronde ${ronde} · ${bruikbaar} verkopers`);
-        tel(totaal, o);
-        merken.push(...o.merken);
-        // De toelichting per ronde slaan we hier niet op: aan het eind zegt de reden
-        // waaróm hij stopte je meer dan wat de laatste ronde toevallig opmerkte.
-
-        if (o.fout) {
-          laatsteFout = o.fout;
-          log.push(`Ronde ${ronde}: ${o.fout}`);
-          // Een storing telt mee als lege ronde. Blijft de sleutel geweigerd worden,
-          // dan stopt hij zo vanzelf in plaats van zestig keer hetzelfde te proberen.
-          droog++;
-        } else if (o.gevonden === 0) {
-          droog++;
-          log.push(`Ronde ${ronde}: niets nieuws (${droog}× op rij)`);
-        } else {
-          droog = 0;
-          log.push(`Ronde ${ronde}: ${o.gevonden} nieuwe advertenties`);
-        }
-
-        if (droog >= DROOG_NA) {
-          reden = laatsteFout
-            ? `Gestopt na ${DROOG_NA} rondes zonder resultaat. Laatste melding: ${laatsteFout}`
-            : `Klaar — ${DROOG_NA} rondes achter elkaar niets nieuws. Binnen deze zoekgrenzen is alles gehad.`;
-          break;
-        }
-      }
-
-      if (!reden) reden = `Gestopt bij de grens van ${MAX_RONDES} rondes.`;
-      log.push(reden);
-
-      if (totaal.ids === 0 && laatsteFout) throw new Error(laatsteFout);
-
-      return {
-        toegevoegd: Math.max(0, totaal.ids - totaal.weg),
-        overgeslagen: totaal.overgeslagen,
-        gecontroleerd: totaal.ids,
-        afgevallen: totaal.weg,
-        nietUitgelezen: totaal.mislukt,
-        toelichting: reden,
-        merken: [...new Set(merken)],
+        toegevoegd: Array.isArray(data.nieuwe_ids) ? data.nieuwe_ids.length : 0,
+        overgeslagen: data.overgeslagen ?? 0,
+        gecontroleerd: data.gevonden ?? 0,
+        afgevallen: 0,
+        toelichting: data.toelichting ?? "",
+        merken: Array.isArray(data.merken) ? data.merken : [],
       };
     });
   };
@@ -622,51 +381,17 @@ function ZoekTab({
             )}
 
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
-              {bezig ? (
-                <>
-                  <Btn onClick={stopZoeken} variant="ghost" size="lg" disabled={stopGevraagd}>
-                    <Square size={12} /> {stopGevraagd ? "Stopt na deze ronde…" : "Stop met zoeken"}
-                  </Btn>
-                  <span className="flex items-center gap-2" style={body(12, T.navy)}>
-                    <Spinner size={13} />
-                    {fase || (doorlopend ? "Doorlopend zoeken…" : "Aan het zoeken…")}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Btn onClick={blijfZoeken} size="lg">
-                    <Oneindig size={14} /> Blijf zoeken
-                  </Btn>
-                  <Btn onClick={zoek} variant="ghost" size="lg">
-                    <Radar size={13} /> Eén ronde
-                  </Btn>
-                </>
-              )}
+              <Btn onClick={zoek} disabled={bezig} size="lg">
+                {bezig ? <Spinner size={13} tone="donker" /> : <Radar size={13} />}
+                {bezig ? fase || "Bezig…" : "Zoek alle verkopers"}
+              </Btn>
             </div>
 
             <p style={body(11.5, T.ink(0.45))}>
-              {bezig ? (
-                doorlopend ? (
-                  <>
-                    Hij blijft rondes draaien met steeds andere merken, en stopt vanzelf als er{" "}
-                    {DROOG_NA} keer op rij niets nieuws meer bij komt. De lijst bij Verkopers groeit
-                    ondertussen mee — je kunt daar gewoon al beginnen met beoordelen.
-                  </>
-                ) : (
-                  <>
-                    {ZOEKRONDES} rondes achter elkaar, en elke gevonden advertentie wordt apart
-                    geopend. Reken op een paar minuten. Je kunt gerust doorklikken; hij gaat door.
-                  </>
-                )
-              ) : (
-                <>
-                  <strong style={{ color: T.navy }}>Blijf zoeken</strong> gaat net zo lang door tot
-                  hij alle particulieren binnen deze grenzen heeft gehad — dat duurt lang, maar je
-                  kunt ondertussen doorwerken en op elk moment stoppen.{" "}
-                  <strong style={{ color: T.navy }}>Eén ronde</strong> is een snelle greep van een
-                  paar minuten.
-                </>
-              )}
+              Loopt alle merken langs op beide sites — een seconde of tien.{" "}
+              <strong style={{ color: T.navy }}>Dit kost niets:</strong> er wordt alleen opgehaald wat
+              openbaar op de overzichtspagina&apos;s staat. Pas als jij bij Verkopers iemand aanvinkt,
+              wordt de advertentie gelezen en een bericht geschreven.
             </p>
           </div>
         </Panel>
@@ -691,8 +416,7 @@ function ZoekTab({
             </div>
             {resultaat.merken && resultaat.merken.length > 0 && (
               <p className="mb-2" style={body(12, T.ink(0.5))}>
-                Deze keer gezocht op: {resultaat.merken.join(", ")}. Een volgende keer pakt hij andere
-                merken, tot de hele lijst is geweest.
+                Alle {resultaat.merken.length} merken doorzocht op beide sites.
               </p>
             )}
             {(resultaat.nietUitgelezen ?? 0) > 0 && (
@@ -706,9 +430,8 @@ function ZoekTab({
             {resultaat.toelichting && <p style={body(12.5)}>{resultaat.toelichting}</p>}
             {resultaat.toegevoegd === 0 ? (
               <p className="mt-2" style={body(12, T.ink(0.5))}>
-                Niets bruikbaars gevonden. Advertentiesites zijn wisselend doorzoekbaar — druk gerust
-                nog eens op zoeken, dan pakt hij andere merken. Helpt dat niet, zet de actieradius dan
-                ruimer of verbreed de prijsklasse.
+                Niets nieuws gevonden. Waarschijnlijk ken je alles al wat er nu binnen je zoekgrenzen
+                staat. Zet de actieradius ruimer of verbreed de prijsklasse om meer te zien.
               </p>
             ) : (
               <div className="mt-3">
@@ -749,6 +472,17 @@ function ZoekTab({
  * geschreven en verstuurd. Goedgekeurde verkopers verdwijnen dus uit deze lijst,
  * zodat je hier altijd alleen ziet wat nog beoordeeld moet worden.
  */
+/**
+ * Een kort modelnaampje uit de advertentietitel, voor vondsten die nog niet zijn
+ * uitgelezen en dus geen model-veld hebben. Het merk eraf halen in plaats van er een
+ * vast aantal woorden af te knippen: "Alfa Romeo" is twee woorden, en dan werd het
+ * "Alfa Romeo Romeo Giulietta".
+ */
+function korteTitel(lead: Lead): string {
+  const zonderMerk = lead.titel.replace(new RegExp(lead.merk, "i"), "").trim();
+  return zonderMerk.split(/\s+/).slice(0, 2).join(" ");
+}
+
 const FILTERS: { id: "alle" | Status; label: string }[] = [
   { id: "alle", label: "Alles" },
   { id: "nieuw", label: "Nieuw" },
@@ -776,6 +510,79 @@ function LeadsTab({
   // Welke rijen op dit moment een knop verwerken. Per lead, zodat de rest
   // aanklikbaar blijft terwijl er eentje bezig is.
   const [bezig, setBezig] = useState<Record<string, "weg" | "klaar" | "lezen">>({});
+  // Wie je hebt aangevinkt om een bericht voor te laten schrijven.
+  const [gekozen, setGekozen] = useState<Set<string>>(new Set());
+
+  // Het doorzetten draait in de takenlaag: bij tweehonderd aangevinkte verkopers duurt
+  // het even, en dit tabblad wordt uit het geheugen gegooid zodra je ergens anders klikt.
+  const { taak: zetTaak, start: startZetten } = useAiTaak<{ gelukt: number; mislukt: number }>(
+    "verkopers-doorzetten"
+  );
+  const zetBezigBulk = zetTaak?.bezig ?? false;
+  const zetStap = zetTaak?.stap ?? "";
+
+  const kiesOfNiet = (id: string) =>
+    setGekozen((v) => {
+      const n = new Set(v);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  /**
+   * Zet alles wat je hebt aangevinkt klaar op Nakijken.
+   *
+   * Dit kost niets: er wordt alleen een vinkje omgezet. Het schrijven van de tekst
+   * gebeurt daar, per advertentie, als jij erop klikt — dan betaal je alleen voor de
+   * verkopers die je echt gaat benaderen.
+   */
+  const zetSelectieKlaar = () => {
+    if (zetBezigBulk || gekozen.size === 0) return;
+    // Uit álle leads, niet uit wat er nu zichtbaar is: wissel je tussendoor van filter,
+    // dan zou de selectie stilletjes leeglopen en zou je denken dat het gelukt was.
+    const gekozenIds = new Set(gekozen);
+    const rij = (leads ?? []).filter((l) => gekozenIds.has(l.id));
+    if (rij.length === 0) return;
+
+    onFout("");
+    startZetten(`${rij.length} klaarzetten`, async (stap) => {
+      let gelukt = 0;
+      const mislukt: string[] = [];
+
+      for (let i = 0; i < rij.length; i++) {
+        const lead = rij[i];
+        stap(`${i + 1} van ${rij.length}`);
+        try {
+          const res = await fetch(`/api/admin/verkopers/${lead.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "goedgekeurd" }),
+          });
+          if (res.ok) gelukt++;
+          else {
+            const d = await res.json().catch(() => ({}));
+            mislukt.push(d.error || `fout ${res.status}`);
+          }
+        } catch (e) {
+          mislukt.push(e instanceof Error ? e.message : String(e));
+        } finally {
+          // Meteen afvinken, ook als het misging: anders staat hij bij een volgende
+          // poging opnieuw in de rij.
+          setGekozen((v) => {
+            const n = new Set(v);
+            n.delete(lead.id);
+            return n;
+          });
+        }
+      }
+
+      await herlaad().catch(() => null);
+      if (mislukt.length > 0) {
+        onFout(`${gelukt} van de ${rij.length} klaargezet. Niet gelukt: ${mislukt.slice(0, 2).join("; ")}.`);
+      }
+      return { gelukt, mislukt: mislukt.length };
+    });
+  };
 
   // Goedgekeurde verkopers wachten op het tabblad Nakijken; die horen hier niet meer.
   const teBeoordelen = useMemo(
@@ -901,6 +708,16 @@ function LeadsTab({
         })}
       </div>
 
+      {gekozen.size > 0 && (
+        <SelectieBalk
+          aantal={gekozen.size}
+          bezig={zetBezigBulk}
+          voortgang={zetStap}
+          onZet={zetSelectieKlaar}
+          onWis={() => setGekozen(new Set())}
+        />
+      )}
+
       {zichtbaar.length === 0 ? (
         <Empty compact title="Niets in dit filter" body="Kies een ander filter." />
       ) : (
@@ -910,6 +727,8 @@ function LeadsTab({
               key={lead.id}
               lead={lead}
               bezig={bezig[lead.id] ?? null}
+              aangevinkt={gekozen.has(lead.id)}
+              onVink={() => kiesOfNiet(lead.id)}
               onWeg={() => verwijder(lead)}
               onKlaar={() => zetKlaar(lead)}
               onOpenen={() => naarNakijken(lead.id, true)}
@@ -920,10 +739,69 @@ function LeadsTab({
       )}
 
       <PanelVoet>
-        Klik op een kaart om de advertentie te openen. Met de prullenbak gooi je hem weg én komt de verkoper op
-        de blokkadelijst, zodat hij niet opnieuw opduikt. Met het vinkje zet je hem klaar op Nakijken — daar
-        schrijf je het bericht en verstuur je de mail.
+        Klik op een kaart om de advertentie te openen. Vink aan wie je wilt benaderen en zet ze klaar op
+        Nakijken — dat kost niets. Daar vraag je per advertentie een tekst aan, dus je betaalt alleen voor
+        wie je echt benadert. Met de prullenbak gooi je iemand weg én komt hij op de blokkadelijst.
       </PanelVoet>
+    </div>
+  );
+}
+
+/**
+ * Verschijnt zodra je iemand aanvinkt: hoeveel het er zijn en de knop om ze klaar te
+ * zetten. Bewust geen bedrag: klaarzetten kost niets. Je betaalt pas op Nakijken, per
+ * advertentie waar jij een tekst voor vraagt.
+ */
+function SelectieBalk({
+  aantal,
+  bezig,
+  voortgang,
+  onZet,
+  onWis,
+}: {
+  aantal: number;
+  bezig: boolean;
+  voortgang: string;
+  onZet: () => void;
+  onWis: () => void;
+}) {
+  return (
+    <div
+      className="sticky z-20 flex flex-wrap items-center gap-3 px-4 py-3"
+      style={{ top: 102, backgroundColor: T.navy, color: "#ffffff" }}
+    >
+      <Check size={15} />
+      <span style={{ fontFamily: T.inter, fontSize: 12.5 }}>
+        <strong>{aantal} aangevinkt</strong>
+        <span style={{ opacity: 0.7 }}> · klaarzetten kost niets</span>
+      </span>
+      <span className="ml-auto flex items-center gap-2">
+        {bezig ? (
+          <span className="flex items-center gap-2" style={{ fontFamily: T.inter, fontSize: 12 }}>
+            <Spinner size={13} tone="donker" />
+            {voortgang || "Bezig…"}
+          </span>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onWis}
+              className="px-3 py-2 transition-all hover:opacity-70"
+              style={{ fontFamily: T.inter, fontSize: 11.5, color: "rgba(255,255,255,0.7)" }}
+            >
+              Wis selectie
+            </button>
+            <button
+              type="button"
+              onClick={onZet}
+              className="flex items-center gap-1.5 px-4 py-2 transition-all hover:opacity-90"
+              style={{ backgroundColor: "#ffffff", color: T.navy, fontFamily: T.inter, fontSize: 12, fontWeight: 700 }}
+            >
+              <ScrollText size={12} /> Zet klaar op Nakijken
+            </button>
+          </>
+        )}
+      </span>
     </div>
   );
 }
@@ -961,6 +839,8 @@ function KlaarBalk({ aantal, onGa }: { aantal: number; onGa: () => void }) {
 function LeadKaart({
   lead,
   bezig,
+  aangevinkt,
+  onVink,
   onWeg,
   onKlaar,
   onOpenen,
@@ -968,6 +848,8 @@ function LeadKaart({
 }: {
   lead: Lead;
   bezig: "weg" | "klaar" | "lezen" | null;
+  aangevinkt: boolean;
+  onVink: () => void;
   onWeg: () => void;
   onKlaar: () => void;
   onOpenen: () => void;
@@ -981,9 +863,10 @@ function LeadKaart({
     lead.status === "gereageerd" ||
     lead.status === "cosignatie" ||
     lead.status === "afgewezen";
-  // Nooit uitgelezen: dan weten we niets van deze verkoper, geen contactgegevens en
-  // geen scores. Eerst uitlezen heeft dan meer zin dan klaarzetten.
-  const ongelezen = lead.particulier_score === 0;
+  // Nooit uitgelezen: dan kennen we alleen wat op de overzichtspagina stond, geen
+  // bouwjaar en geen kilometerstand. Aan het bouwjaar afmeten en niet aan de
+  // particulier-score: AutoScout24-vondsten krijgen die score al bij het ophalen mee.
+  const ongelezen = !lead.bouwjaar;
 
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -993,25 +876,58 @@ function LeadKaart({
   return (
     <div
       className="relative flex flex-col transition-all hover:opacity-90"
-      style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
+      style={{
+        backgroundColor: aangevinkt ? "rgba(0,19,55,0.04)" : T.paper,
+        border: `1px solid ${aangevinkt ? T.navy : T.line}`,
+      }}
     >
+      {/* Het vinkvakje ligt bovenop de link, want de kaart zelf opent de advertentie. */}
+      {!afgerond && (
+        <button
+          type="button"
+          onClick={(e) => {
+            stop(e);
+            onVink();
+          }}
+          title={aangevinkt ? "Niet meer aanvinken" : "Aanvinken om een bericht te laten schrijven"}
+          aria-label={aangevinkt ? "Niet meer aanvinken" : "Aanvinken"}
+          className="absolute flex items-center justify-center transition-all hover:opacity-80"
+          style={{
+            top: 10,
+            right: 10,
+            zIndex: 2,
+            width: 22,
+            height: 22,
+            backgroundColor: aangevinkt ? T.navy : T.paper,
+            border: `1px solid ${aangevinkt ? T.navy : T.line2}`,
+            color: "#ffffff",
+          }}
+        >
+          {aangevinkt && <Check size={13} />}
+        </button>
+      )}
       <a
         href={lead.advertentie_url || undefined}
         target="_blank"
         rel="noopener noreferrer"
         className="block flex-1"
-        style={{ padding: "12px 14px", cursor: lead.advertentie_url ? "pointer" : "default" }}
+        style={{
+          // Rechts extra ruimte voor het vinkvakje dat daar bovenop ligt.
+          padding: afgerond ? "12px 14px" : "12px 40px 12px 14px",
+          cursor: lead.advertentie_url ? "pointer" : "default",
+        }}
         title={lead.advertentie_url ? "Open de advertentie in een nieuw tabblad" : "Geen link bekend"}
       >
-        <div className="flex items-start gap-2 mb-1.5">
+        <div className="flex flex-wrap items-start gap-x-2 gap-y-1 mb-1.5">
           <span
             className="flex-1 min-w-0 truncate flex items-center gap-1.5"
             style={{ fontFamily: T.play, fontSize: 14, fontWeight: 700, color: T.navy }}
           >
-            {lead.merk} {lead.model}
+            {lead.merk} {lead.model || korteTitel(lead)}
             {lead.advertentie_url && <ExternalLink size={11} color={T.ink(0.3)} />}
           </span>
           <Pill color={st.kleur}>{st.label}</Pill>
+          <Pill color={lead.bron === "AutoScout24" ? T.teal : T.blauw}>{lead.bron}</Pill>
         </div>
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-2" style={body(11.5, T.ink(0.5))}>
           {lead.bouwjaar && <span>{lead.bouwjaar}</span>}
@@ -1121,84 +1037,40 @@ function RijKnop({
   );
 }
 
-// ── Detail: bericht schrijven en versturen ────────────────────────
-function LeadDetail({
+// ── Nakijken: de zijbalk waarin je per advertentie een tekst laat schrijven ───────
+/**
+ * Alles voor één advertentie op één plek: wat het voor auto is, de link erheen, en de
+ * tekst die je erbij kunt laten schrijven.
+ *
+ * Bewust één doorlopende kolom in plaats van een stapel losse panelen. Je doet hier
+ * steeds hetzelfde rondje — kijken, tekst laten maken, kopiëren, plakken, afvinken —
+ * en dat rondje moet je in één oogopslag kunnen volgen.
+ */
+function NakijkPaneel({
   lead,
   herlaad,
   herlaadBlokkade,
   onFout,
   onVerwijderd,
-  onVerstuurd,
 }: {
   lead: Lead;
   herlaad: () => Promise<void>;
   herlaadBlokkade: () => Promise<void>;
   onFout: (s: string) => void;
   onVerwijderd: () => void;
-  /** Na een geslaagde verzending, zodat de lijst deze verkoper open kan houden. */
-  onVerstuurd?: (id: string) => void;
 }) {
-  const [onderwerp, setOnderwerp] = useState(lead.onderwerp);
-  const [berichtMail, setBerichtMail] = useState(lead.bericht_mail);
-  const [berichtKort, setBerichtKort] = useState(lead.bericht_kort);
+  // Geen useEffect die deze velden terugzet uit de lead: dit component krijgt een
+  // key={lead.id} van de lijst, dus bij het wisselen van verkoper wordt het opnieuw
+  // opgebouwd. Zou je hier synchroniseren, dan overschrijft elke herlaadactie de tekst
+  // die je net zelf hebt aangepast.
+  const [bericht, setBericht] = useState(lead.bericht_kort || lead.bericht_mail);
   const [email, setEmail] = useState(lead.email);
   const [schrijft, setSchrijft] = useState(false);
-  const [verstuurt, setVerstuurt] = useState(false);
-  const [verrijkt, setVerrijkt] = useState(false);
+  const [bezig, setBezig] = useState<"" | "versturen" | "lezen">("");
   const [gekopieerd, setGekopieerd] = useState(false);
 
-  // Geen useEffect die de velden uit de lead terugzet: dit component krijgt een
-  // key={lead.id} van de lijst, dus bij het wisselen van verkoper wordt het opnieuw
-  // opgebouwd en initialiseren de useStates zichzelf. Zou je hier alsnog synchroniseren,
-  // dan overschrijft elke herlaadactie de tekst die je net zelf hebt aangepast.
-
-  const alVerstuurd = lead.status === "verstuurd" || lead.status === "gereageerd" || lead.status === "cosignatie";
-  const st = STATUS_LABEL[lead.status];
-
-  const verrijkOpnieuw = async () => {
-    if (verrijkt) return;
-    setVerrijkt(true);
-    onFout("");
-    try {
-      const res = await fetch(`/api/admin/verkopers/${lead.id}/verrijk`, { method: "POST" });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        onFout(d.error || "Advertentie uitlezen mislukt");
-        return;
-      }
-      if (d.handelaar) onFout("Dit blijkt een handelaar te zijn — de lead is verwijderd.");
-      if (d.bereikbaar === false) onFout("De advertentie kon niet worden geopend (mogelijk verwijderd).");
-      if (d.handelaar || d.geblokkeerd) onVerwijderd();
-      await herlaad();
-    } catch (e) {
-      onFout(String(e));
-    } finally {
-      setVerrijkt(false);
-    }
-  };
-
-  const schrijfBericht = async () => {
-    setSchrijft(true);
-    onFout("");
-    try {
-      const res = await fetch(`/api/admin/verkopers/${lead.id}/bericht`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        onFout(data.error || "Bericht schrijven mislukt");
-        return;
-      }
-      setOnderwerp(data.onderwerp);
-      setBerichtMail(data.bericht_mail);
-      setBerichtKort(data.bericht_kort);
-      // Bewust géén statuswijziging: goedkeuren doe jij met het vinkje op het
-      // tabblad Verkopers. Schrijven is niet hetzelfde als akkoord gaan.
-      await herlaad();
-    } catch (e) {
-      onFout(String(e));
-    } finally {
-      setSchrijft(false);
-    }
-  };
+  const alVerstuurd =
+    lead.status === "verstuurd" || lead.status === "gereageerd" || lead.status === "cosignatie";
 
   const patch = async (velden: Record<string, unknown>) => {
     const res = await fetch(`/api/admin/verkopers/${lead.id}`, {
@@ -1215,44 +1087,87 @@ function LeadDetail({
     return true;
   };
 
-  const verstuurMail = async () => {
-    if (verstuurt) return;
-    setVerstuurt(true);
+  /**
+   * De knop waar het hier om draait. Leest zo nodig eerst de advertentie uit — zonder
+   * bouwjaar en kilometerstand wordt de tekst algemeen, en juist het concrete maakt
+   * hem persoonlijk — en laat er daarna een bericht bij schrijven.
+   */
+  const genereer = async () => {
+    if (schrijft) return;
+    setSchrijft(true);
     onFout("");
     try {
-      // Eerst opslaan, dan pas versturen — en niet versturen als het opslaan mislukt.
-      // De server pakt de ontvanger uit de database, niet uit dit verzoek. Corrigeer
-      // je hier een verkeerd e-mailadres en gaat het opslaan mis, dan zou de mail
-      // alsnog naar het oude adres vertrekken. Dat valt niet terug te halen.
-      if (!(await patch({ onderwerp, bericht_mail: berichtMail, email }))) return;
-      const res = await fetch(`/api/admin/verkopers/${lead.id}/verstuur`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ onderwerp, bericht: berichtMail }),
-      });
-      const data = await res.json();
+      if (!lead.bouwjaar) {
+        const vr = await fetch(`/api/admin/verkopers/${lead.id}/verrijk`, { method: "POST" });
+        const vd = await vr.json().catch(() => ({}));
+        if (vd?.handelaar) {
+          onFout("Dit blijkt een handelaar te zijn — de verkoper is uit de lijst gehaald.");
+          onVerwijderd();
+          await herlaad();
+          return;
+        }
+        if (vd?.bereikbaar === false) {
+          onFout("De advertentie kon niet worden geopend. De tekst wordt geschreven met wat we al wisten.");
+        }
+      }
+
+      const res = await fetch(`/api/admin/verkopers/${lead.id}/bericht`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        onFout(data.error || "Versturen mislukt");
+        onFout(d.error || "Tekst schrijven mislukt");
         return;
       }
-      // Hem aangewezen houden: hij verlaat de wachtrij en zou anders meteen uit
-      // beeld schuiven, zonder dat je ziet dat het gelukt is.
-      onVerstuurd?.(lead.id);
+      setBericht(d.bericht_kort || d.bericht_mail || "");
       await herlaad();
     } catch (e) {
-      onFout(String(e));
+      onFout(e instanceof Error ? e.message : String(e));
     } finally {
-      setVerstuurt(false);
+      setSchrijft(false);
     }
   };
 
-  const kopieerKort = async () => {
+  const kopieer = async () => {
     try {
-      await navigator.clipboard.writeText(berichtKort || berichtMail);
+      await navigator.clipboard.writeText(bericht);
       setGekopieerd(true);
       setTimeout(() => setGekopieerd(false), 2000);
     } catch {
       onFout("Kopiëren naar klembord lukte niet");
+    }
+  };
+
+  const markeerVerstuurd = async () => {
+    if (bezig) return;
+    setBezig("versturen");
+    try {
+      await patch({ bericht_kort: bericht, handmatig_verstuurd_via: "platform" });
+    } finally {
+      setBezig("");
+    }
+  };
+
+  const verstuurMail = async () => {
+    if (bezig) return;
+    setBezig("versturen");
+    onFout("");
+    try {
+      // Eerst opslaan, dan pas versturen — en niet versturen als het opslaan mislukt.
+      // De server pakt de ontvanger uit de database, niet uit dit verzoek.
+      if (!(await patch({ email, bericht_mail: bericht, onderwerp: lead.onderwerp || "Over je advertentie" })))
+        return;
+      const res = await fetch(`/api/admin/verkopers/${lead.id}/verstuur`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onderwerp: lead.onderwerp || "Over je advertentie", bericht }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        onFout(d.error || "Versturen mislukt");
+        return;
+      }
+      await herlaad();
+    } finally {
+      setBezig("");
     }
   };
 
@@ -1270,251 +1185,191 @@ function LeadDetail({
 
   const naarCosignatie = async () => {
     const res = await fetch(`/api/admin/verkopers/${lead.id}/naar-cosignatie`, { method: "POST" });
-    const data = await res.json();
+    const d = await res.json().catch(() => ({}));
     if (!res.ok) {
-      onFout(data.error || "Omzetten mislukt");
+      onFout(d.error || "Omzetten mislukt");
       return;
     }
     await herlaad();
   };
 
+  const feiten = [
+    lead.bouwjaar,
+    lead.km ? `${Number(lead.km).toLocaleString("nl-NL")} km` : "",
+    lead.brandstof,
+    lead.plaats,
+  ].filter(Boolean);
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Auto en advertentie */}
-      <Panel
-        title={`${lead.merk} ${lead.model}`}
-        meta={lead.bron}
-        actions={<Pill color={st.kleur} solid>{st.label}</Pill>}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
-          <Stat label="Bouwjaar" value={lead.bouwjaar || "—"} size={18} />
-          <Stat label="Km-stand" value={lead.km ? Number(lead.km).toLocaleString("nl-NL") : "—"} size={18} />
-          <Stat
-            label="Vraagprijs"
-            value={lead.vraagprijs ? `€ ${lead.vraagprijs.toLocaleString("nl-NL")}` : "—"}
-            size={18}
-            accent={T.navy}
-          />
-          <Stat label="Plaats" value={lead.plaats || "—"} size={15} />
+    <div style={{ backgroundColor: T.paper, border: `1px solid ${T.line2}` }}>
+      {/* ── Om welke auto gaat het ── */}
+      <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.line}` }}>
+        <div className="flex flex-wrap items-start gap-2 mb-1.5">
+          <h3 className="flex-1 min-w-0" style={{ fontFamily: T.play, fontSize: 17, fontWeight: 700, color: T.navy }}>
+            {`${lead.merk} ${lead.model}`.trim() || lead.titel}
+          </h3>
+          <Pill color={lead.bron === "AutoScout24" ? T.teal : T.blauw}>{lead.bron}</Pill>
+          {alVerstuurd && <Pill color={T.groen} solid>Verstuurd</Pill>}
         </div>
 
-        {lead.motivatie && (
-          <div className="mb-3 px-3.5 py-2.5" style={{ backgroundColor: "rgba(0,19,55,0.025)", borderLeft: `3px solid ${T.navy}` }}>
-            <p style={{ ...micro(T.ink(0.35)), marginBottom: 4 }}>Wat de AI opviel</p>
-            <p style={body(12.5)}>{lead.motivatie}</p>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1" style={body(12.5, T.ink(0.55))}>
+          {lead.vraagprijs > 0 && (
+            <span style={{ color: T.navy, fontWeight: 700, fontSize: 15 }}>
+              € {lead.vraagprijs.toLocaleString("nl-NL")}
+            </span>
+          )}
+          {feiten.length > 0 && <span>{feiten.join(" · ")}</span>}
+          {lead.naam && <span>· {lead.naam}</span>}
+        </div>
+
+        {lead.advertentie_url && (
+          <a
+            href={lead.advertentie_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex items-center gap-2 px-3 py-2.5 transition-all hover:opacity-80"
+            style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}` }}
+          >
+            <ExternalLink size={13} color={T.blauw} style={{ flexShrink: 0 }} />
+            <span className="min-w-0 truncate" style={{ ...body(11.5, T.blauw), textDecoration: "underline" }}>
+              {lead.advertentie_url}
+            </span>
+          </a>
+        )}
+
+        {lead.telefoon && (
+          <a href={`tel:${lead.telefoon}`} className="inline-flex mt-2">
+            <Btn variant="ghost" size="sm">
+              <Phone size={12} /> {lead.telefoon}
+            </Btn>
+          </a>
         )}
 
         {lead.notitie && (
-          <div
-            className="mb-3 px-3.5 py-2.5"
-            style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}
-          >
-            <p style={{ ...micro(T.amber), marginBottom: 4 }}>Let op</p>
-            <p style={body(12.5, T.ink(0.7))}>{lead.notitie}</p>
+          <div className="mt-3 px-3 py-2" style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}>
+            <p style={body(11.5, T.ink(0.7))}>{lead.notitie}</p>
           </div>
         )}
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <a href={lead.advertentie_url} target="_blank" rel="noopener noreferrer">
-            <Btn variant="ghost" size="sm">
-              <ExternalLink size={12} /> Bekijk advertentie
-            </Btn>
-          </a>
-          {!alVerstuurd && (
-            <Btn variant="ghost" size="sm" onClick={verrijkOpnieuw} disabled={verrijkt}>
-              {verrijkt ? <Spinner size={11} /> : <RefreshCw size={11} />}
-              {lead.particulier_score === 0 ? "Lees advertentie uit" : "Opnieuw uitlezen"}
-            </Btn>
-          )}
-          {lead.telefoon && (
-            <a href={`tel:${lead.telefoon}`}>
-              <Btn variant="ghost" size="sm">
-                <Phone size={12} /> {lead.telefoon}
-              </Btn>
-            </a>
-          )}
-          <span className="ml-auto flex items-center gap-1.5" style={{ ...micro(T.ink(0.3)), fontSize: 8.5 }}>
-            Particulier {lead.particulier_score}/10 · Kans {lead.kans_score}/10
-          </span>
-        </div>
-      </Panel>
-
-      {/* Bericht */}
-      <Panel
-        title="Bericht"
-        icon={<Sparkles size={14} color={T.navy} />}
-        actions={
-          !alVerstuurd && (
-            <Btn variant="ghost" size="sm" onClick={schrijfBericht} disabled={schrijft}>
-              {schrijft ? <Spinner size={11} /> : <Sparkles size={11} />}
-              {berichtMail ? "Opnieuw schrijven" : "Schrijf bericht"}
-            </Btn>
-          )
-        }
-      >
-        {!berichtMail && !schrijft && (
-          <Empty
-            compact
-            icon={<MessageSquare size={24} color={T.ink(0.2)} />}
-            title="Nog geen bericht"
-            body="Laat de AI een persoonlijk bericht over deze auto schrijven. Je kunt het daarna zelf aanpassen."
-          />
-        )}
-        {schrijft && (
-          <div className="flex items-center justify-center gap-2.5 py-10">
-            <Spinner size={16} />
-            <span style={body(12.5)}>De AI schrijft een bericht over deze auto…</span>
+      {/* ── De tekst ── */}
+      <div className="px-5 py-4">
+        {schrijft ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <Spinner size={18} />
+            <span style={body(12.5)}>De AI leest de advertentie en schrijft een tekst…</span>
+            <span style={body(11.5, T.ink(0.4))}>Een seconde of twintig. Je kunt gerust doorklikken.</span>
           </div>
-        )}
-
-        {berichtMail && !schrijft && (
-          <div className="flex flex-col gap-3">
-            <Field
-              label={`Bericht voor de berichtenbox van ${lead.bron || "het platform"}`}
-              hint="Dit is wat je straks plakt. Pas gerust aan — er gaat precies dit heen."
-            >
-              <textarea
-                value={berichtKort}
-                onChange={(e) => setBerichtKort(e.target.value)}
-                rows={10}
-                disabled={alVerstuurd}
-                style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
-              />
-            </Field>
-
-            {/* De mailversie zit weggevouwen: die heb je alleen nodig als er
-                uitzonderlijk wél een adres in de advertentie stond. */}
-            <details>
-              <summary
-                className="cursor-pointer select-none py-1"
-                style={{ ...micro(T.ink(0.4)), listStyle: "revert" }}
-              >
-                Mailversie {email ? "" : "(geen adres bekend)"}
-              </summary>
-              <div className="flex flex-col gap-3 pt-2">
-                <Field label="Onderwerp">
-                  <input
-                    value={onderwerp}
-                    onChange={(e) => setOnderwerp(e.target.value)}
-                    disabled={alVerstuurd}
-                    style={inputStijl}
-                  />
-                </Field>
-                <Field label="E-mailbericht" hint="Hieronder komt automatisch je Gmail-handtekening.">
-                  <textarea
-                    value={berichtMail}
-                    onChange={(e) => setBerichtMail(e.target.value)}
-                    rows={10}
-                    disabled={alVerstuurd}
-                    style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
-                  />
-                </Field>
-              </div>
-            </details>
-          </div>
-        )}
-      </Panel>
-
-      {/* Versturen — de berichtenbox is de hoofdroute, zie de toelichting onderaan */}
-      {berichtMail && !alVerstuurd && (
-        <Panel title="Versturen" icon={<Send size={14} color={T.navy} />}>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Btn onClick={kopieerKort} size="lg">
-                {gekopieerd ? <Check size={13} /> : <Copy size={13} />}
-                {gekopieerd ? "Gekopieerd" : "1 · Kopieer bericht"}
-              </Btn>
-              <a href={lead.advertentie_url || undefined} target="_blank" rel="noopener noreferrer">
-                <Btn variant="ghost" size="lg" disabled={!lead.advertentie_url}>
-                  <ExternalLink size={13} /> 2 · Open advertentie
-                </Btn>
-              </a>
-              <Btn
-                variant="ghost"
-                size="lg"
-                onClick={() => patch({ handmatig_verstuurd_via: "platform" })}
-                title="Klik dit nadat je het bericht in de berichtenbox hebt geplaatst"
-              >
-                <Check size={13} /> 3 · Verstuurd
-              </Btn>
-            </div>
-
-            <p style={body(11.5, T.ink(0.45))}>
-              Kopieer het bericht, open de advertentie, plak het in de berichtenbox en druk daar op
-              verzenden. Klik daarna hier op <strong style={{ color: T.navy }}>Verstuurd</strong> —
-              dan komt hij in het verzendlog en krijgt deze verkoper nooit een tweede bericht.
+        ) : !bericht ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <MessageSquare size={26} color={T.ink(0.2)} />
+            <p style={body(12.5, T.ink(0.55))} className="max-w-md">
+              Nog geen tekst. De AI leest deze advertentie en schrijft een persoonlijk bericht over
+              díe auto — met het aanbod dat wij hem waarschijnlijk sneller en voor een betere prijs
+              kunnen verkopen.
             </p>
-
-            <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
-              <Field
-                label="Of mailen — alleen als je een adres hebt"
-                hint={
-                  email
-                    ? "De mail gaat vanaf info@jgmobility.nl; antwoorden komen in je gewone inbox."
-                    : "Particulieren zetten hun adres niet in de advertentie. Weet je het uit een reactie, vul het dan hier in."
-                }
-              >
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nog niet bekend"
-                  style={inputStijl}
-                />
-              </Field>
-
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                <Btn variant="ghost" onClick={verstuurMail} disabled={!email || verstuurt}>
-                  {verstuurt ? <Spinner size={12} /> : <Mail size={12} />}
-                  {verstuurt ? "Versturen…" : "Verstuur mail"}
-                </Btn>
-
-                <Btn variant="ghost" onClick={geenInteresse} title="Op blokkadelijst en verwijderen">
-                  <Trash2 size={12} /> Geen interesse
-                </Btn>
-              </div>
-            </div>
-          </div>
-          <div className="mt-1" />
-        </Panel>
-      )}
-
-      {alVerstuurd && (
-        <Panel title="Vervolg">
-          <div className="flex flex-wrap items-center gap-2">
-            {lead.verstuurd_op && (
-              <span style={body(12, T.ink(0.5))}>
-                Verstuurd op {new Date(lead.verstuurd_op).toLocaleDateString("nl-NL")} via {lead.verstuurd_via || "mail"}.
-              </span>
-            )}
-            <div className="w-full" />
-            {lead.status === "verstuurd" && (
-              <Btn variant="ghost" onClick={() => patch({ status: "gereageerd" })}>
-                <MessageSquare size={12} /> Reactie ontvangen
-              </Btn>
-            )}
-            {lead.status !== "cosignatie" && (
-              <Btn onClick={naarCosignatie}>
-                <Handshake size={12} /> Zet om naar consignatie
-              </Btn>
-            )}
-            {lead.status === "cosignatie" && (
-              <span style={body(12.5, T.groen)}>
-                Staat als consignatiedossier in het tabblad Cosignatie.
-              </span>
-            )}
-            <Btn variant="ghost" onClick={geenInteresse}>
-              <Trash2 size={12} /> Geen interesse
+            <Btn onClick={genereer} size="lg">
+              <Sparkles size={13} /> Genereer tekst
             </Btn>
+            <span style={body(11, T.ink(0.35))}>Kost ongeveer 2 cent</span>
           </div>
-        </Panel>
-      )}
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <p style={micro(T.ink(0.4))}>
+                Bericht voor de berichtenbox van {lead.bron || "het platform"}
+              </p>
+              {!alVerstuurd && (
+                <Btn variant="ghost" size="sm" onClick={genereer}>
+                  <RefreshCw size={11} /> Opnieuw
+                </Btn>
+              )}
+            </div>
 
-      <PanelVoet>
-        Elk bericht gaat over de auto die deze verkoper zelf openbaar te koop heeft gezet, en wordt pas verstuurd
-        als jij erop klikt. Wat je verstuurt wordt vastgelegd; een &quot;geen interesse&quot; belandt op de
-        blokkadelijst.
-      </PanelVoet>
+            <textarea
+              value={bericht}
+              onChange={(e) => setBericht(e.target.value)}
+              rows={14}
+              disabled={alVerstuurd}
+              style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
+            />
+
+            {!alVerstuurd && (
+              <>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Btn onClick={kopieer} size="lg">
+                    {gekopieerd ? <Check size={13} /> : <Copy size={13} />}
+                    {gekopieerd ? "Gekopieerd" : "1 · Kopieer tekst"}
+                  </Btn>
+                  <a href={lead.advertentie_url || undefined} target="_blank" rel="noopener noreferrer">
+                    <Btn variant="ghost" size="lg" disabled={!lead.advertentie_url}>
+                      <ExternalLink size={13} /> 2 · Open advertentie
+                    </Btn>
+                  </a>
+                  <Btn variant="ghost" size="lg" onClick={markeerVerstuurd} disabled={bezig !== ""}>
+                    {bezig === "versturen" ? <Spinner size={12} /> : <Check size={13} />} 3 · Verstuurd
+                  </Btn>
+                </div>
+                <p style={body(11.5, T.ink(0.45))}>
+                  Kopieer de tekst, open de advertentie, plak hem in de berichtenbox en verstuur daar.
+                  Klik daarna op <strong style={{ color: T.navy }}>Verstuurd</strong> — dan komt hij in
+                  het verzendlog en krijgt deze verkoper nooit een tweede bericht.
+                </p>
+
+                {/* Mailen kan alleen als er een adres bekend is. Particulieren zetten dat
+                    niet in hun advertentie, dus dit is de uitzondering. */}
+                <details style={{ borderTop: `1px solid ${T.line}`, paddingTop: 10 }}>
+                  <summary className="cursor-pointer select-none py-1" style={{ ...micro(T.ink(0.4)), listStyle: "revert" }}>
+                    Mailen in plaats van de berichtenbox
+                  </summary>
+                  <div className="pt-2 flex flex-col gap-2">
+                    <Field label="E-mailadres verkoper" hint="Alleen invullen als je het écht hebt.">
+                      <input
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="niet bekend"
+                        style={inputStijl}
+                      />
+                    </Field>
+                    <div>
+                      <Btn variant="ghost" onClick={verstuurMail} disabled={!email || bezig !== ""}>
+                        {bezig === "versturen" ? <Spinner size={12} /> : <Mail size={12} />} Verstuur mail
+                      </Btn>
+                    </div>
+                  </div>
+                </details>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Vervolg ── */}
+      <div
+        className="px-5 py-3 flex flex-wrap items-center gap-2"
+        style={{ borderTop: `1px solid ${T.line}`, backgroundColor: "rgba(0,19,55,0.015)" }}
+      >
+        {alVerstuurd && lead.verstuurd_op && (
+          <span style={body(11.5, T.ink(0.5))}>
+            Verstuurd op {new Date(lead.verstuurd_op).toLocaleDateString("nl-NL")}
+          </span>
+        )}
+        {lead.status === "verstuurd" && (
+          <Btn variant="ghost" size="sm" onClick={() => patch({ status: "gereageerd" })}>
+            <MessageSquare size={11} /> Reactie ontvangen
+          </Btn>
+        )}
+        {alVerstuurd && lead.status !== "cosignatie" && (
+          <Btn size="sm" onClick={naarCosignatie}>
+            <Handshake size={11} /> Naar consignatie
+          </Btn>
+        )}
+        <span className="ml-auto">
+          <Btn variant="ghost" size="sm" onClick={geenInteresse}>
+            <Trash2 size={11} /> Geen interesse
+          </Btn>
+        </span>
+      </div>
     </div>
   );
 }
@@ -1575,6 +1430,11 @@ function NakijkenTab({
     return aangewezen ?? wachtrij[0] ?? null;
   }, [alle, gekozenId, wachtrij]);
 
+  const metTekst = useMemo(
+    () => wachtrij.filter((l) => l.bericht_kort || l.bericht_mail).length,
+    [wachtrij]
+  );
+
   // Na versturen moeten zowel de leads als het log opnieuw opgehaald worden,
   // anders klopt het overzicht eronder niet meer met wat je net gedaan hebt.
   const herlaadAlles = useCallback(async () => {
@@ -1623,13 +1483,18 @@ function NakijkenTab({
           body="Ga naar het tabblad Verkopers en vink daar aan wie je wilt mailen. Wat je afvinkt komt hier terecht."
         />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5">
-          <div className="xl:col-span-2 flex flex-col gap-2">
-            <p style={micro(T.ink(0.35))}>
-              {wachtrij.length > 0
-                ? `${wachtrij.length} klaar om te mailen`
-                : "Wachtrij leeg — je kijkt naar een eerder verstuurde verkoper"}
-            </p>
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5 items-start">
+          {/* Links: de lijst. Rechts: alles over de aangeklikte advertentie. */}
+          <div className="xl:col-span-2 flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-2 mb-1">
+              <p style={micro(T.ink(0.4))}>
+                {wachtrij.length > 0 ? `${wachtrij.length} klaargezet` : "Wachtrij leeg"}
+              </p>
+              {metTekst > 0 && (
+                <p style={{ ...micro(T.groen), fontSize: 9 }}>{metTekst} met tekst</p>
+              )}
+            </div>
+
             {wachtrij.map((l) => (
               <WachtrijKaart
                 key={l.id}
@@ -1638,20 +1503,20 @@ function NakijkenTab({
                 onClick={() => setGekozenId(l.id)}
               />
             ))}
+
             {wachtrij.length === 0 && (
               <Empty compact title="Wachtrij leeg" body="Vink op het tabblad Verkopers de volgende aan." />
             )}
           </div>
 
-          <div className="xl:col-span-3">
-            <LeadDetail
+          <div className="xl:col-span-3 xl:sticky" style={{ top: 112 }}>
+            <NakijkPaneel
               key={gekozen.id}
               lead={gekozen}
               herlaad={herlaadAlles}
               herlaadBlokkade={herlaadBlokkade}
               onFout={onFout}
               onVerwijderd={() => setGekozenId(null)}
-              onVerstuurd={setGekozenId}
             />
           </div>
         </div>
@@ -1808,36 +1673,58 @@ function NakijkenTab({
 
 /** Compacte rij in de wachtrij van Nakijken. */
 function WachtrijKaart({ lead, actief, onClick }: { lead: Lead; actief: boolean; onClick: () => void }) {
+  const heeftTekst = !!(lead.bericht_kort || lead.bericht_mail);
+  const feiten = [
+    lead.bouwjaar,
+    lead.km ? `${Math.round(Number(lead.km) / 1000)}dkm` : "",
+    lead.plaats,
+  ].filter(Boolean);
+
   return (
     <button
       type="button"
       onClick={onClick}
       className="text-left w-full transition-all hover:opacity-85"
       style={{
-        backgroundColor: actief ? "rgba(0,19,55,0.035)" : T.paper,
+        backgroundColor: actief ? T.navy : T.paper,
         border: `1px solid ${actief ? T.navy : T.line}`,
-        padding: "10px 13px",
+        padding: "10px 12px",
+        // Een streepje links dat meteen laat zien of er al een tekst ligt. Met twintig
+        // in de rij wil je dat zien zonder te lezen.
+        borderLeft: `3px solid ${heeftTekst ? T.groen : T.amber}`,
       }}
     >
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2">
         <span
           className="flex-1 min-w-0 truncate"
-          style={{ fontFamily: T.play, fontSize: 13.5, fontWeight: 700, color: T.navy }}
+          style={{
+            fontFamily: T.play,
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: actief ? "#ffffff" : T.navy,
+          }}
         >
-          {lead.merk} {lead.model}
+          {`${lead.merk} ${lead.model}`.trim() || lead.titel}
         </span>
-        {lead.bericht_mail ? (
-          <Pill color={T.groen}>bericht klaar</Pill>
-        ) : (
-          <Pill color={T.amber}>nog schrijven</Pill>
+        {lead.vraagprijs > 0 && (
+          <span
+            style={{
+              ...num(12, actief ? "#ffffff" : T.navy),
+              flexShrink: 0,
+            }}
+          >
+            € {lead.vraagprijs.toLocaleString("nl-NL")}
+          </span>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1" style={body(11.5, T.ink(0.5))}>
-        {lead.bouwjaar && <span>{lead.bouwjaar}</span>}
-        {lead.vraagprijs > 0 && (
-          <span style={{ color: T.navy, fontWeight: 600 }}>€ {lead.vraagprijs.toLocaleString("nl-NL")}</span>
-        )}
-        <span className="truncate">{lead.email || "geen e-mailadres"}</span>
+      <div
+        className="flex items-center gap-2 mt-0.5"
+        style={body(11, actief ? "rgba(255,255,255,0.65)" : T.ink(0.45))}
+      >
+        <span className="flex-1 min-w-0 truncate">{feiten.join(" · ") || lead.bron}</span>
+        <span style={{ flexShrink: 0, color: heeftTekst ? T.groen : T.amber, fontWeight: 600 }}>
+          {heeftTekst ? "tekst klaar" : "geen tekst"}
+        </span>
       </div>
     </button>
   );

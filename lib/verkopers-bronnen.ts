@@ -75,6 +75,14 @@ const BEDRIJFSNAAM = new RegExp(
   "i"
 );
 
+/** Hoe AutoScout24 brandstof in zijn url noteert. */
+const AS24_BRANDSTOF: Record<string, string> = {
+  benzine: "B",
+  diesel: "D",
+  hybride: "2",
+  elektrisch: "E",
+};
+
 /** Vervoegt een merknaam tot het stukje url dat Marktplaats gebruikt. */
 function merkSlug(merk: string): string {
   return merk
@@ -185,6 +193,12 @@ export async function haalAutoScout24(merk: string, criteria: Criteria): Promise
   const p = new URLSearchParams({ atype: "C", cy: "NL", custtype: "P", sort: "age", desc: "1" });
   if (criteria.prijsMin > 0) p.set("pricefrom", String(criteria.prijsMin));
   if (criteria.prijsMax > 0) p.set("priceto", String(criteria.prijsMax));
+  // AutoScout24 kent brandstof als letters: B benzine, D diesel, 2 hybride, E elektrisch.
+  const brandstofLetters = criteria.brandstof
+    .map((b) => AS24_BRANDSTOF[b])
+    .filter(Boolean)
+    .join(",");
+  if (brandstofLetters) p.set("fuel", brandstofLetters);
 
   // Het merk hoort in het pad, niet in de queryreeks: als queryparameter wordt hij
   // genegeerd en krijg je gewoon alle merken terug.
@@ -267,24 +281,34 @@ async function plaatsPositie(naam: string): Promise<{ lat: number; lon: number }
   }
 
   let gevonden: { lat: number; lon: number } | null = null;
+  // Onderscheid tussen "gevraagd en niets gevonden" en "de vraag mislukte". Alleen het
+  // eerste mag onthouden worden. Anders zou één trage bui bij PDOK — of een limiet die
+  // even volloopt — Rotterdam voorgoed als "onbekend" vastleggen, en dan valt de
+  // afstandscontrole daar permanent weg zonder dat iemand het merkt.
+  let gelukt = false;
   try {
     const res = await fetch(
       `https://api.pdok.nl/bzk/locatieserver/search/v3_1/free?q=${encodeURIComponent(naam)}&fq=type:woonplaats&rows=1`,
       { signal: AbortSignal.timeout(6000) }
     );
-    const d = await res.json();
-    const punt = d?.response?.docs?.[0]?.centroide_ll as string | undefined;
-    const c = punt?.match(/POINT\(([\d.]+) ([\d.]+)\)/);
-    if (c) gevonden = { lat: Number(c[2]), lon: Number(c[1]) };
+    if (res.ok) {
+      const d = await res.json();
+      gelukt = true;
+      const punt = d?.response?.docs?.[0]?.centroide_ll as string | undefined;
+      const c = punt?.match(/POINT\(([\d.]+) ([\d.]+)\)/);
+      if (c) gevonden = { lat: Number(c[2]), lon: Number(c[1]) };
+    }
   } catch {
-    /* niets gevonden; hieronder als "niet gevonden" bewaren */
+    /* time-out of netwerkfout: niets onthouden, volgende keer opnieuw proberen */
   }
 
-  await sql`
-    INSERT INTO plaats_posities (naam, lat, lon)
-    VALUES (${sleutel}, ${gevonden?.lat ?? 0}, ${gevonden?.lon ?? 0})
-    ON CONFLICT (naam) DO NOTHING
-  `.catch(() => null);
+  if (gelukt) {
+    await sql`
+      INSERT INTO plaats_posities (naam, lat, lon)
+      VALUES (${sleutel}, ${gevonden?.lat ?? 0}, ${gevonden?.lon ?? 0})
+      ON CONFLICT (naam) DO NOTHING
+    `.catch(() => null);
+  }
 
   return gevonden;
 }
@@ -307,7 +331,10 @@ export async function initBronnenDB(): Promise<void> {
  */
 export async function filterOpCriteria(
   vondsten: (Vondst & { lat?: number; lon?: number })[],
-  criteria: Criteria
+  criteria: Criteria,
+  /** Tijdstip waarop het opzoeken van plaatsnamen moet stoppen. Komt van de aanroeper,
+   *  die als enige weet hoeveel tijd het hele verzoek nog heeft. */
+  stopOpzoekenOp: number
 ): Promise<{ goed: Vondst[]; handelaren: number; buitenGrenzen: number }> {
   let handelaren = 0;
   let buitenGrenzen = 0;
@@ -330,14 +357,31 @@ export async function filterOpCriteria(
     return true;
   });
 
+  // Plaatsnamen die nog opgezocht moeten worden eerst in één keer afhandelen, een
+  // paar tegelijk. Stuk voor stuk wachten liep bij honderd advertenties op tot een
+  // halve minuut, en dat past niet binnen de tijd die Vercel per verzoek geeft.
+  const opTeZoeken = [
+    ...new Set(naPrijs.filter((v) => v.lat == null && v.plaats).map((v) => v.plaats)),
+  ];
+  const posities = new Map<string, { lat: number; lon: number } | null>();
+  const stop = Math.min(Date.now() + 12_000, stopOpzoekenOp);
+  const rij = [...opTeZoeken];
+  await Promise.all(
+    Array.from({ length: Math.min(6, rij.length) }, async () => {
+      for (;;) {
+        const plaats = rij.shift();
+        if (!plaats || Date.now() > stop) return;
+        posities.set(plaats, await plaatsPositie(plaats));
+      }
+    })
+  );
+
   const goed: Vondst[] = [];
   for (const v of naPrijs) {
     const positie =
       v.lat != null && v.lon != null
         ? { lat: v.lat, lon: v.lon }
-        : v.plaats
-          ? await plaatsPositie(v.plaats)
-          : null;
+        : (posities.get(v.plaats) ?? null);
 
     // Zonder positie laten we hem staan: liever een lead te veel beoordelen dan een
     // goede weggooien omdat we de plaats niet konden thuisbrengen.
