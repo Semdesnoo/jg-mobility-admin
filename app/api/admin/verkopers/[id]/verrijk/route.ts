@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import sql from "@/lib/db";
-import { magUitgeven, boekVerbruik, BUDGET_OP } from "@/lib/verkopers-budget";
 import {
   initVerkopersDB,
   getLead,
@@ -82,11 +81,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
 
-  // De uitgavenrem. Staat vóór alles wat geld kost, zodat een lopende ronde vanzelf
-  // stilvalt zodra het vrijgegeven bedrag op is.
-  const { mag } = await magUitgeven();
-  if (!mag) return Response.json({ error: BUDGET_OP, budgetOp: true }, { status: 429 });
-
   const { id } = await params;
   await initVerkopersDB();
   const lead = await getLead(id);
@@ -154,9 +148,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n");
-      // Werkelijk verbruik afboeken, niet een schatting: een grote advertentiepagina
-      // kost meer dan een kleine en dat weet je pas achteraf.
-      await boekVerbruik(resp.usage).catch(() => null);
       if (rondeTekst) laatsteTekst = rondeTekst;
       if (resp.stop_reason === "pause_turn") {
         messages.push({ role: "assistant", content: resp.content });

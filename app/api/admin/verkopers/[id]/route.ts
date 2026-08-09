@@ -8,6 +8,7 @@ import {
   isAlBenaderd,
   verkoperSleutel,
   TOEGESTANE_STATUS,
+  negeer,
 } from "@/lib/verkopers-db";
 
 export const dynamic = "force-dynamic";
@@ -101,9 +102,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await initVerkopersDB();
     const blokkeren = new URL(req.url).searchParams.get("blokkeer") === "1";
 
-    if (blokkeren) {
-      const lead = await getLead(id);
-      if (lead) {
+    // Altijd eerst onthouden dát je hem weggooit, ook zonder blokkeren. Verwijder je
+    // alleen de rij, dan verdwijnt de unieke sleutel op de advertentie-URL en komt
+    // dezelfde advertentie bij de volgende zoekronde gewoon weer binnen — en dat kost
+    // je elke keer opnieuw tijd en tokens.
+    const lead = await getLead(id);
+    if (lead) {
+      await negeer(
+        lead.advertentie_url,
+        verkoperSleutel(lead.verkoper_profiel ?? "", lead.naam, lead.plaats),
+        blokkeren ? "Geen interesse" : "Weggegooid"
+      );
+      if (blokkeren) {
+        // De blokkadelijst werkt op contactgegevens. Particulieren zetten die niet in
+        // hun advertentie, dus vaak valt hier niets te blokkeren — daarom is de
+        // negeerlijst hierboven wat het werk doet.
         if (lead.email) await blokkeer(lead.email, "email", "Afgemeld / geen interesse");
         if (lead.telefoon) await blokkeer(lead.telefoon, "telefoon", "Afgemeld / geen interesse");
       }

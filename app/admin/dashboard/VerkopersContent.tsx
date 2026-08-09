@@ -17,7 +17,6 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
-  Euro,
   ScrollText,
   ChevronRight,
 } from "lucide-react";
@@ -395,7 +394,6 @@ function ZoekTab({
           <Foutmelding>{taak.fout}</Foutmelding>
         )}
 
-        <BudgetPaneel onFout={onFout} />
 
         <VerkopersCriteria onFout={onFout} onGewijzigd={setCriteria} />
 
@@ -454,75 +452,6 @@ function ZoekTab({
         </Panel>
       </div>
     </div>
-  );
-}
-
-/**
- * De uitgavenrem, in beeld.
- *
- * De rem zelf zit in de server en geldt dus altijd — ook als je met een oud tabblad
- * werkt. Dit paneel laat alleen zien hoeveel er nog in het potje zit en geeft je de
- * knop om er weer wat bij te doen.
- */
-function BudgetPaneel({ onFout }: { onFout: (s: string) => void }) {
-  const [budget, setBudget] = useState<{ besteed: number; potje: number; over: number } | null>(null);
-  const [bezig, setBezig] = useState(false);
-
-  const laad = useCallback(async () => {
-    try {
-      const r = await fetch("/api/admin/verkopers/budget");
-      if (r.ok) setBudget(await r.json());
-    } catch {
-      /* een onbereikbaar potje mag het scherm niet blokkeren */
-    }
-  }, []);
-
-  useEffect(() => {
-    laad();
-  }, [laad]);
-
-  const vrijgeven = async () => {
-    setBezig(true);
-    onFout("");
-    try {
-      const r = await fetch("/api/admin/verkopers/budget", { method: "POST" });
-      if (r.ok) setBudget(await r.json());
-      else onFout("Vrijgeven mislukt");
-    } finally {
-      setBezig(false);
-    }
-  };
-
-  const over = (budget?.over ?? 0) / 100;
-  const besteed = (budget?.besteed ?? 0) / 100;
-  const leeg = over <= 0;
-
-  return (
-    <Panel title="Uitgaven" icon={<Euro size={14} color={T.navy} />}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex-1" style={{ minWidth: 180 }}>
-          <p style={body(12.5)}>
-            Nog te besteden:{" "}
-            <strong style={{ color: leeg ? T.rood : T.groen, fontSize: 15 }}>
-              € {over.toFixed(2)}
-            </strong>
-          </p>
-          <p style={body(11.5, T.ink(0.45))}>
-            {budget === null
-              ? "Ophalen…"
-              : `Tot nu toe uitgegeven: € ${besteed.toFixed(2)}. Zoeken is gratis; alleen het uitlezen van een advertentie en het schrijven van een tekst kosten iets.`}
-          </p>
-        </div>
-        <Btn onClick={vrijgeven} disabled={bezig} size="lg">
-          {bezig ? <Spinner size={13} tone="donker" /> : <Euro size={13} />}
-          Geef € 2,50 vrij
-        </Btn>
-      </div>
-      <PanelVoet>
-        Zodra dit op is stopt alles wat geld kost, ook een ronde die al loopt. Wil je verder, dan
-        druk je hier opnieuw. Zo kan er nooit meer weglopen dan je zelf hebt goedgekeurd.
-      </PanelVoet>
-    </Panel>
   );
 }
 
@@ -623,6 +552,48 @@ function LeadsTab({
    * Dit kost niets: er gaat alleen een vinkje om. Het schrijven van de tekst gebeurt op
    * Nakijken, per advertentie, als jij erop klikt.
    */
+  /**
+   * Gooi de hele selectie weg.
+   *
+   * Ze komen op de negeerlijst en daarna pas uit de lijst. Zonder die lijst zou een
+   * volgende zoekronde ze allemaal opnieuw binnenhalen — en dat kost je elke keer weer
+   * tijd en tokens.
+   */
+  const gooiSelectieWeg = async () => {
+    if (zetBezigBulk || gekozen.size === 0) return;
+    const ids = [...gekozen];
+    if (
+      !confirm(
+        `${ids.length} verkopers weggooien?
+
+Ze verdwijnen uit de lijst en komen bij een volgende zoekronde niet meer terug.`
+      )
+    )
+      return;
+
+    setZetBezigBulk(true);
+    onFout("");
+    try {
+      const res = await fetch("/api/admin/verkopers/bulk-verwijder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        onFout(d.error || "Weggooien mislukt");
+        return;
+      }
+      setGekozen(new Set());
+      setSelecteerStand(false);
+      await herlaad();
+    } catch (e) {
+      onFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setZetBezigBulk(false);
+    }
+  };
+
   const zetSelectieKlaar = async () => {
     if (zetBezigBulk || gekozen.size === 0) return;
     const ids = [...gekozen];
@@ -959,6 +930,7 @@ function LeadsTab({
           zichtbaar={zichtbaar.length}
           bezig={zetBezigBulk}
           onZet={zetSelectieKlaar}
+          onWeg={gooiSelectieWeg}
           onAllesOpScherm={() => setGekozen(new Set(zichtbaar.map((l) => l.id)))}
           onWis={() => {
             setGekozen(new Set());
@@ -1012,6 +984,7 @@ function SelectieBalk({
   zichtbaar,
   bezig,
   onZet,
+  onWeg,
   onAllesOpScherm,
   onWis,
 }: {
@@ -1019,6 +992,7 @@ function SelectieBalk({
   zichtbaar: number;
   bezig: boolean;
   onZet: () => void;
+  onWeg: () => void;
   onAllesOpScherm: () => void;
   onWis: () => void;
 }) {
@@ -1066,6 +1040,22 @@ function SelectieBalk({
               style={{ fontFamily: T.inter, fontSize: 11.5, color: "rgba(255,255,255,0.6)" }}
             >
               Stop met selecteren
+            </button>
+            <button
+              type="button"
+              onClick={onWeg}
+              disabled={aantal === 0}
+              title="Weggooien — ze komen bij een volgende zoekronde niet meer terug"
+              className="flex items-center gap-1.5 px-3 py-2 transition-all hover:opacity-80 disabled:opacity-40"
+              style={{
+                border: "1px solid rgba(255,255,255,0.35)",
+                color: "#ffffff",
+                fontFamily: T.inter,
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              <Trash2 size={12} /> Weggooien
             </button>
             <button
               type="button"

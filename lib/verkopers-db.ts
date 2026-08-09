@@ -108,6 +108,26 @@ export async function initVerkopersDB(): Promise<void> {
   `.catch(() => null);
   await sql`CREATE INDEX IF NOT EXISTS verkoper_leads_status_idx ON verkoper_leads (status, gevonden_op DESC)`.catch(() => null);
 
+  // Negeerlijst: advertenties die jij hebt weggegooid.
+  //
+  // Waarom apart van de blokkadelijst: die werkt op e-mailadres of telefoonnummer, en
+  // particulieren zetten die niet in hun advertentie — er valt dus niets te blokkeren.
+  // En waarom apart van de leads: als je een lead verwijdert verdwijnt ook de unieke
+  // sleutel op de advertentie-URL, en dan komt dezelfde advertentie bij de volgende
+  // zoekronde gewoon weer binnen. Dat kost je elke keer opnieuw tijd en tokens.
+  await sql`
+    CREATE TABLE IF NOT EXISTS verkoper_genegeerd (
+      advertentie_url TEXT PRIMARY KEY,
+      verkoper_sleutel TEXT DEFAULT '',
+      reden TEXT DEFAULT '',
+      aangemaakt TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS verkoper_genegeerd_sleutel_idx
+    ON verkoper_genegeerd (verkoper_sleutel) WHERE verkoper_sleutel <> ''
+  `.catch(() => null);
+
   // Blokkadelijst: e-mailadressen en telefoonnummers die we nooit (meer) benaderen.
   // Gevuld door afmeldingen, klachten, of handmatig door de gebruiker.
   await sql`
@@ -335,6 +355,36 @@ export async function isAlBenaderd(
     wanneer: rijen[0].verstuurd_op as string,
     kanaal: (rijen[0].kanaal as string) ?? "",
   };
+}
+
+/**
+ * Onthoudt dat je deze advertentie niet meer wilt zien.
+ *
+ * Wordt vastgelegd vóórdat de lead wordt verwijderd, want daarna is de URL weg. Ook de
+ * verkopersleutel gaat mee: zet dezelfde persoon een andere auto te koop, dan weet je
+ * dat je hem al eens hebt weggeklikt.
+ */
+export async function negeer(
+  advertentieUrl: string,
+  verkoperSleutelWaarde: string,
+  reden = ""
+): Promise<void> {
+  if (!advertentieUrl) return;
+  await sql`
+    INSERT INTO verkoper_genegeerd (advertentie_url, verkoper_sleutel, reden)
+    VALUES (${advertentieUrl}, ${verkoperSleutelWaarde}, ${reden})
+    ON CONFLICT (advertentie_url) DO NOTHING
+  `.catch(() => null);
+}
+
+/** Alle weggegooide advertentie-URL's, om ze bij het zoeken over te slaan. */
+export async function genegeerdeUrls(): Promise<Set<string>> {
+  try {
+    const rijen = await sql`SELECT advertentie_url FROM verkoper_genegeerd`;
+    return new Set(rijen.map((r) => String(r.advertentie_url)));
+  } catch {
+    return new Set();
+  }
 }
 
 export async function logContact(data: {

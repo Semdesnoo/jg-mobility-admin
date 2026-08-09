@@ -3,6 +3,7 @@ import {
   voegLeadToe,
   normaliseerTelefoon,
   isGeldigNlTelefoon,
+  genegeerdeUrls,
 } from "@/lib/verkopers-db";
 import { leesCriteria, volgendeMerken } from "@/lib/verkopers-criteria";
 import {
@@ -100,12 +101,19 @@ export async function POST() {
 
   const { goed, handelaren, buitenGrenzen } = await filterOpCriteria(alles, criteria, DEADLINE - 14_000);
 
+  // Advertenties die jij hebt weggegooid slaan we over. Zonder dit kwamen ze elke ronde
+  // opnieuw binnen, want met het verwijderen van de lead verdween ook de sleutel die
+  // dat tegenhield.
+  const genegeerd = await genegeerdeUrls();
+  const teBewaren = goed.filter((v) => !genegeerd.has(v.advertentie_url));
+  const overgeslagenWeggegooid = goed.length - teBewaren.length;
+
   // Wegschrijven met een stuk of tien tegelijk. Stuk voor stuk was het bij
   // tweehonderdvijftig vondsten een kwestie van seconden aan wachten op de database,
   // en dat gaat ten koste van de tijd die Vercel voor het hele verzoek geeft.
   const nieuweIds: string[] = [];
   let alBekend = 0;
-  const rij = [...goed];
+  const rij = [...teBewaren];
 
   let nietBewaard = 0;
   const bewaarder = async () => {
@@ -161,18 +169,19 @@ export async function POST() {
     }
   };
 
-  await Promise.all(Array.from({ length: Math.min(10, goed.length) }, bewaarder));
+  await Promise.all(Array.from({ length: Math.min(10, teBewaren.length) }, bewaarder));
 
   return Response.json({
     ok: true,
     gevonden: alles.length,
     toegevoegd: nieuweIds.length,
-    overgeslagen: handelaren + buitenGrenzen + alBekend,
+    overgeslagen: handelaren + buitenGrenzen + alBekend + overgeslagenWeggegooid,
     nieuwe_ids: nieuweIds,
     merken,
     toelichting:
       `${alles.length} advertenties bekeken op Marktplaats en AutoScout24 (${merken.join(", ")}). ` +
       `${handelaren} handelaar, ${buitenGrenzen} buiten je zoekgrenzen, ${alBekend} kende je al` +
+      (overgeslagenWeggegooid > 0 ? `, ${overgeslagenWeggegooid} eerder weggegooid` : "") +
       (nietBewaard > 0 ? `, ${nietBewaard} niet opgeslagen (te weinig tijd of een storing)` : "") +
       ".",
   });

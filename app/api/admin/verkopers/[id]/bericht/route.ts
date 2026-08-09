@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { initVerkopersDB, getLead } from "@/lib/verkopers-db";
 import { genereerBericht } from "@/lib/verkopers-bericht";
-import { magUitgeven, BUDGET_OP } from "@/lib/verkopers-budget";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,10 +13,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "ANTHROPIC_API_KEY niet ingesteld" }, { status: 500 });
   }
-
-  // Zelfde uitgavenrem als bij het uitlezen; zie lib/verkopers-budget.ts.
-  const { mag } = await magUitgeven();
-  if (!mag) return Response.json({ error: BUDGET_OP, budgetOp: true }, { status: 429 });
 
   const { id } = await params;
   await initVerkopersDB();
