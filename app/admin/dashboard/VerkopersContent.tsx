@@ -18,8 +18,6 @@ import {
   Plus,
   RefreshCw,
   ScrollText,
-  GraduationCap,
-  ChevronDown,
   ChevronRight,
 } from "lucide-react";
 import VerkopersCriteria, { type Criteria as ZoekCriteria } from "./VerkopersCriteria";
@@ -91,20 +89,6 @@ type Lead = {
 type Blokkade = { waarde: string; soort: string; reden: string; aangemaakt: string };
 
 
-type LogRegel = {
-  id: string;
-  lead_id: string;
-  kanaal: string;
-  ontvanger: string;
-  onderwerp: string;
-  inhoud: string;
-  advertentie_url: string;
-  verstuurd_op: string;
-  merk: string | null;
-  model: string | null;
-  bouwjaar: string | null;
-  lead_status: string | null;
-};
 
 type TabId = "zoeken" | "leads" | "nakijken" | "blokkade";
 
@@ -329,8 +313,18 @@ function ZoekTab({
     start("Verkopers zoeken", async (stap) => {
       stap("Marktplaats en AutoScout24 langslopen");
       const res = await fetch("/api/admin/verkopers/zoek", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Zoeken mislukt");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Ook bij een fout de lijst verversen: als de server halverwege afgekapt is,
+        // staan de gevonden verkopers er wél al en zou je ze anders niet zien.
+        await herlaad().catch(() => null);
+        throw new Error(
+          data.error ||
+            (res.status === 504
+              ? "Het zoeken duurde te lang en werd afgebroken. Wat al gevonden was staat bij Verkopers."
+              : `Zoeken mislukt (fout ${res.status})`)
+        );
+      }
 
       await herlaad();
 
@@ -507,6 +501,10 @@ function LeadsTab({
   aantalKlaar: number;
 }) {
   const [filter, setFilter] = useState<"alle" | Status>("alle");
+  // Loopt er een zoekronde? Dan hoort hier niet "ga eerst zoeken" te staan. De takenlaag
+  // ligt boven de tabbladen, dus dit tabblad kan er gewoon naar kijken.
+  const { taak: zoekTaak } = useAiTaak<unknown>("verkopers-zoek");
+  const zoektNu = zoekTaak?.bezig ?? false;
   // Welke rijen op dit moment een knop verwerken. Per lead, zodat de rest
   // aanklikbaar blijft terwijl er eentje bezig is.
   const [bezig, setBezig] = useState<Record<string, "weg" | "klaar" | "lezen">>({});
@@ -679,15 +677,25 @@ function LeadsTab({
     return (
       <div className="flex flex-col gap-4">
         {aantalKlaar > 0 && <KlaarBalk aantal={aantalKlaar} onGa={() => naarNakijken("", true)} />}
-        <Empty
-          icon={<Radar size={30} color={T.ink(0.2)} />}
-          title={aantalKlaar > 0 ? "Alles beoordeeld" : "Nog geen verkopers gevonden"}
-          body={
-            aantalKlaar > 0
-              ? "Wat je hebt doorgezet staat klaar op het tabblad Nakijken."
-              : "Ga naar het tabblad Radar en doe je eerste zoekopdracht."
-          }
-        />
+        {zoektNu ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-20">
+            <Spinner size={20} />
+            <p style={body(13, T.navy)}>Marktplaats en AutoScout24 worden doorzocht…</p>
+            <p style={body(11.5, T.ink(0.45))}>
+              Ze verschijnen hier zodra hij klaar is — een seconde of tien.
+            </p>
+          </div>
+        ) : (
+          <Empty
+            icon={<Radar size={30} color={T.ink(0.2)} />}
+            title={aantalKlaar > 0 ? "Alles beoordeeld" : "Nog geen verkopers gevonden"}
+            body={
+              aantalKlaar > 0
+                ? "Wat je hebt doorgezet staat klaar op het tabblad Nakijken."
+                : "Ga naar het tabblad Radar en druk op Zoek alle verkopers."
+            }
+          />
+        )}
       </div>
     );
   }
@@ -1398,26 +1406,6 @@ function NakijkenTab({
   gekozenId: string | null;
   setGekozenId: (id: string | null) => void;
 }) {
-  const [log, setLog] = useState<LogRegel[] | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
-  const [aanwijzingen, setAanwijzingen] = useState("");
-  const [opgeslagen, setOpgeslagen] = useState<string | null>(null);
-  const [bezig, setBezig] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/admin/verkopers/log")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setLog)
-      .catch(() => setLog([]));
-    fetch("/api/admin/verkopers/aanwijzingen")
-      .then((r) => (r.ok ? r.json() : { aanwijzingen: "" }))
-      .then((d) => {
-        setAanwijzingen(d.aanwijzingen ?? "");
-        setOpgeslagen(d.aanwijzingen ?? "");
-      })
-      .catch(() => {});
-  }, []);
-
   const alle = useMemo(() => leads ?? [], [leads]);
   // De wachtrij: alles wat jij hebt afgevinkt en nog gemaild moet worden.
   const wachtrij = useMemo(() => alle.filter((l) => l.status === "goedgekeurd"), [alle]);
@@ -1434,40 +1422,6 @@ function NakijkenTab({
     () => wachtrij.filter((l) => l.bericht_kort || l.bericht_mail).length,
     [wachtrij]
   );
-
-  // Na versturen moeten zowel de leads als het log opnieuw opgehaald worden,
-  // anders klopt het overzicht eronder niet meer met wat je net gedaan hebt.
-  const herlaadAlles = useCallback(async () => {
-    await herlaad();
-    try {
-      const r = await fetch("/api/admin/verkopers/log");
-      setLog(r.ok ? await r.json() : []);
-    } catch {
-      /* het log is bijzaak; de lead is bijgewerkt */
-    }
-  }, [herlaad]);
-
-  const bewaar = async () => {
-    setBezig(true);
-    onFout("");
-    try {
-      const res = await fetch("/api/admin/verkopers/aanwijzingen", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aanwijzingen }),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        onFout(d.error || "Opslaan mislukt");
-        return;
-      }
-      setOpgeslagen(d.aanwijzingen ?? aanwijzingen);
-    } finally {
-      setBezig(false);
-    }
-  };
-
-  const gewijzigd = opgeslagen !== null && aanwijzingen !== opgeslagen;
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">
@@ -1513,7 +1467,7 @@ function NakijkenTab({
             <NakijkPaneel
               key={gekozen.id}
               lead={gekozen}
-              herlaad={herlaadAlles}
+              herlaad={herlaad}
               herlaadBlokkade={herlaadBlokkade}
               onFout={onFout}
               onVerwijderd={() => setGekozenId(null)}
@@ -1522,151 +1476,6 @@ function NakijkenTab({
         </div>
       )}
 
-      {/* ── Verantwoording en bijsturen ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 md:gap-5" style={{ borderTop: `1px solid ${T.line2}`, paddingTop: 20 }}>
-      <div className="xl:col-span-3">
-        <Panel
-          title="Verzendlog"
-          icon={<ScrollText size={14} color={T.navy} />}
-          meta={log ? `${log.length} bericht${log.length === 1 ? "" : "en"}` : ""}
-          flush
-        >
-          {log === null && (
-            <div className="flex justify-center py-12">
-              <Spinner />
-            </div>
-          )}
-          {log?.length === 0 && (
-            <Empty
-              compact
-              icon={<ScrollText size={24} color={T.ink(0.2)} />}
-              title="Nog niets verstuurd"
-              body="Zodra er een bericht uitgaat, staat het hier woordelijk in."
-            />
-          )}
-          {log && log.length > 0 && (
-            <div className="flex flex-col">
-              {log.map((r, i) => {
-                const uit = open !== r.id;
-                const auto = `${r.merk ?? ""} ${r.model ?? ""}`.trim();
-                return (
-                  <div
-                    key={r.id}
-                    style={{
-                      borderTop: i === 0 ? undefined : `1px solid ${T.line}`,
-                      backgroundColor: uit && i % 2 !== 0 ? "#fafbfc" : T.paper,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setOpen(uit ? r.id : null)}
-                      className="w-full flex items-center gap-2.5 px-4 md:px-5 py-2.5 text-left transition-all hover:opacity-70"
-                    >
-                      {uit ? (
-                        <ChevronRight size={13} color={T.ink(0.35)} />
-                      ) : (
-                        <ChevronDown size={13} color={T.navy} />
-                      )}
-                      <span
-                        className="flex-1 min-w-0 truncate"
-                        style={{ fontFamily: T.inter, fontSize: 12.5, fontWeight: 600, color: T.navy }}
-                      >
-                        {auto || r.onderwerp || "Bericht"}
-                      </span>
-                      <span className="hidden sm:block truncate" style={body(11, T.ink(0.42))}>
-                        {r.ontvanger}
-                      </span>
-                      <Pill color={r.kanaal === "mail" ? T.teal : T.blauw}>{r.kanaal}</Pill>
-                      <span className="flex-shrink-0" style={{ ...micro(T.ink(0.3)), fontSize: 8.5 }}>
-                        {new Date(r.verstuurd_op).toLocaleDateString("nl-NL")}
-                      </span>
-                    </button>
-
-                    {!uit && (
-                      <div className="px-4 md:px-5 pb-4" style={{ backgroundColor: "rgba(0,19,55,0.015)" }}>
-                        <p style={{ ...micro(T.ink(0.35)), marginBottom: 6 }}>Onderwerp</p>
-                        <p className="mb-3" style={body(12.5, T.navy)}>
-                          {r.onderwerp || "—"}
-                        </p>
-                        <p style={{ ...micro(T.ink(0.35)), marginBottom: 6 }}>Verstuurde tekst</p>
-                        <pre
-                          className="overflow-x-auto"
-                          style={{
-                            fontFamily: T.inter,
-                            fontSize: 12,
-                            color: T.ink(0.7),
-                            lineHeight: 1.7,
-                            whiteSpace: "pre-wrap",
-                            margin: 0,
-                          }}
-                        >
-                          {r.inhoud}
-                        </pre>
-                        {r.advertentie_url && (
-                          <div className="mt-3">
-                            <a href={r.advertentie_url} target="_blank" rel="noopener noreferrer">
-                              <Btn variant="ghost" size="sm">
-                                <ExternalLink size={11} /> Bekijk de advertentie
-                              </Btn>
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <PanelVoet>
-            Dit log blijft staan als een lead wordt verwijderd — het is je verantwoording van wat er
-            naar wie is gegaan.
-          </PanelVoet>
-        </Panel>
-      </div>
-
-      <div className="xl:col-span-2 flex flex-col gap-4">
-        <Panel
-          title="Wat de AI van jou moet leren"
-          icon={<GraduationCap size={14} color={T.navy} />}
-          actions={gewijzigd ? <Pill color={T.amber}>niet opgeslagen</Pill> : undefined}
-        >
-          <p className="mb-3" style={body(12.5)}>
-            Zie je in het log iets wat je anders wilt? Schrijf het hier op. De AI krijgt dit mee bij
-            élk bericht dat hij schrijft, en jouw regel gaat vóór de standaardtekst.
-          </p>
-          <Field label="Jouw aanwijzingen">
-            <textarea
-              value={aanwijzingen}
-              onChange={(e) => setAanwijzingen(e.target.value)}
-              rows={10}
-              placeholder={
-                "Bijvoorbeeld:\n" +
-                "- Noem altijd dat we al 15 jaar in Barendrecht zitten.\n" +
-                "- Houd het korter, maximaal vijf zinnen.\n" +
-                "- Bied bij auto's onder €4.000 geen consignatie aan, alleen inkoop.\n" +
-                "- Begin nooit met 'Hallo,' maar met 'Goedemiddag,'."
-              }
-              style={{ ...inputStijl, resize: "vertical", lineHeight: 1.7 }}
-            />
-          </Field>
-          <div className="flex items-center gap-2 mt-3">
-            <Btn onClick={bewaar} disabled={bezig || !gewijzigd}>
-              {bezig ? <Spinner size={12} tone="donker" /> : <Check size={12} />} Opslaan
-            </Btn>
-            {gewijzigd && (
-              <Btn variant="ghost" onClick={() => setAanwijzingen(opgeslagen ?? "")}>
-                Ongedaan maken
-              </Btn>
-            )}
-          </div>
-          <PanelVoet>
-            Geldt voor elk bericht dat de AI voortaan schrijft. Al verstuurde berichten veranderen
-            er niet meer van.
-          </PanelVoet>
-        </Panel>
-      </div>
-      </div>
     </div>
   );
 }
