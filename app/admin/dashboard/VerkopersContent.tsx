@@ -18,7 +18,6 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
-  Zap,
   // Onder een eigen naam: `Infinity` is ook een ingebouwde waarde in JavaScript, en
   // die wil je in dit bestand niet overschaduwen.
   Infinity as Oneindig,
@@ -41,10 +40,8 @@ type ZoekResultaat = {
   /** Advertenties die niet te openen waren. Die blijven in de lijst staan, met een
    *  aantekening — ze zijn dus niet afgevallen. */
   nietUitgelezen?: number;
-  automatischVerstuurd: number;
   toelichting: string;
   merken?: string[];
-  autoLog: string[];
 };
 import {
   T,
@@ -59,7 +56,6 @@ import {
   Field,
   inputStijl,
   Spinner,
-  Skeleton,
   Empty,
   Foutmelding,
   PanelVoet,
@@ -99,15 +95,6 @@ type Lead = {
 
 type Blokkade = { waarde: string; soort: string; reden: string; aangemaakt: string };
 
-type Autopilot = {
-  aan: boolean;
-  maxPerDag: number;
-  minKans: number;
-  minParticulier: number;
-  vandaagVerstuurd: number;
-  resterendVandaag: number;
-  klaarVoorVerzending: number;
-};
 
 type LogRegel = {
   id: string;
@@ -362,7 +349,6 @@ function ZoekTab({
   tellers: { nieuw: number; klaar: number; verstuurd: number; reacties: number; consignatie: number };
 }) {
   const [criteria, setCriteria] = useState<ZoekCriteria | null>(null);
-  const [auto, setAuto] = useState<Autopilot | null>(null);
 
   // De zoekronde draait in de takenlaag boven de tabbladen. Daardoor loopt hij
   // door als je naar een ander scherm klikt, en staat het antwoord er nog als je
@@ -371,7 +357,6 @@ function ZoekTab({
   const bezig = taak?.bezig ?? false;
   const fase = taak?.stap ?? "";
   const resultaat = taak?.bezig ? null : (taak?.resultaat ?? null);
-  const autoLog = resultaat?.autoLog ?? [];
   // Uit het etiket van de lopende taak, niet uit een eigen toestand: dit paneel kan
   // opnieuw zijn opgebouwd terwijl de zoektocht al draaide.
   const doorlopend = taak?.label === "Doorlopend zoeken";
@@ -385,63 +370,6 @@ function ZoekTab({
   const stopZoeken = () => {
     doorzoekVlag.stop = true;
     setStopGevraagd(true);
-  };
-
-  const laadAutopilot = useCallback(async () => {
-    const res = await fetch("/api/admin/verkopers/autopilot");
-    if (res.ok) setAuto(await res.json());
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/admin/verkopers/autopilot")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setAuto(d))
-      .catch(() => {});
-  }, []);
-
-  /**
-   * Draait de autopilot tot er niets meer te versturen is. De server verwerkt per
-   * aanroep een kleine partij (anders loopt hij tegen de time-out van Vercel aan),
-   * dus we roepen hem herhaald aan. De ronde-teller is een noodrem tegen doorrazen.
-   */
-  const draaiAutopilot = async (
-    stap: (t: string) => void,
-    log: string[]
-  ): Promise<number> => {
-    let totaal = 0;
-    for (let ronde = 0; ronde < 15; ronde++) {
-      stap(`Automatisch versturen — ronde ${ronde + 1}`);
-      const res = await fetch("/api/admin/verkopers/autopilot", { method: "POST" });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        log.push(d.error || "Automatisch versturen mislukt");
-        break;
-      }
-      if (Array.isArray(d.meldingen) && d.meldingen.length) log.push(...d.meldingen);
-      totaal += d.verstuurd ?? 0;
-      await herlaad();
-      if (d.uit || d.klaar || (d.verstuurd ?? 0) === 0) break;
-    }
-    await laadAutopilot();
-    return totaal;
-  };
-
-  const alleenVersturen = () => {
-    if (bezig) return;
-    onFout("");
-    start("Berichten versturen", async (stap) => {
-      const log: string[] = [];
-      const aantal = await draaiAutopilot(stap, log);
-      return {
-        toegevoegd: 0,
-        overgeslagen: 0,
-        gecontroleerd: 0,
-        afgevallen: 0,
-        automatischVerstuurd: aantal,
-        toelichting: "",
-        autoLog: log,
-      };
-    });
   };
 
   /** Wat één zoekronde plus het uitlezen ervan oplevert. */
@@ -545,7 +473,6 @@ function ZoekTab({
     onFout("");
     doorzoekVlag.stop = false;
     setStopGevraagd(false);
-    const autopilotAan = auto?.aan ?? false;
 
     start("Verkopers zoeken", async (stap) => {
       const log: string[] = [];
@@ -568,10 +495,8 @@ function ZoekTab({
 
       // Alleen een échte storing is een fout. Rondes die netjes verliepen maar alleen
       // al bekende advertenties opleverden zijn een normale uitkomst — daar hoort geen
-      // rode melding bij, en de autopilot hieronder moet gewoon nog draaien.
+      // rode melding bij.
       if (totaal.ids === 0 && laatsteFout) throw new Error(laatsteFout);
-
-      const automatischVerstuurd = autopilotAan ? await draaiAutopilot(stap, log) : 0;
 
       return {
         toegevoegd: Math.max(0, totaal.ids - totaal.weg),
@@ -579,10 +504,8 @@ function ZoekTab({
         gecontroleerd: totaal.ids,
         afgevallen: totaal.weg,
         nietUitgelezen: totaal.mislukt,
-        automatischVerstuurd,
         toelichting,
         merken: [...new Set(merken)],
-        autoLog: log,
       };
     });
   };
@@ -600,7 +523,6 @@ function ZoekTab({
     onFout("");
     doorzoekVlag.stop = false;
     setStopGevraagd(false);
-    const autopilotAan = auto?.aan ?? false;
 
     start("Doorlopend zoeken", async (stap) => {
       const log: string[] = [];
@@ -652,18 +574,14 @@ function ZoekTab({
 
       if (totaal.ids === 0 && laatsteFout) throw new Error(laatsteFout);
 
-      const automatischVerstuurd = autopilotAan ? await draaiAutopilot(stap, log) : 0;
-
       return {
         toegevoegd: Math.max(0, totaal.ids - totaal.weg),
         overgeslagen: totaal.overgeslagen,
         gecontroleerd: totaal.ids,
         afgevallen: totaal.weg,
         nietUitgelezen: totaal.mislukt,
-        automatischVerstuurd,
         toelichting: reden,
         merken: [...new Set(merken)],
-        autoLog: log,
       };
     });
   };
@@ -771,17 +689,6 @@ function ZoekTab({
                 sub="handelaar of al bekend"
               />
             </div>
-            {resultaat.automatischVerstuurd > 0 && (
-              <div
-                className="mb-3 px-3.5 py-2.5"
-                style={{ backgroundColor: T.tintGroen, borderLeft: `3px solid ${T.groen}` }}
-              >
-                <p style={body(12.5, T.ink(0.7))}>
-                  De autopilot heeft {resultaat.automatischVerstuurd} bericht
-                  {resultaat.automatischVerstuurd === 1 ? "" : "en"} verstuurd.
-                </p>
-              </div>
-            )}
             {resultaat.merken && resultaat.merken.length > 0 && (
               <p className="mb-2" style={body(12, T.ink(0.5))}>
                 Deze keer gezocht op: {resultaat.merken.join(", ")}. Een volgende keer pakt hij andere
@@ -814,71 +721,9 @@ function ZoekTab({
           </Panel>
         )}
 
-        {autoLog.length > 0 && (
-          <Panel title="Wat de autopilot deed" icon={<Zap size={14} color={T.navy} />} flush>
-            <div className="flex flex-col">
-              {autoLog.map((regel, i) => (
-                <div
-                  key={i}
-                  className="px-4 md:px-5 py-2"
-                  style={{
-                    borderTop: i === 0 ? undefined : `1px solid ${T.line}`,
-                    backgroundColor: i % 2 === 0 ? T.paper : "#fafbfc",
-                  }}
-                >
-                  <span style={body(12, T.ink(0.65))}>{regel}</span>
-                </div>
-              ))}
-            </div>
-            <PanelVoet>Alles wat verstuurd is, staat ook vast in het verzendlog.</PanelVoet>
-          </Panel>
-        )}
       </div>
 
       <div className="flex flex-col gap-4 md:gap-5">
-        <AutopilotPaneel
-          auto={auto}
-          bezig={bezig}
-          onOpslaan={async (velden) => {
-            const res = await fetch("/api/admin/verkopers/autopilot", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(velden),
-            });
-            if (res.ok) await laadAutopilot();
-            else onFout("Instelling opslaan mislukt");
-          }}
-          onNuVersturen={alleenVersturen}
-        />
-
-        <Panel title="Zo werkt het" tone="donker">
-          <ol className="flex flex-col gap-3" style={{ counterReset: "stap" }}>
-            {[
-              "De radar loopt de overzichtspagina's van Marktplaats en AutoScout24 langs, gooit handelaren er meteen uit, en laat de AI daarna per advertentie kijken hoe kansrijk die is.",
-              "Bij Verkopers klik je op een kaart om de advertentie te bekijken. Prullenbak = weg en geblokkeerd, vinkje = klaarzetten.",
-              "Wat je afvinkt staat bij Nakijken. Daar schrijft de AI het bericht over díe auto en lees jij het na.",
-              "Jij drukt op versturen. Nooit automatisch: wat jij hebt afgevinkt gaat pas weg als je erop klikt.",
-            ].map((tekst, i) => (
-              <li key={i} className="flex gap-2.5">
-                <span
-                  className="flex-shrink-0 flex items-center justify-center rounded-full"
-                  style={{
-                    width: 20,
-                    height: 20,
-                    backgroundColor: "rgba(255,255,255,0.12)",
-                    ...num(11, "#ffffff"),
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <span style={{ fontFamily: T.inter, fontSize: 12, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
-                  {tekst}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
-
         <Panel title="Lopende trajecten">
           <div className="grid grid-cols-2 gap-2.5">
             <Stat label="Verstuurd" value={tellers.verstuurd} size={22} accent={T.teal} />
@@ -887,143 +732,8 @@ function ZoekTab({
             <Stat label="In consignatie" value={tellers.consignatie} size={22} accent={T.paars} />
           </div>
         </Panel>
-
-        <Panel title="Spelregels" icon={<ShieldOff size={14} color={T.navy} />}>
-          <p style={body(12)}>
-            Je benadert mensen over de auto die ze zélf openbaar te koop hebben gezet. Dat mag — mits het bericht
-            over díe auto gaat en jij het handmatig verstuurt.
-          </p>
-          <p className="mt-2.5" style={body(12)}>
-            Wat niet mag: massaal ongevraagde reclame mailen naar particulieren. Daarom gaat elke prullenbak direct
-            naar de blokkadelijst, en raakt de autopilot niet aan wat jij hebt afgevinkt — dat wacht op Nakijken
-            tot jij op versturen drukt.
-          </p>
-        </Panel>
       </div>
     </div>
-  );
-}
-
-// ── Autopilot ─────────────────────────────────────────────────────
-function AutopilotPaneel({
-  auto,
-  bezig,
-  onOpslaan,
-  onNuVersturen,
-}: {
-  auto: Autopilot | null;
-  bezig: boolean;
-  onOpslaan: (velden: Record<string, unknown>) => Promise<void>;
-  onNuVersturen: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  if (!auto) {
-    return (
-      <Panel title="Autopilot" icon={<Zap size={14} color={T.navy} />}>
-        <Skeleton h={40} />
-      </Panel>
-    );
-  }
-
-  return (
-    <Panel
-      title="Autopilot"
-      icon={<Zap size={14} color={auto.aan ? T.groen : T.ink(0.35)} />}
-      actions={
-        <Pill color={auto.aan ? T.groen : T.ink(0.4)} solid={auto.aan}>
-          {auto.aan ? "Aan" : "Uit"}
-        </Pill>
-      }
-    >
-      <p style={body(12.5)}>
-        {auto.aan
-          ? "Na elke zoekopdracht mailt de AI zelf de nieuwe vondsten die door alle controles komen."
-          : "Zet dit aan om de AI zelf te laten mailen bij nieuwe vondsten."}
-      </p>
-      <div
-        className="mt-2.5 px-3 py-2.5"
-        style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}
-      >
-        <p style={body(11.5, T.ink(0.65))}>
-          Werkt alleen bij een bekend e-mailadres, en dat hebben particulieren vrijwel nooit — die
-          zetten het niet in hun advertentie. In de praktijk gaat vrijwel alles via de berichtenbox,
-          en dat kan alleen met de hand. Verwacht hier dus weinig van.
-        </p>
-      </div>
-      <p className="mt-2" style={body(11.5, T.ink(0.45))}>
-        Wat jij met het vinkje hebt klaargezet blijft hier sowieso buiten — dat wacht op Nakijken tot
-        jij op versturen drukt.
-      </p>
-
-      <div className="grid grid-cols-3 gap-2.5 my-3">
-        <Stat label="Autopilot pakt op" value={auto.klaarVoorVerzending} size={20} accent={T.amber} />
-        <Stat label="Vandaag verstuurd" value={auto.vandaagVerstuurd} size={20} />
-        <Stat label="Nog ruimte" value={auto.resterendVandaag} size={20} accent={T.groen} />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Btn
-          variant={auto.aan ? "ghost" : "primair"}
-          onClick={() => onOpslaan({ aan: !auto.aan })}
-          disabled={bezig}
-        >
-          <Zap size={12} /> {auto.aan ? "Zet autopilot uit" : "Zet autopilot aan"}
-        </Btn>
-        {auto.aan && auto.klaarVoorVerzending > 0 && (
-          <Btn variant="ghost" onClick={onNuVersturen} disabled={bezig}>
-            {bezig ? <Spinner size={12} /> : <Send size={12} />} Nu versturen
-          </Btn>
-        )}
-        <Btn variant="ghost" size="sm" onClick={() => setOpen((v) => !v)}>
-          {open ? "Verberg grenzen" : "Grenzen instellen"}
-        </Btn>
-      </div>
-
-      {open && (
-        <div className="flex flex-col gap-3 mt-4 pt-4" style={{ borderTop: `1px solid ${T.line}` }}>
-          <Field label="Maximaal per dag" hint="Telt ook mee wat je zelf handmatig verstuurt.">
-            <input
-              type="number"
-              min={1}
-              max={50}
-              defaultValue={auto.maxPerDag}
-              onBlur={(e) => onOpslaan({ maxPerDag: Number(e.target.value) })}
-              style={inputStijl}
-            />
-          </Field>
-          <Field
-            label="Minimale zekerheid particulier (1-10)"
-            hint="Lager dan dit en de autopilot laat de lead staan. Handelaren vallen sowieso af."
-          >
-            <input
-              type="number"
-              min={1}
-              max={10}
-              defaultValue={auto.minParticulier}
-              onBlur={(e) => onOpslaan({ minParticulier: Number(e.target.value) })}
-              style={inputStijl}
-            />
-          </Field>
-          <Field label="Minimale kansscore (1-10)" hint="Hoe kansrijk de lead moet zijn om automatisch te mailen.">
-            <input
-              type="number"
-              min={0}
-              max={10}
-              defaultValue={auto.minKans}
-              onBlur={(e) => onOpslaan({ minKans: Number(e.target.value) })}
-              style={inputStijl}
-            />
-          </Field>
-        </div>
-      )}
-
-      <PanelVoet>
-        De autopilot mailt alleen als de advertentie echt is uitgelezen, het adres de controle haalt,
-        de verkoper niet geblokkeerd is en er nog niet eerder een bericht is gegaan. Elke verzending
-        krijgt een afmeldregel.
-      </PanelVoet>
-    </Panel>
   );
 }
 
@@ -1087,7 +797,7 @@ function LeadsTab({
     });
 
   /** Advertentie (opnieuw) openen en uitlezen. Nodig als dat tijdens de zoekronde
-   *  misging: zonder scores weet je niets van deze verkoper en laat de autopilot hem staan. */
+   *  misging: zonder scores weet je niets van deze verkoper. */
   const leesUit = async (lead: Lead) => {
     zetBezig(lead.id, "lezen");
     onFout("");
@@ -1966,7 +1676,7 @@ function NakijkenTab({
               compact
               icon={<ScrollText size={24} color={T.ink(0.2)} />}
               title="Nog niets verstuurd"
-              body="Zodra er een bericht uitgaat — door jou of door de autopilot — staat het hier woordelijk in."
+              body="Zodra er een bericht uitgaat, staat het hier woordelijk in."
             />
           )}
           {log && log.length > 0 && (
@@ -2086,8 +1796,8 @@ function NakijkenTab({
             )}
           </div>
           <PanelVoet>
-            Geldt voor de autopilot én voor berichten die je zelf laat schrijven. Al verstuurde
-            berichten veranderen er niet meer van.
+            Geldt voor elk bericht dat de AI voortaan schrijft. Al verstuurde berichten veranderen
+            er niet meer van.
           </PanelVoet>
         </Panel>
       </div>
