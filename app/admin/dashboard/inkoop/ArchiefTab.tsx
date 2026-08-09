@@ -210,7 +210,8 @@ function TaxatieDetail({ r }: { r: TaxatieRij }) {
         {[
           { l: "Max. inkoop", v: fmt(r.max_inkoop) },
           { l: "Verwachte verkoop", v: fmt(r.verwachte_verkoop) },
-          { l: "Geschatte marge", v: ber ? fmt(ber.geschatte_marge) : "—" },
+          // Nieuwe taxaties hebben netto_marge (ná btw); oude alleen geschatte_marge.
+          { l: "Marge", v: ber?.netto_marge != null ? fmt(ber.netto_marge) : ber?.geschatte_marge != null ? fmt(ber.geschatte_marge) : "—" },
           { l: "Gewenste marge", v: `${r.marge}%` },
           { l: "Geschatte kosten", v: fmt(r.kosten) },
           { l: "Koerslijstwaarde", v: ber?.koerslijst_waarde ? fmt(ber.koerslijst_waarde) : "—" },
@@ -218,8 +219,8 @@ function TaxatieDetail({ r }: { r: TaxatieRij }) {
           { l: "Aantrekkelijkheid", v: ber?.aantrekkelijkheid != null ? `${ber.aantrekkelijkheid}/10` : "—" },
           { l: "Markt gemiddeld", v: markt?.gemiddelde_prijs ? fmt(markt.gemiddelde_prijs) : "—" },
           { l: "Markt min · max", v: markt?.min_prijs ? `${fmt(markt.min_prijs)} – ${fmt(markt.max_prijs)}` : "—" },
-          { l: "Aanbod gevonden", v: markt?.aantal_aanbod != null ? String(markt.aantal_aanbod) : "—" },
-          { l: "Prijstrend", v: markt?.prijs_trend || "—" },
+          { l: "Advertenties gevonden", v: markt?.aantal_gevonden != null ? String(markt.aantal_gevonden) : "—" },
+          { l: "Gebaseerd op", v: ber?.live == null ? "—" : ber.live ? "live advertenties" : "modelkennis" },
         ].map((c) => (
           <div key={c.l} className="px-3 py-2" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
             <p style={{ ...micro(T.ink(0.4)), fontSize: 8.5 }}>{c.l}</p>

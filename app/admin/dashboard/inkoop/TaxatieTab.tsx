@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import {
   T, num, micro, body, fmt, fmtGetal, fmtKm, scoreKleur,
-  Panel, SectionRule, Meter, Segments, Pill, TrendBadge, ScoreRing,
+  Panel, SectionRule, Meter, Pill, ScoreRing,
   Field, inputStijl, Btn, Chip, Spinner, Foutmelding, PanelVoet,
   Th, Td, TabelWrap, rijStijl,
 } from "./ui";
@@ -54,6 +54,11 @@ export default function TaxatieTab({
   const [rdwFout, setRdwFout] = useState<string | null>(null);
   const [km, setKm] = useState("");
   const [marge, setMarge] = useState(10);
+  // Marge of BTW. Koop je van een particulier, dan is het altijd marge — die kan geen
+  // btw-factuur geven. Alleen bij inkoop van een bedrijf is het een btw-auto, en dan
+  // moet de btw eerst van de verkoopprijs af voordat je je marge rekent. Dat scheelde
+  // tot zeventien procent in wat je maximaal kunt bieden.
+  const [btwType, setBtwType] = useState<"marge" | "btw">("marge");
   const [kosten, setKosten] = useState(0);
   const [posten, setPosten] = useState<{ id: number; label: string; bedrag: number }[]>([]);
   const [scanStap, setScanStap] = useState(0);
@@ -110,7 +115,7 @@ export default function TaxatieTab({
     // Alles wat de opdracht nodig heeft nu vastleggen: hij draait straks buiten dit
     // scherm door, ook als je naar een ander tabblad klikt.
     const auto = rdw;
-    const gegevens = { kenteken, km: kmNum, marge, kosten };
+    const gegevens = { kenteken, km: kmNum, marge, kosten, btwType };
 
     start(`Taxatie ${auto.merk} ${auto.model}`, async () => {
       const res = await fetch("/api/admin/inkoop/taxeer", {
@@ -124,6 +129,7 @@ export default function TaxatieTab({
           bodytype: auto.bodytype, catalogusprijs: auto.catalogusprijs,
           gewenste_marge: gegevens.marge,
           geschatte_kosten: gegevens.kosten,
+          btw_type: gegevens.btwType,
         }),
       });
       if (!res.ok) {
@@ -143,7 +149,7 @@ export default function TaxatieTab({
           km: gegevens.km, marge: gegevens.marge, kosten: gegevens.kosten,
           max_inkoop: uit.berekening.max_inkoop,
           verwachte_verkoop: uit.berekening.verwachte_verkoop,
-          betrouwbaarheid: uit.markt.betrouwbaarheid ?? "",
+          betrouwbaarheid: uit.berekening.live ? "live" : "modelkennis",
           resultaat: uit,
         }),
       }).catch(() => {});
@@ -166,7 +172,7 @@ export default function TaxatieTab({
         bod_prijs: resultaat.berekening.max_inkoop,
         status: "nieuw",
         notitie:
-          `Markt: gemiddeld ${fmt(resultaat.markt.gemiddelde_prijs)}, ${resultaat.markt.aantal_aanbod} stuks aanbod. ` +
+          `Markt: gemiddeld ${fmt(resultaat.markt.gemiddelde_prijs)} uit ${resultaat.markt.aantal_gevonden ?? 0} advertenties. ` +
           `Max inkoop ${fmt(resultaat.berekening.max_inkoop)} bij ${marge}% marge en ${fmt(kosten)} kosten.`,
       }),
     });
@@ -418,6 +424,23 @@ export default function TaxatieTab({
             </Field>
 
             <div>
+              <p className="mb-1.5" style={micro()}>BTW-regeling</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Chip active={btwType === "marge"} onClick={() => setBtwType("marge")}>
+                  Marge
+                </Chip>
+                <Chip active={btwType === "btw"} onClick={() => setBtwType("btw")}>
+                  BTW-auto
+                </Chip>
+              </div>
+              <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.45), lineHeight: 1.5 }}>
+                {btwType === "marge"
+                  ? "Koop je van een particulier, dan is het altijd marge. Je draagt 21/121 over je winst af."
+                  : "Alleen bij inkoop van een bedrijf met btw-factuur. De 21% gaat eerst van de verkoopprijs af."}
+              </p>
+            </div>
+
+            <div>
               <p className="mb-1.5" style={micro()}>Gewenste marge</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 {MARGE_PRESETS.map((p) => (
@@ -600,8 +623,16 @@ export default function TaxatieTab({
             >
               {[
                 { l: "Verwachte verkoop", v: b ? fmt(b.verwachte_verkoop) : "—" },
-                { l: "Geschatte marge", v: b ? `${b.geschatte_marge > 0 ? "+" : ""}${fmt(b.geschatte_marge)}` : "—", kleur: b ? (b.geschatte_marge > 0 ? "#4ade80" : "#f87171") : undefined },
-                { l: "Betrouwbaarheid", v: m?.betrouwbaarheid ?? "—" },
+                {
+                  l: "Marge na btw",
+                  v: b?.netto_marge != null ? `${b.netto_marge > 0 ? "+" : ""}${fmt(b.netto_marge)}` : "—",
+                  kleur: b?.netto_marge != null ? (b.netto_marge > 0 ? "#4ade80" : "#f87171") : undefined,
+                },
+                {
+                  l: "Gebaseerd op",
+                  v: b ? (b.live ? `${m?.aantal_gevonden ?? 0} advertenties` : "modelkennis") : "—",
+                  kleur: b ? (b.live ? undefined : "#fbbf24") : undefined,
+                },
               ].map((k) => (
                 <div key={k.l} className="px-4 py-3 flex-1 flex flex-col justify-center" style={{ backgroundColor: T.navy }}>
                   <p style={{ ...micro("rgba(255,255,255,0.4)"), fontSize: 8.5 }}>{k.l}</p>
@@ -615,7 +646,7 @@ export default function TaxatieTab({
               className="flex xl:flex-col items-center justify-between xl:justify-center gap-4 p-5 flex-shrink-0"
               style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
             >
-              {b ? (
+              {b?.aantrekkelijkheid != null ? (
                 <ScoreRing score={b.aantrekkelijkheid} tone="donker" />
               ) : (
                 <div
@@ -781,7 +812,11 @@ export default function TaxatieTab({
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
             <Panel
               title="Marktprijzen"
-              actions={<TrendBadge trend={m.prijs_trend} />}
+              actions={
+                <span style={{ ...micro(b.live ? T.groen : T.amber), fontSize: 9 }}>
+                  {b.live ? `${m.aantal_gevonden ?? 0} advertenties gevonden` : "geen live advertenties"}
+                </span>
+              }
               className="xl:col-span-5"
             >
               <p style={num(30)}>{fmt(m.gemiddelde_prijs)}</p>
@@ -825,35 +860,33 @@ export default function TaxatieTab({
 
             <Panel title="Marktanalyse" className="xl:col-span-4">
               <div className="flex flex-col gap-5">
+                {/* Hier stonden "aanbod online" en een "populariteit"-score. Allebei
+                    verzonnen: met een handvol zoekopdrachten weet je niet hoeveel van
+                    deze auto er landelijk te koop staan. Wat er nu staat is geteld. */}
                 <div>
-                  <p className="mb-1.5" style={micro()}>Aanbod online</p>
+                  <p className="mb-1.5" style={micro()}>Gevonden advertenties</p>
                   <p style={num(28)}>
-                    {m.aantal_aanbod}
-                    <span style={{ fontFamily: T.inter, fontSize: 12, fontWeight: 400, color: T.ink(0.4), marginLeft: 6 }}>stuks</span>
+                    {m.aantal_gevonden ?? 0}
+                    <span style={{ fontFamily: T.inter, fontSize: 12, fontWeight: 400, color: T.ink(0.4), marginLeft: 6 }}>
+                      vergelijkbaar
+                    </span>
                   </p>
-                  <div className="mt-2">
-                    <Meter
-                      value={Math.min(m.aantal_aanbod, 100)}
-                      max={100}
-                      color={m.aantal_aanbod > 60 ? T.rood : m.aantal_aanbod > 30 ? T.amber : T.groen}
-                    />
-                  </div>
                   <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.4) }}>
-                    {m.aantal_aanbod > 60
-                      ? "Groot aanbod — sterk concurrerend"
-                      : m.aantal_aanbod > 30
-                        ? "Gemiddeld aanbod"
-                        : "Beperkt aanbod — gunstig voor verkoop"}
+                    {!b.live
+                      ? "Geen live advertenties opgehaald — dit is een schatting uit modelkennis."
+                      : (m.aantal_gevonden ?? 0) >= 5
+                        ? "Genoeg om de marktprijs op te baseren."
+                        : (m.aantal_gevonden ?? 0) >= 1
+                          ? "Weinig vergelijkbare auto's; de nieuwprijs weegt zwaarder mee."
+                          : "Niets vergelijkbaars gevonden; de waarde komt volledig uit de nieuwprijs."}
                   </p>
                 </div>
 
-                <div>
-                  <p className="mb-2" style={micro()}>Populariteit</p>
-                  <Segments score={m.vraag_score} />
-                  <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.4) }}>
-                    {m.vraag_score}/10 vraagscore
-                  </p>
-                </div>
+                {b.markt_afgekeurd && (
+                  <div className="px-3 py-2.5" style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}>
+                    <p style={body(11, T.ink(0.7))}>{b.markt_afgekeurd}</p>
+                  </div>
+                )}
 
                 <div>
                   <p className="mb-2" style={micro()}>Berekening</p>
@@ -861,6 +894,11 @@ export default function TaxatieTab({
                     <tbody>
                       {([
                         ["Geadviseerde verkoop", fmt(b.verwachte_verkoop), false],
+                        [
+                          b.btw_type === "btw" ? "BTW (21%, in de prijs)" : "BTW over de marge (21/121)",
+                          `− ${fmt(b.btw_afdracht ?? 0)}`,
+                          false,
+                        ],
                         ["Gewenste marge", `${b.gewenste_marge}%`, false],
                         ["Geschatte kosten", `− ${fmt(b.geschatte_kosten)}`, false],
                         ["Max inkoopprijs", fmt(b.max_inkoop), true],

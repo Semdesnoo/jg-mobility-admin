@@ -21,33 +21,68 @@ export type Vergelijkbaar = {
   platform?: string;
 };
 
+/**
+ * Wat er over de markt bekend is.
+ *
+ * Bewust klein. Hier stonden ook landelijk aanbod, prijstrend en een "vraagscore" in —
+ * getallen die een model met een handvol zoekopdrachten niet kan weten, maar die wel als
+ * feit op het scherm kwamen en meetelden in de score. Die zijn eruit: een gezaghebbend
+ * ogende gok is schadelijker dan geen getal.
+ */
 export type MarktData = {
   gemiddelde_prijs: number;
   min_prijs: number;
   max_prijs: number;
-  aantal_aanbod: number;
-  prijs_trend: string;
-  marktplaats_gemiddeld?: number;
-  autoscout_gemiddeld?: number;
-  vraag_score: number;
   advies: string;
-  betrouwbaarheid?: "hoog" | "midden" | "laag";
+  /** Hoeveel advertenties er écht gevonden én bruikbaar waren — geteld, niet gemeld. */
   aantal_gevonden?: number;
   vergelijkbare?: Vergelijkbaar[];
+
+  // ── Verouderd ──
+  // Deze velden worden niet meer geproduceerd, maar staan nog in taxaties die eerder
+  // zijn opgeslagen. Ze blijven hier zodat het archief die oude analyses kan tonen zoals
+  // ze destijds waren. Gebruik ze nergens anders.
+  /** @deprecated onbekenbaar; werd geraden */
+  aantal_aanbod?: number;
+  /** @deprecated onbekenbaar; werd geraden */
+  prijs_trend?: string;
+  /** @deprecated onbekenbaar; werd geraden */
+  vraag_score?: number;
+  /** @deprecated zelfgerapporteerd, niet geverifieerd */
+  betrouwbaarheid?: "hoog" | "midden" | "laag";
+  /** @deprecated onbekenbaar; werd geraden */
+  marktplaats_gemiddeld?: number;
+  /** @deprecated onbekenbaar; werd geraden */
+  autoscout_gemiddeld?: number;
 };
 
 export type Berekening = {
   max_inkoop: number;
   verwachte_verkoop: number;
-  geschatte_marge: number;
+  /** Verkoopwaarde zonder btw. Bij een marge-auto gelijk aan de verkoopwaarde. */
+  netto_verkoop?: number;
+  btw_type?: "marge" | "btw";
+  /** Wat er aan btw afgedragen moet worden — bij marge over de marge, bij btw over alles. */
+  btw_afdracht?: number;
+  /** Wat er ná btw en kosten overblijft. */
+  netto_marge?: number;
   marge_percentage: number;
   geschatte_kosten: number;
   gewenste_marge: number;
-  aantrekkelijkheid: number;
   catalogusprijs?: number;
   koerslijst_waarde?: number;
   markt_waarde?: number;
   bron?: string;
+  /** Kwamen de cijfers uit echt gezochte advertenties, of uit modelkennis? */
+  live?: boolean;
+  /** Gezet als de gevonden marktprijs zo ver van de koerslijst lag dat hij is genegeerd. */
+  markt_afgekeurd?: string;
+
+  // ── Verouderd, alleen nog voor het archief ──
+  /** @deprecated was per definitie gelijk aan de ingestelde marge; zegt dus niets */
+  geschatte_marge?: number;
+  /** @deprecated leunde op geraden cijfers */
+  aantrekkelijkheid?: number;
 };
 
 export type TaxatieResultaat = { markt: MarktData; berekening: Berekening };
