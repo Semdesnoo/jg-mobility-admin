@@ -591,13 +591,11 @@ function LeadsTab({
   // Wie je hebt aangevinkt om een bericht voor te laten schrijven.
   const [gekozen, setGekozen] = useState<Set<string>>(new Set());
 
-  // Het doorzetten draait in de takenlaag: bij tweehonderd aangevinkte verkopers duurt
-  // het even, en dit tabblad wordt uit het geheugen gegooid zodra je ergens anders klikt.
-  const { taak: zetTaak, start: startZetten } = useAiTaak<{ gelukt: number; mislukt: number }>(
-    "verkopers-doorzetten"
-  );
-  const zetBezigBulk = zetTaak?.bezig ?? false;
-  const zetStap = zetTaak?.stap ?? "";
+  const [zetBezigBulk, setZetBezigBulk] = useState(false);
+  // Selecteerstand: pas als je die aanzet verschijnen de vinkvakjes en vinkt een klik
+  // op een kaart aan in plaats van de advertentie te openen. Zo blijft de gewone stand
+  // rustig, en kun je in de selecteerstand snel achter elkaar doorklikken.
+  const [selecteerStand, setSelecteerStand] = useState(false);
 
   const kiesOfNiet = (id: string) =>
     setGekozen((v) => {
@@ -610,56 +608,43 @@ function LeadsTab({
   /**
    * Zet alles wat je hebt aangevinkt klaar op Nakijken.
    *
-   * Dit kost niets: er wordt alleen een vinkje omgezet. Het schrijven van de tekst
-   * gebeurt daar, per advertentie, als jij erop klikt — dan betaal je alleen voor de
-   * verkopers die je echt gaat benaderen.
+   * Eén verzoek voor de hele selectie. Hiervoor ging er een apart verzoek per verkoper
+   * heen en weer — bij vijftig kaarten stond je tien seconden te wachten op iets wat de
+   * database in één opdracht doet. Nu is het een kwestie van een tel, of je er nu drie
+   * of driehonderd aanvinkt.
+   *
+   * Dit kost niets: er gaat alleen een vinkje om. Het schrijven van de tekst gebeurt op
+   * Nakijken, per advertentie, als jij erop klikt.
    */
-  const zetSelectieKlaar = () => {
+  const zetSelectieKlaar = async () => {
     if (zetBezigBulk || gekozen.size === 0) return;
-    // Uit álle leads, niet uit wat er nu zichtbaar is: wissel je tussendoor van filter,
-    // dan zou de selectie stilletjes leeglopen en zou je denken dat het gelukt was.
-    const gekozenIds = new Set(gekozen);
-    const rij = (leads ?? []).filter((l) => gekozenIds.has(l.id));
-    if (rij.length === 0) return;
-
+    const ids = [...gekozen];
+    setZetBezigBulk(true);
     onFout("");
-    startZetten(`${rij.length} klaarzetten`, async (stap) => {
-      let gelukt = 0;
-      const mislukt: string[] = [];
-
-      for (let i = 0; i < rij.length; i++) {
-        const lead = rij[i];
-        stap(`${i + 1} van ${rij.length}`);
-        try {
-          const res = await fetch(`/api/admin/verkopers/${lead.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "goedgekeurd" }),
-          });
-          if (res.ok) gelukt++;
-          else {
-            const d = await res.json().catch(() => ({}));
-            mislukt.push(d.error || `fout ${res.status}`);
-          }
-        } catch (e) {
-          mislukt.push(e instanceof Error ? e.message : String(e));
-        } finally {
-          // Meteen afvinken, ook als het misging: anders staat hij bij een volgende
-          // poging opnieuw in de rij.
-          setGekozen((v) => {
-            const n = new Set(v);
-            n.delete(lead.id);
-            return n;
-          });
-        }
+    try {
+      const res = await fetch("/api/admin/verkopers/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, status: "goedgekeurd" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        onFout(d.error || "Klaarzetten mislukt");
+        return;
       }
-
-      await herlaad().catch(() => null);
-      if (mislukt.length > 0) {
-        onFout(`${gelukt} van de ${rij.length} klaargezet. Niet gelukt: ${mislukt.slice(0, 2).join("; ")}.`);
+      setGekozen(new Set());
+      setSelecteerStand(false);
+      if (d.bijgewerkt < ids.length) {
+        onFout(
+          `${d.bijgewerkt} van de ${ids.length} klaargezet. De rest was al verstuurd en blijft ongemoeid.`
+        );
       }
-      return { gelukt, mislukt: mislukt.length };
-    });
+      await herlaad();
+    } catch (e) {
+      onFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setZetBezigBulk(false);
+    }
   };
 
   // Goedgekeurde verkopers wachten op het tabblad Nakijken; die horen hier niet meer.
@@ -925,6 +910,17 @@ function LeadsTab({
           <option value="kans">Beste kans eerst</option>
         </select>
 
+        <Btn
+          variant={selecteerStand ? "primair" : "ghost"}
+          size="sm"
+          onClick={() => {
+            setSelecteerStand((v) => !v);
+            if (selecteerStand) setGekozen(new Set());
+          }}
+        >
+          <Check size={11} /> {selecteerStand ? "Klaar met selecteren" : "Selecteren"}
+        </Btn>
+
         <span style={{ ...micro(T.ink(0.4)), marginLeft: "auto" }}>
           {zichtbaar.length} van {teBeoordelen.length}
         </span>
@@ -946,13 +942,17 @@ function LeadsTab({
         )}
       </div>
 
-      {gekozen.size > 0 && (
+      {(selecteerStand || gekozen.size > 0) && (
         <SelectieBalk
           aantal={gekozen.size}
+          zichtbaar={zichtbaar.length}
           bezig={zetBezigBulk}
-          voortgang={zetStap}
           onZet={zetSelectieKlaar}
-          onWis={() => setGekozen(new Set())}
+          onAllesOpScherm={() => setGekozen(new Set(zichtbaar.map((l) => l.id)))}
+          onWis={() => {
+            setGekozen(new Set());
+            setSelecteerStand(false);
+          }}
         />
       )}
 
@@ -969,6 +969,7 @@ function LeadsTab({
               key={lead.id}
               lead={lead}
               bezig={bezig[lead.id] ?? null}
+              selecteerStand={selecteerStand}
               aangevinkt={gekozen.has(lead.id)}
               onVink={() => kiesOfNiet(lead.id)}
               onWeg={() => verwijder(lead)}
@@ -991,21 +992,23 @@ function LeadsTab({
 }
 
 /**
- * Verschijnt zodra je iemand aanvinkt: hoeveel het er zijn en de knop om ze klaar te
- * zetten. Bewust geen bedrag: klaarzetten kost niets. Je betaalt pas op Nakijken, per
- * advertentie waar jij een tekst voor vraagt.
+ * De balk in de selecteerstand: hoeveel je hebt aangevinkt, "alles op dit scherm", en
+ * de knop om ze klaar te zetten. Bewust geen bedrag — klaarzetten kost niets. Je betaalt
+ * pas op Nakijken, per advertentie waar jij een tekst voor vraagt.
  */
 function SelectieBalk({
   aantal,
+  zichtbaar,
   bezig,
-  voortgang,
   onZet,
+  onAllesOpScherm,
   onWis,
 }: {
   aantal: number;
+  zichtbaar: number;
   bezig: boolean;
-  voortgang: string;
   onZet: () => void;
+  onAllesOpScherm: () => void;
   onWis: () => void;
 }) {
   return (
@@ -1015,32 +1018,52 @@ function SelectieBalk({
     >
       <Check size={15} />
       <span style={{ fontFamily: T.inter, fontSize: 12.5 }}>
-        <strong>{aantal} aangevinkt</strong>
-        <span style={{ opacity: 0.7 }}> · klaarzetten kost niets</span>
+        {aantal === 0 ? (
+          <>
+            <strong>Selecteren aan</strong>
+            <span style={{ opacity: 0.7 }}> · klik kaarten aan om ze te kiezen</span>
+          </>
+        ) : (
+          <>
+            <strong>{aantal} aangevinkt</strong>
+            <span style={{ opacity: 0.7 }}> · klaarzetten kost niets</span>
+          </>
+        )}
       </span>
-      <span className="ml-auto flex items-center gap-2">
+
+      <span className="ml-auto flex flex-wrap items-center gap-2">
         {bezig ? (
           <span className="flex items-center gap-2" style={{ fontFamily: T.inter, fontSize: 12 }}>
-            <Spinner size={13} tone="donker" />
-            {voortgang || "Bezig…"}
+            <Spinner size={13} tone="donker" /> Klaarzetten…
           </span>
         ) : (
           <>
+            {aantal < zichtbaar && (
+              <button
+                type="button"
+                onClick={onAllesOpScherm}
+                className="px-3 py-2 transition-all hover:opacity-70"
+                style={{ fontFamily: T.inter, fontSize: 11.5, color: "rgba(255,255,255,0.85)" }}
+              >
+                Alle {zichtbaar} op dit scherm
+              </button>
+            )}
             <button
               type="button"
               onClick={onWis}
               className="px-3 py-2 transition-all hover:opacity-70"
-              style={{ fontFamily: T.inter, fontSize: 11.5, color: "rgba(255,255,255,0.7)" }}
+              style={{ fontFamily: T.inter, fontSize: 11.5, color: "rgba(255,255,255,0.6)" }}
             >
-              Wis selectie
+              Stop met selecteren
             </button>
             <button
               type="button"
               onClick={onZet}
-              className="flex items-center gap-1.5 px-4 py-2 transition-all hover:opacity-90"
+              disabled={aantal === 0}
+              className="flex items-center gap-1.5 px-4 py-2 transition-all hover:opacity-90 disabled:opacity-40"
               style={{ backgroundColor: "#ffffff", color: T.navy, fontFamily: T.inter, fontSize: 12, fontWeight: 700 }}
             >
-              <ScrollText size={12} /> Zet klaar op Nakijken
+              <ScrollText size={12} /> Zet {aantal > 0 ? `${aantal} ` : ""}klaar op Nakijken
             </button>
           </>
         )}
@@ -1082,6 +1105,7 @@ function KlaarBalk({ aantal, onGa }: { aantal: number; onGa: () => void }) {
 function LeadKaart({
   lead,
   bezig,
+  selecteerStand,
   aangevinkt,
   onVink,
   onWeg,
@@ -1092,6 +1116,7 @@ function LeadKaart({
 }: {
   lead: Lead;
   bezig: "weg" | "klaar" | "lezen" | "terug" | null;
+  selecteerStand: boolean;
   aangevinkt: boolean;
   onVink: () => void;
   onWeg: () => void;
@@ -1126,17 +1151,11 @@ function LeadKaart({
         border: `1px solid ${aangevinkt ? T.navy : T.line}`,
       }}
     >
-      {/* Het vinkvakje ligt bovenop de link, want de kaart zelf opent de advertentie. */}
-      {!afgerond && (
-        <button
-          type="button"
-          onClick={(e) => {
-            stop(e);
-            onVink();
-          }}
-          title={aangevinkt ? "Niet meer aanvinken" : "Aanvinken om een bericht te laten schrijven"}
-          aria-label={aangevinkt ? "Niet meer aanvinken" : "Aanvinken"}
-          className="absolute flex items-center justify-center transition-all hover:opacity-80"
+      {/* In de selecteerstand ligt er een vinkvakje bovenop; in de gewone stand niet,
+          want dan opent een klik gewoon de advertentie. */}
+      {selecteerStand && !afgerond && (
+        <span
+          className="absolute flex items-center justify-center"
           style={{
             top: 10,
             right: 10,
@@ -1146,50 +1165,41 @@ function LeadKaart({
             backgroundColor: aangevinkt ? T.navy : T.paper,
             border: `1px solid ${aangevinkt ? T.navy : T.line2}`,
             color: "#ffffff",
+            pointerEvents: "none",
           }}
         >
           {aangevinkt && <Check size={13} />}
-        </button>
+        </span>
       )}
-      <a
-        href={lead.advertentie_url || undefined}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block flex-1"
-        style={{
-          // Rechts extra ruimte voor het vinkvakje dat daar bovenop ligt.
-          padding: afgerond ? "12px 14px" : "12px 40px 12px 14px",
-          cursor: lead.advertentie_url ? "pointer" : "default",
-        }}
-        title={lead.advertentie_url ? "Open de advertentie in een nieuw tabblad" : "Geen link bekend"}
-      >
-        <div className="flex flex-wrap items-start gap-x-2 gap-y-1 mb-1.5">
-          <span
-            className="flex-1 min-w-0 truncate flex items-center gap-1.5"
-            style={{ fontFamily: T.play, fontSize: 14, fontWeight: 700, color: T.navy }}
-          >
-            {lead.merk} {lead.model || korteTitel(lead)}
-            {lead.advertentie_url && <ExternalLink size={11} color={T.ink(0.3)} />}
-          </span>
-          <Pill color={st.kleur}>{st.label}</Pill>
-          <Pill color={lead.bron === "AutoScout24" ? T.teal : T.blauw}>{lead.bron}</Pill>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-2" style={body(11.5, T.ink(0.5))}>
-          {lead.bouwjaar && <span>{lead.bouwjaar}</span>}
-          {lead.km && <span>{Number(lead.km).toLocaleString("nl-NL")} km</span>}
-          {lead.vraagprijs > 0 && (
-            <span style={{ color: T.navy, fontWeight: 600 }}>€ {lead.vraagprijs.toLocaleString("nl-NL")}</span>
-          )}
-          {lead.plaats && <span>· {lead.plaats}</span>}
-        </div>
-        <div className="flex items-center gap-2">
-          <span style={{ ...micro(T.ink(0.32)), fontSize: 8.5, flexShrink: 0 }}>Kans</span>
-          <div className="flex-1 min-w-0">
-            <Segments score={lead.kans_score} />
-          </div>
-          <span style={num(11, T.ink(0.5))}>{lead.kans_score}</span>
-        </div>
-      </a>
+
+      {/* In de selecteerstand is de kaart een knop die aanvinkt; daarbuiten een link
+          naar de advertentie. Twee verschillende elementen in plaats van een link met
+          een onderschepte klik: dan blijft midden- en ctrl-klikken gewoon werken. */}
+      {selecteerStand && !afgerond ? (
+        <button
+          type="button"
+          onClick={onVink}
+          className="block flex-1 text-left w-full"
+          style={{ padding: "12px 40px 12px 14px" }}
+          aria-pressed={aangevinkt}
+        >
+        <KaartInhoud lead={lead} st={st} />
+        </button>
+      ) : (
+        <a
+          href={lead.advertentie_url || undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block flex-1"
+          style={{
+            padding: "12px 14px",
+            cursor: lead.advertentie_url ? "pointer" : "default",
+          }}
+          title={lead.advertentie_url ? "Open de advertentie in een nieuw tabblad" : "Geen link bekend"}
+        >
+          <KaartInhoud lead={lead} st={st} />
+        </a>
+      )}
 
       <div
         className="flex items-center gap-2 px-3 py-2"
@@ -1263,6 +1273,41 @@ function LeadKaart({
         </span>
       </div>
     </div>
+  );
+}
+
+/** De inhoud van een verkoperskaart. Gedeeld, omdat de kaart in de selecteerstand een
+ *  knop is en daarbuiten een link — de binnenkant is in beide gevallen hetzelfde. */
+function KaartInhoud({ lead, st }: { lead: Lead; st: { label: string; kleur: string } }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-start gap-x-2 gap-y-1 mb-1.5">
+        <span
+          className="flex-1 min-w-0 truncate flex items-center gap-1.5"
+          style={{ fontFamily: T.play, fontSize: 14, fontWeight: 700, color: T.navy }}
+        >
+          {lead.merk} {lead.model || korteTitel(lead)}
+          {lead.advertentie_url && <ExternalLink size={11} color={T.ink(0.3)} />}
+        </span>
+        <Pill color={st.kleur}>{st.label}</Pill>
+        <Pill color={lead.bron === "AutoScout24" ? T.teal : T.blauw}>{lead.bron}</Pill>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mb-2" style={body(11.5, T.ink(0.5))}>
+        {lead.bouwjaar && <span>{lead.bouwjaar}</span>}
+        {lead.km && <span>{Number(lead.km).toLocaleString("nl-NL")} km</span>}
+        {lead.vraagprijs > 0 && (
+          <span style={{ color: T.navy, fontWeight: 600 }}>€ {lead.vraagprijs.toLocaleString("nl-NL")}</span>
+        )}
+        {lead.plaats && <span>· {lead.plaats}</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <span style={{ ...micro(T.ink(0.32)), fontSize: 8.5, flexShrink: 0 }}>Kans</span>
+        <div className="flex-1 min-w-0">
+          <Segments score={lead.kans_score} />
+        </div>
+        <span style={num(11, T.ink(0.5))}>{lead.kans_score}</span>
+      </div>
+    </>
   );
 }
 

@@ -7,18 +7,10 @@ import {
   logContact,
   isAlBenaderd,
   verkoperSleutel,
+  TOEGESTANE_STATUS,
 } from "@/lib/verkopers-db";
 
 export const dynamic = "force-dynamic";
-
-const TOEGESTANE_STATUS = [
-  "nieuw",
-  "goedgekeurd",
-  "verstuurd",
-  "gereageerd",
-  "cosignatie",
-  "afgewezen",
-];
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {

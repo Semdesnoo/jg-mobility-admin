@@ -18,13 +18,16 @@ import sql from "./db";
  *  5. wie zich afmeldt komt op de blokkadelijst en wordt nooit opnieuw benaderd.
  */
 
-export type VerkoperStatus =
-  | "nieuw"
-  | "goedgekeurd"
-  | "verstuurd"
-  | "gereageerd"
-  | "cosignatie"
-  | "afgewezen";
+export const TOEGESTANE_STATUS = [
+  "nieuw",
+  "goedgekeurd",
+  "verstuurd",
+  "gereageerd",
+  "cosignatie",
+  "afgewezen",
+] as const;
+
+export type VerkoperStatus = (typeof TOEGESTANE_STATUS)[number];
 
 export type VerkoperLead = {
   id: string;
