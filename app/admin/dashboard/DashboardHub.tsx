@@ -303,7 +303,9 @@ export default function DashboardHub() {
     setHubOpen(false);
   };
   const [autos, setAutos] = useState<Auto[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  // Begint op true: de eerste lading loopt al vanaf de eerste render mee, dus de
+  // verversknop hoort meteen "Verversen..." te tonen zonder dat het effect dat zet.
+  const [refreshing, setRefreshing] = useState(true);
   const [countdown, setCountdown] = useState(60);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
@@ -320,9 +322,22 @@ export default function DashboardHub() {
     setRefreshing(false);
   }, [laadAutos]);
 
+  // Eerste lading: alleen een promise-keten starten, geen setState in de effectbody zelf.
+  // Dezelfde stappen als refresh(), maar dan pas in de .then() — refresh() blijft bestaan
+  // als verversfunctie voor de knop, de aftelklok en de onderliggende tabbladen.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    fetch("/api/admin/autos")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setAutos(data);
+        setLastRefresh(new Date());
+        setCountdown(60);
+        setRefreshing(false);
+      })
+      // Ook als het ophalen mislukt moet de knop stoppen met draaien, anders blijft er
+      // "Verversen..." staan terwijl er niets meer gebeurt.
+      .catch(() => setRefreshing(false));
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -3136,7 +3151,7 @@ function FacturenContent() {
           {betaald.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-28" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
               <p className="text-lg font-bold mt-5 mb-2" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Nog geen betaalde facturen</p>
-              <p className="text-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Zet een factuur op "Betaald" om hem hier te zien.</p>
+              <p className="text-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Zet een factuur op &quot;Betaald&quot; om hem hier te zien.</p>
             </div>
           ) : (
             <>

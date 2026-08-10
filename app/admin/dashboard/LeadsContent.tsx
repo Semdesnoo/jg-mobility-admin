@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Target, ChevronDown, ChevronUp, Trash2, UserCheck } from "lucide-react";
 
 type Lead = {
@@ -56,14 +56,18 @@ export default function LeadsContent() {
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("alle");
 
-  const laad = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/leads");
-    if (res.ok) setLeads(await res.json());
-    setLoading(false);
+  // Eerste lading: alleen een promise-keten starten, geen setState in de effectbody zelf.
+  // De lijst wordt daarna bijgehouden door de acties hieronder, dus een aparte
+  // verversfunctie is hier niet nodig.
+  useEffect(() => {
+    fetch("/api/admin/leads")
+      .then(async (res) => {
+        if (res.ok) setLeads(await res.json());
+        setLoading(false);
+      })
+      // Valt het netwerk weg, dan blijft de spinner anders eeuwig draaien.
+      .catch(() => setLoading(false));
   }, []);
-
-  useEffect(() => { laad(); }, [laad]);
 
   const maakAan = async () => {
     if (!form.naam.trim() && !form.telefoon.trim()) return;

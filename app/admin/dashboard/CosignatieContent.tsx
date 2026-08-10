@@ -67,6 +67,21 @@ export default function CosignatieContent() {
   const [updateOk, setUpdateOk] = useState<Record<string, boolean>>({});
   const [filterStatus, setFilterStatus] = useState<string>("alle");
   const [rdwLaden, setRdwLaden] = useState(false);
+  // De klok hoort niet tijdens het renderen te worden uitgelezen: React mag een render
+  // opnieuw draaien, en dan komt er een ander getal uit hetzelfde scherm. Hij staat dus
+  // in state — maar wél een state die bijblijft. Puur bevriezen bij het openen gaat mis
+  // op de tablet die de hele dag aan staat: dan blijft een auto na middernacht "12 dagen
+  // in consignatie" tonen terwijl het er 13 zijn, en dat getal stuurt het gesprek met de
+  // klant aan.
+  const [nu, setNu] = useState(() => Date.now());
+  useEffect(() => {
+    // Een dagenteller hoeft niet vaak bij, maar wel op de twee momenten die ertoe doen:
+    // als de dag verspringt terwijl het scherm openstaat, en als je er weer naar terugkomt.
+    const tik = setInterval(() => setNu(Date.now()), 10 * 60 * 1000);
+    const bijKomen = () => { if (document.visibilityState === "visible") setNu(Date.now()); };
+    document.addEventListener("visibilitychange", bijKomen);
+    return () => { clearInterval(tik); document.removeEventListener("visibilitychange", bijKomen); };
+  }, []);
 
   const laad = useCallback(async () => {
     setLoading(true);
@@ -75,7 +90,19 @@ export default function CosignatieContent() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { laad(); }, [laad]);
+  // Eerste lading: alleen de promise-keten starten, geen setState in de effectbody zelf.
+  // De spinner draait al vanaf de eerste render (loading begint op true), dus hier hoeft
+  // hij alleen uitgezet te worden zodra het antwoord binnen is. `laad` hierboven blijft
+  // bestaan als verversfunctie na het aanmaken of bijwerken van een aanvraag.
+  useEffect(() => {
+    fetch("/api/admin/cosignaties")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d)) setAanvragen(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
   const rdwOpzoeken = async (kenteken: string) => {
     if (!kenteken.trim()) return;
@@ -166,7 +193,7 @@ export default function CosignatieContent() {
   const dagsSinds = (datum: string | undefined) => {
     if (!datum) return null;
     const d = new Date(datum);
-    const diff = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    const diff = Math.floor((nu - d.getTime()) / (1000 * 60 * 60 * 24));
     return diff;
   };
 

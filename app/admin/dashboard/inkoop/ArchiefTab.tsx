@@ -41,15 +41,23 @@ export default function ArchiefTab() {
   const [markten, setMarkten] = useState<MarktRij[] | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
 
-  const laad = async () => {
-    const [t, m] = await Promise.all([
+  // Eerste lading: alleen promise-ketens starten, geen setState in de effectbody zelf.
+  // De Promise.all blijft staan omdat beide lijsten samen gezet moeten worden: de
+  // skeleton verdwijnt pas als er niets meer null is, dus zo klapt het archief in
+  // één keer open in plaats van halverwege.
+  useEffect(() => {
+    let afgebroken = false;
+    Promise.all([
       fetch("/api/admin/inkoop/archief").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/admin/inkoop/markt-archief").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-    ]);
-    setTaxaties(Array.isArray(t) ? t : []);
-    setMarkten(Array.isArray(m) ? m : []);
-  };
-  useEffect(() => { laad(); }, []);
+    ]).then(([t, m]) => {
+      // Het tabblad kan al weggeklikt zijn voordat het antwoord binnen is.
+      if (afgebroken) return;
+      setTaxaties(Array.isArray(t) ? t : []);
+      setMarkten(Array.isArray(m) ? m : []);
+    });
+    return () => { afgebroken = true; };
+  }, []);
 
   const verwijder = async (it: Item) => {
     if (!confirm("Deze analyse uit het archief verwijderen?")) return;

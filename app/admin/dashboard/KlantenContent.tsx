@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Users, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
 type Klant = {
@@ -32,14 +32,19 @@ export default function KlantenContent() {
   const [saving, setSaving] = useState(false);
   const [zoek, setZoek] = useState("");
 
-  const laad = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/klanten");
-    if (res.ok) setKlanten(await res.json());
-    setLoading(false);
+  // Eerste lading: alleen de promise-keten starten, geen setState in de effectbody zelf.
+  // Een aparte laadfunctie is hier niet nodig: na de eerste lading houden de handlers
+  // hieronder de lijst zelf bij, er wordt nooit opnieuw opgehaald.
+  useEffect(() => {
+    fetch("/api/admin/klanten")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Klant[] | null) => {
+        if (data) setKlanten(data);
+        setLoading(false);
+      })
+      // Valt het netwerk weg, dan blijft de spinner anders eeuwig draaien.
+      .catch(() => setLoading(false));
   }, []);
-
-  useEffect(() => { laad(); }, [laad]);
 
   const maakAan = async () => {
     if (!form.naam.trim()) return;

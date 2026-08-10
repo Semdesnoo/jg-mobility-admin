@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
 import { Plus, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
@@ -98,14 +98,20 @@ export default function AfsprakenContent() {
   const formRef = useScrollNaar<HTMLDivElement>(toonNieuw);
   const dagRef = useScrollNaar<HTMLDivElement>(!!gekozenDag);
 
-  const laad = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/afspraken");
-    if (res.ok) setAfspraken(await res.json());
-    setLoading(false);
+  // Eerste lading: alleen de promise-keten starten, geen setState in de effectbody zelf.
+  // Een setState die synchroon in een effect draait dwingt meteen een tweede render af.
+  // De spinner draait al vanaf de eerste render (loading begint op true), dus hem hier
+  // nog eens aanzetten voegt niets toe — alleen uitzetten als het antwoord binnen is.
+  useEffect(() => {
+    fetch("/api/admin/afspraken")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: Afspraak[] | null) => {
+        if (d) setAfspraken(d);
+        setLoading(false);
+      })
+      // Valt het netwerk weg, dan blijft de spinner anders eeuwig draaien.
+      .catch(() => setLoading(false));
   }, []);
-
-  useEffect(() => { laad(); }, [laad]);
 
   const maakAan = async () => {
     if (!form.datum || !form.klant_naam.trim()) return;
