@@ -499,6 +499,23 @@ export function Foutmelding({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Iets om te weten, maar niets ging mis. Rood is voorbehouden aan wat je tegenhoudt;
+ * staat er iets in het rood terwijl je actie gewoon gelukt is, dan ga je het na een
+ * paar keer negeren — en dan mis je de meldingen die er wél toe doen.
+ */
+export function Waarschuwing({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="flex items-start gap-2.5 px-4 py-3"
+      style={{ backgroundColor: T.tintAmber, border: "1px solid #fde68a" }}
+    >
+      <span style={{ color: T.amber, fontSize: 13, lineHeight: 1.3, flexShrink: 0 }}>●</span>
+      <p style={{ fontFamily: T.inter, fontSize: 12.5, color: T.amber, lineHeight: 1.5 }}>{children}</p>
+    </div>
+  );
+}
+
 // ── Tabel ─────────────────────────────────────────────────────────
 export function Th({
   children,

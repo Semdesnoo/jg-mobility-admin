@@ -51,6 +51,7 @@ import {
   Spinner,
   Empty,
   Foutmelding,
+  Waarschuwing,
   PanelVoet,
   Segments,
 } from "./inkoop/ui";
@@ -1680,6 +1681,8 @@ function NakijkenTab({
   const schrijftVoor = schrijfTaak?.bezig ? (schrijfTaak.resultaat?.leadId ?? null) : null;
   // Welke rij op dit moment wordt afgevinkt.
   const [vinkBezig, setVinkBezig] = useState<string | null>(null);
+  // Meldingen die het afvinken niet tegenhouden maar wel het vermelden waard zijn.
+  const [melding, setMelding] = useState("");
 
   const alle = useMemo(() => leads ?? [], [leads]);
   // De wachtrij: alles wat jij hebt afgevinkt en nog gemaild moet worden.
@@ -1738,17 +1741,20 @@ function NakijkenTab({
     if (vinkBezig) return;
     setVinkBezig(lead.id);
     onFout("");
+    setMelding("");
     try {
       const res = await fetch(`/api/admin/verkopers/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ handmatig_verstuurd_via: "platform" }),
       });
+      const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
         onFout(d.error || "Afvinken mislukt");
         return;
       }
+      // Wél afgevinkt, maar er is iets om te weten. Niet in het rood: er ging niets mis.
+      setMelding(d.waarschuwing ?? "");
       await herlaad();
     } catch (e) {
       onFout(e instanceof Error ? e.message : String(e));
@@ -1772,6 +1778,7 @@ function NakijkenTab({
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">
+      {melding && <Waarschuwing>{melding}</Waarschuwing>}
       {/* ── Werkbank: schrijven en versturen ── */}
       {leads === null ? (
         <div className="flex items-center justify-center py-16">

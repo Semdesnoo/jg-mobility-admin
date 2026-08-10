@@ -210,6 +210,47 @@ export function normaliseerEmail(email: string): string {
   return (email || "").trim().toLowerCase();
 }
 
+/** Parameters die niets over de verkoper zeggen en dus geen deel van de sleutel zijn. */
+const RUIS_PARAMS = /^(utm_|fbclid|gclid|msclkid|ref|referrer|source|src|campaign|sort|page|atype|ustate)/;
+
+/**
+ * Haalt de ruis uit een profiel-URL zonder weg te gooien wie het is.
+ *
+ * Hier ging het eerder mis. De hele query-string werd geknipt, en bij AutoScout24 staat
+ * de verkoper juist dáárin: https://www.autoscout24.nl/lst?cid=97807. Zonder die cid
+ * bleef er `https://www.autoscout24.nl/lst` over — voor iedereen dezelfde. Eén verstuurd
+ * bericht zette daarmee elke andere AutoScout24-verkoper op "al benaderd", en die stonden
+ * daarna allemaal muurvast in de wachtrij.
+ *
+ * Dus: tracking-parameters eruit, de rest blijft staan, op alfabet zodat dezelfde link
+ * met de parameters in een andere volgorde toch dezelfde sleutel oplevert.
+ */
+function schoonProfiel(url: string): string {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return "";
+  }
+  const paren = [...u.searchParams.entries()]
+    .filter(([k]) => !RUIS_PARAMS.test(k.toLowerCase()))
+    .map(([k, v]) => [k.toLowerCase(), v.toLowerCase()] as const)
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+
+  const pad = u.pathname.toLowerCase().replace(/\/+$/, "");
+  const basis = `${u.protocol}//${u.host.toLowerCase()}${pad}`;
+  const vraag = paren.map(([k, v]) => `${k}=${v}`).join("&");
+
+  // Blijft er na het schoonmaken alleen een kaal pad over dat iedereen deelt, dan wijst
+  // deze URL geen persoon aan. Liever niets teruggeven dan iedereen op één hoop gooien.
+  if (!vraag && KALE_PADEN.has(pad)) return "";
+
+  return vraag ? `${basis}?${vraag}` : basis;
+}
+
+/** Paden die op zichzelf niemand aanwijzen — het zoek- of overzichtsscherm van een site. */
+const KALE_PADEN = new Set(["", "/", "/lst", "/l", "/aanbod", "/u", "/verkopers", "/dealer"]);
+
 /**
  * Eén sleutel die deze verkoper aanwijst, ook zonder mailadres of telefoonnummer.
  *
@@ -221,7 +262,7 @@ export function normaliseerEmail(email: string): string {
  * op verwarring te groot om er iets aan op te hangen.
  */
 export function verkoperSleutel(profielUrl: string, naam: string, plaats: string): string {
-  const profiel = (profielUrl || "").trim().toLowerCase().replace(/[?#].*$/, "").replace(/\/+$/, "");
+  const profiel = schoonProfiel(profielUrl || "");
   if (profiel.startsWith("http")) return profiel;
 
   const n = (naam || "").trim().toLowerCase().replace(/\s+/g, " ");

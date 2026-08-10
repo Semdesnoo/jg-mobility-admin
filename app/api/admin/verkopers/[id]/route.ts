@@ -46,25 +46,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Zelf verstuurd buiten de mail om (berichtenbox van het platform, of gebeld).
     // We loggen dat net zo goed: het verzendlog moet compleet zijn, ongeacht kanaal.
+    let waarschuwing = "";
     if (b.handmatig_verstuurd_via) {
       const kanaal = String(b.handmatig_verstuurd_via);
       const lead = await getLead(id);
       if (!lead) return Response.json({ error: "Lead niet gevonden" }, { status: 404 });
 
-      // Ook hier de dubbelcheck. Meld je zelf een verzending, dan moet dezelfde
-      // grendel gelden als bij de mailknop — anders sluipt een dubbele benadering
-      // er alsnog via deze route in.
-      // De verkopersleutel is hier het belangrijkst: dit is de route die een
-      // bericht via de berichtenbox vastlegt, en daar is per definitie geen
-      // mailadres of telefoonnummer bij.
+      // Hier stond een grendel die het afvinken botweg weigerde als deze verkoper al
+      // eens benaderd leek. Dat was verkeerd om: afvinken verstuurt niets, het legt
+      // vast wat jij zelf al via de berichtenbox hebt gedaan. Weigeren maakt dat
+      // bericht niet ongedaan — het laat de lead alleen voorgoed in de wachtrij staan
+      // én houdt het verzendlog onvolledig, waardoor de dubbelcontrole de volgende
+      // ronde nog steeds niets weet. De grendel werkte zichzelf dus tegen.
+      //
+      // Dat wil niet zeggen dat de waarschuwing waardeloos is: is dezelfde persoon
+      // eerder benaderd, dan is het goed om te weten. Hij gaat mee als melding terug,
+      // en het afvinken gaat gewoon door.
       const wie = verkoperSleutel(lead.verkoper_profiel ?? "", lead.naam, lead.plaats);
       const eerder = await isAlBenaderd(lead.email, lead.telefoon, id, wie);
       if (eerder.eerder) {
         const datum = eerder.wanneer ? new Date(eerder.wanneer).toLocaleDateString("nl-NL") : "eerder";
-        return Response.json(
-          { error: `Deze verkoper is al benaderd op ${datum} — waarschijnlijk voor een andere auto.` },
-          { status: 409 }
-        );
+        waarschuwing = `Let op: deze verkoper was op ${datum} ook al benaderd${
+          eerder.kanaal ? ` via ${eerder.kanaal}` : ""
+        } — mogelijk voor een andere auto.`;
       }
 
       await sql`
@@ -85,7 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }).catch(() => null);
     }
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, waarschuwing });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
   }
