@@ -134,6 +134,9 @@ Antwoord met UITSLUITEND dit JSON-object, zonder tekst eromheen:
   "telefoon": "telefoonnummer, leeg als het er niet in staat",
   "onderwerp": "in één korte Nederlandse regel waar de mail over gaat, bijvoorbeeld 'Vraagt proefrit Golf' of 'Wil auto laten taxeren'",
   "kenteken": "kenteken, leeg als er geen in staat",
+  "advertentie_titel": "de auto waar de mail over gaat, zoals hij in de mail of in een advertentietitel staat — bijvoorbeeld 'Mercedes-Benz CLA 250 224pk 7G-DCT 2020 Zwart'. Leeg als er geen auto in staat.",
+  "advertentie_url": "de link naar de advertentie als die in de mail staat (marktplaats.nl, autoscout24.nl, autotrack, gaspedaal). Leeg als er geen link in staat.",
+  "bericht": "wat de klant LETTERLIJK schrijft, in zijn eigen woorden. Neem de kern van zijn tekst over zonder aanhef, ondertekening, disclaimers of platformruis. Vertaal niet en vat niet samen — dit moet leesbaar zijn als zijn bericht.",
   "samenvatting": "twee tot drie zinnen: wat de klant vraagt en wat er nodig is om te antwoorden"
 }`;
 
@@ -143,6 +146,9 @@ type Uitgelezen = {
   telefoon?: string;
   onderwerp?: string;
   kenteken?: string;
+  advertentie_titel?: string;
+  advertentie_url?: string;
+  bericht?: string;
   samenvatting?: string;
 };
 
@@ -286,7 +292,13 @@ export async function POST(req: Request) {
       interesse: schoon(gelezen?.onderwerp) || kop,
       onderwerp: kop,
       kenteken: schoon(gelezen?.kenteken),
-      notitie: schoon(gelezen?.samenvatting) || bodyTekst.slice(0, 500),
+      // De auto en de link uit ZIJN advertentie, plus zijn eigen woorden. Zonder deze drie
+      // moet je bij elk gesprek terugzoeken waar het ook alweer over ging — en dan belandt
+      // de autotitel in het notitieveld, want daar was het de enige plek voor.
+      advertentieTitel: schoon(gelezen?.advertentie_titel),
+      advertentieUrl: schoon(gelezen?.advertentie_url),
+      bericht: schoon(gelezen?.bericht) || bodyTekst.slice(0, 1200),
+      notitie: schoon(gelezen?.samenvatting),
       gmailMessageId: messageId,
     });
 

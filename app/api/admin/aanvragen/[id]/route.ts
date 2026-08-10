@@ -38,6 +38,9 @@ const AANPASBAAR = [
   "bod",
   "inruil",
   "auto_naam",
+  "advertentie_titel",
+  "advertentie_url",
+  "bericht",
 ] as const;
 
 type Veld = (typeof AANPASBAAR)[number];
@@ -106,7 +109,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       );
     }
 
-    return Response.json(bijgewerkt);
+    // Zelfde vorm als de POST hiernaast: { aanvraag }. Twee routes over hetzelfde ding
+    // die verschillend antwoorden is een valkuil die je pas merkt als het scherm de
+    // verkeerde helft uitleest.
+    return Response.json({ aanvraag: bijgewerkt });
   } catch (e) {
     return Response.json(
       {

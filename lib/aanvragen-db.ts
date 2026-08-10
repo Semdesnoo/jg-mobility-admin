@@ -47,6 +47,17 @@ export type Aanvraag = {
   bod: string;
   /** Wat hij wil inruilen, in zijn eigen woorden. Leeg als hij niets inruilt. */
   inruil: string;
+  /**
+   * De auto uit ZIJN advertentie, en de link erheen.
+   *
+   * Dit is iets anders dan `auto_naam`: dat is een auto uit de eigen voorraad waar iemand
+   * op reageert. Hier gaat het om de auto die hij zelf te koop heeft of wil inruilen. Zonder
+   * de titel en de link moet je bij elk gesprek eerst terugzoeken waar het ook alweer over ging.
+   */
+  advertentie_titel: string;
+  advertentie_url: string;
+  /** Wat hij letterlijk schreef of zei. Zijn woorden, niet onze samenvatting. */
+  bericht: string;
   /** Het antwoord dat klaarstaat. Je kunt het aanpassen voor je het verstuurt. */
   antwoord: string;
   antwoord_verstuurd_op: string | null;
@@ -88,6 +99,9 @@ async function init(): Promise<void> {
     "auto_naam TEXT DEFAULT ''",
     "bod TEXT DEFAULT ''",
     "inruil TEXT DEFAULT ''",
+    "advertentie_titel TEXT DEFAULT ''",
+    "advertentie_url TEXT DEFAULT ''",
+    "bericht TEXT DEFAULT ''",
   ];
   for (const k of kolommen) {
     await sql.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${k}`).catch(() => null);
@@ -123,6 +137,9 @@ function rij(r: Record<string, unknown>): Aanvraag {
     auto_naam: (r.auto_naam as string) ?? "",
     bod: (r.bod as string) ?? "",
     inruil: (r.inruil as string) ?? "",
+    advertentie_titel: (r.advertentie_titel as string) ?? "",
+    advertentie_url: (r.advertentie_url as string) ?? "",
+    bericht: (r.bericht as string) ?? "",
     antwoord: (r.antwoord as string) ?? "",
     antwoord_verstuurd_op: (r.antwoord_verstuurd_op as string) ?? null,
     afgehandeld_op: (r.afgehandeld_op as string) ?? null,
@@ -165,6 +182,9 @@ export type NieuweAanvraag = {
   autoNaam?: string;
   bod?: string;
   inruil?: string;
+  advertentieTitel?: string;
+  advertentieUrl?: string;
+  bericht?: string;
 };
 
 /**
@@ -182,13 +202,15 @@ export async function voegAanvraagToe(a: NieuweAanvraag): Promise<Aanvraag> {
     INSERT INTO leads (
       id, naam, telefoon, email, bron, interesse, budget, notitie,
       status, onderwerp, kenteken, gmail_message_id,
-      auto_id, auto_naam, bod, inruil
+      auto_id, auto_naam, bod, inruil,
+      advertentie_titel, advertentie_url, bericht
     ) VALUES (
       ${id}, ${a.naam ?? ""}, ${a.telefoon ?? ""}, ${a.email ?? ""},
       ${a.bron ?? "overig"}, ${a.interesse ?? ""}, ${a.budget ?? ""}, ${a.notitie ?? ""},
       'nieuw', ${a.onderwerp ?? ""}, ${(a.kenteken ?? "").toUpperCase()},
       ${a.gmailMessageId ?? null},
-      ${a.autoId ?? null}, ${a.autoNaam ?? ""}, ${a.bod ?? ""}, ${a.inruil ?? ""}
+      ${a.autoId ?? null}, ${a.autoNaam ?? ""}, ${a.bod ?? ""}, ${a.inruil ?? ""},
+      ${a.advertentieTitel ?? ""}, ${a.advertentieUrl ?? ""}, ${a.bericht ?? ""}
     )
     ON CONFLICT DO NOTHING
     RETURNING *
@@ -206,6 +228,7 @@ const TE_WIJZIGEN = [
   "naam", "telefoon", "email", "bron", "interesse", "budget",
   "notitie", "status", "onderwerp", "kenteken", "antwoord",
   "auto_naam", "bod", "inruil",
+  "advertentie_titel", "advertentie_url", "bericht",
 ] as const;
 
 export async function wijzigAanvraag(

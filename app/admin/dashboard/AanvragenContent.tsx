@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   Plus, Trash2, Check, Phone, Mail, MessageCircle, Store,
-  Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign,
+  Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign, ExternalLink,
 } from "lucide-react";
 import {
   T, micro, body, klein, Panel, Btn, Chip, Field, inputStijl,
@@ -34,6 +34,7 @@ type Aanvraag = {
   gmail_message_id: string | null;
   onderwerp: string; kenteken: string;
   auto_id: number | null; auto_naam: string; bod: string; inruil: string;
+  advertentie_titel: string; advertentie_url: string; bericht: string;
   antwoord: string; antwoord_verstuurd_op: string | null; afgehandeld_op: string | null;
 };
 
@@ -201,7 +202,7 @@ export default function AanvragenContent({
         />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 items-start">
-          <div className="xl:col-span-3 flex flex-col gap-4">
+          <div className="xl:col-span-2 flex flex-col gap-4">
             {blad === "dag"
               ? perDag.map(([datum, rijen]) => (
                   <div key={datum}>
@@ -211,7 +212,7 @@ export default function AanvragenContent({
                     </div>
                     <div className="flex flex-col gap-1.5">
                       {rijen.map((a) => (
-                        <Regel key={a.id} a={a} actief={a.id === open} onClick={() => setOpen(a.id)} />
+                        <Regel key={a.id} a={a} actief={a.id === openAanvraag?.id} onClick={() => setOpen(a.id)} />
                       ))}
                     </div>
                   </div>
@@ -226,14 +227,14 @@ export default function AanvragenContent({
                     </div>
                     <div className="flex flex-col gap-1.5">
                       {g.rijen.map((a) => (
-                        <Regel key={a.id} a={a} actief={a.id === open} onClick={() => setOpen(a.id)} toonAuto={false} />
+                        <Regel key={a.id} a={a} actief={a.id === openAanvraag?.id} onClick={() => setOpen(a.id)} toonAuto={false} />
                       ))}
                     </div>
                   </div>
                 ))}
           </div>
 
-          <div className="xl:col-span-2 xl:sticky xl:top-4">
+          <div className="xl:col-span-3 xl:sticky xl:top-4">
             {openAanvraag ? (
               <Detail
                 key={openAanvraag.id}
@@ -250,14 +251,7 @@ export default function AanvragenContent({
                 onSluit={() => setOpen(null)}
                 onNaarTaxatie={onNaarTaxatie}
               />
-            ) : (
-              <Panel title="Kies een aanvraag">
-                <p style={klein()}>
-                  Klik links op een regel om de contactgegevens te zien, een antwoord te laten
-                  schrijven of door te gaan naar een taxatie.
-                </p>
-              </Panel>
-            )}
+            ) : null}
           </div>
         </div>
       )}
@@ -271,10 +265,14 @@ function Regel({
 }: { a: Aanvraag; actief: boolean; onClick: () => void; toonAuto?: boolean }) {
   const k = KANAAL[a.bron] ?? KANAAL.overig;
   const st = STATUS[a.status] ?? STATUS.nieuw;
+  // Waaraan herken je deze aanvraag in één oogopslag? Aan de auto, niet aan de naam.
+  // Stond hier eerder alleen het onderwerp, en dat is bij een handmatige aanvraag leeg —
+  // dan las de hele regel als "Thomas Dyne, streepje".
+  const kop = a.advertentie_titel || a.auto_naam || a.kenteken || a.onderwerp || a.interesse;
   const feiten = [
-    toonAuto ? a.auto_naam || a.kenteken : "",
+    !toonAuto || !kop ? a.onderwerp || a.interesse : "",
     a.bod ? `bood ${a.bod}` : "",
-    a.inruil ? `inruil: ${a.inruil}` : "",
+    a.inruil ? `inruil ${a.inruil}` : "",
   ].filter(Boolean);
 
   return (
@@ -304,12 +302,22 @@ function Regel({
             {tijd(a.aangemaakt)}
           </span>
         </span>
-        <span
-          className="block truncate mt-0.5"
-          style={body(11.5, actief ? "rgba(255,255,255,0.65)" : T.ink(0.5))}
-        >
-          {a.onderwerp || a.interesse || "—"}
-        </span>
+        {kop && (
+          <span
+            className="block truncate mt-0.5"
+            style={body(11.5, actief ? "rgba(255,255,255,0.7)" : T.ink(0.6))}
+          >
+            {kop}
+          </span>
+        )}
+        {a.bericht && (
+          <span
+            className="block truncate mt-0.5"
+            style={{ ...klein(actief ? "rgba(255,255,255,0.5)" : T.ink(0.45)), fontStyle: "italic" }}
+          >
+            &ldquo;{a.bericht}&rdquo;
+          </span>
+        )}
         {feiten.length > 0 && (
           <span
             className="block truncate mt-0.5"
@@ -339,6 +347,7 @@ function NieuweAanvraag({
   const leeg = {
     naam: "", telefoon: "", email: "", bron: "whatsapp",
     onderwerp: "", autoId: "", bod: "", inruil: "", notitie: "",
+    advertentieTitel: "", advertentieUrl: "", bericht: "",
   };
   const [f, setF] = useState(leeg);
   const [bezig, setBezig] = useState(false);
@@ -416,6 +425,21 @@ function NieuweAanvraag({
         <Field label="Notitie">
           <input style={inputStijl} value={f.notitie} onChange={(e) => zet("notitie", e.target.value)} placeholder="Belt maandag terug" />
         </Field>
+        <Field label="Auto uit zijn advertentie">
+          <input style={inputStijl} value={f.advertentieTitel} onChange={(e) => zet("advertentieTitel", e.target.value)} placeholder="Mercedes-Benz CLA 250 uit 2020" />
+        </Field>
+        <Field label="Link naar zijn advertentie">
+          <input style={inputStijl} value={f.advertentieUrl} onChange={(e) => zet("advertentieUrl", e.target.value)} placeholder="https://www.marktplaats.nl/v/..." />
+        </Field>
+      </div>
+      <div className="mt-3">
+        <Field label="Wat hij zei">
+          <textarea
+            style={{ ...inputStijl, minHeight: 70, resize: "vertical", lineHeight: 1.55 }}
+            value={f.bericht} onChange={(e) => zet("bericht", e.target.value)}
+            placeholder="Plak hier zijn bericht, in zijn eigen woorden."
+          />
+        </Field>
       </div>
       <div className="flex justify-end mt-3">
         <Btn onClick={bewaar} disabled={bezig}>
@@ -423,6 +447,55 @@ function NieuweAanvraag({
         </Btn>
       </div>
     </Panel>
+  );
+}
+
+/**
+ * Eén bewerkbaar veld dat opslaat zodra je eruit klikt.
+ *
+ * Staat bewust HIER en niet binnen het detailpaneel. Een component die tijdens het
+ * renderen wordt gemaakt is bij elke toetsaanslag een ander component, dus React gooit
+ * het invoerveld weg en bouwt het opnieuw op — en dan ben je na elke letter je cursor kwijt.
+ *
+ * Alles is aanpasbaar, ook wat de AI uit een mail haalde: dat is een gok, en aan de balie
+ * typ je niet meteen alles goed.
+ */
+function Bewerk({
+  label, waarde, zet, huidig, veld, patch, plaats, regels,
+}: {
+  label: string;
+  waarde: string;
+  zet: (v: string) => void;
+  /** Wat er in de database staat; alleen bij een echt verschil slaan we op. */
+  huidig: string;
+  veld: string;
+  patch: (velden: Record<string, unknown>) => Promise<boolean>;
+  plaats?: string;
+  regels?: number;
+}) {
+  const bewaar = () => {
+    if (waarde !== huidig) patch({ [veld]: waarde });
+  };
+  return (
+    <Field label={label}>
+      {regels ? (
+        <textarea
+          style={{ ...inputStijl, minHeight: regels * 20, resize: "vertical", lineHeight: 1.55 }}
+          value={waarde}
+          onChange={(e) => zet(e.target.value)}
+          onBlur={bewaar}
+          placeholder={plaats}
+        />
+      ) : (
+        <input
+          style={inputStijl}
+          value={waarde}
+          onChange={(e) => zet(e.target.value)}
+          onBlur={bewaar}
+          placeholder={plaats}
+        />
+      )}
+    </Field>
   );
 }
 
@@ -440,6 +513,14 @@ function Detail({
 }) {
   // Lokaal bewerken zonder dat een herlaadactie je aanpassing overschrijft. Het component
   // krijgt key={a.id}, dus bij een andere aanvraag begint het opnieuw.
+  const [naam, setNaam] = useState(a.naam);
+  const [telefoon, setTelefoon] = useState(a.telefoon);
+  const [email, setEmail] = useState(a.email);
+  const [onderwerp, setOnderwerp] = useState(a.onderwerp);
+  const [kentekenVeld, setKentekenVeld] = useState(a.kenteken);
+  const [advTitel, setAdvTitel] = useState(a.advertentie_titel);
+  const [advUrl, setAdvUrl] = useState(a.advertentie_url);
+  const [bericht, setBericht] = useState(a.bericht);
   const [bod, setBod] = useState(a.bod);
   const [inruil, setInruil] = useState(a.inruil);
   const [notitie, setNotitie] = useState(a.notitie);
@@ -484,14 +565,44 @@ function Detail({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Waar het over gaat. Bovenaan, want dit is waaraan je de aanvraag herkent —
+          niet aan de naam. */}
       <Panel
-        title={a.naam || "Naamloos"}
+        title="De advertentie"
         actions={<span style={{ ...micro(k.kleur), fontSize: 9 }}>{k.label}</span>}
       >
-        <div className="flex flex-wrap gap-2 mb-3">
+        {advUrl && (
+          <a
+            href={advUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 mb-2.5 hover:opacity-70 transition-all"
+            style={{ ...body(12, T.navy), textDecoration: "underline", overflowWrap: "anywhere" }}
+          >
+            <ExternalLink size={12} style={{ flexShrink: 0 }} />
+            {advTitel || advUrl}
+          </a>
+        )}
+        <div className="grid grid-cols-1 gap-2.5">
+          <Bewerk patch={patch} label="Auto uit zijn advertentie" waarde={advTitel} zet={setAdvTitel}
+            huidig={a.advertentie_titel} veld="advertentie_titel"
+            plaats="Mercedes-Benz CLA 250 224pk 7G-DCT 2020 Zwart" />
+          <Bewerk patch={patch} label="Link naar de advertentie" waarde={advUrl} zet={setAdvUrl}
+            huidig={a.advertentie_url} veld="advertentie_url"
+            plaats="https://www.marktplaats.nl/v/..." />
+        </div>
+
+        <div className="mt-2.5">
+          <Bewerk patch={patch} label="Wat hij zei" waarde={bericht} zet={setBericht}
+            huidig={a.bericht} veld="bericht" regels={5}
+            plaats="Zijn eigen woorden — plak hier het bericht dat hij stuurde." />
+        </div>
+      </Panel>
+
+      {/* Wie het is. */}
+      <Panel title="Contact">
+        <div className="flex flex-wrap gap-3 mb-2.5">
           {a.telefoon && (
             <a href={`tel:${a.telefoon}`} style={{ ...klein(T.navy), textDecoration: "underline" }}>
-              {a.telefoon}
+              Bellen
             </a>
           )}
           {a.telefoon && (
@@ -505,44 +616,64 @@ function Detail({
           )}
           {a.email && (
             <a href={`mailto:${a.email}`} style={{ ...klein(T.navy), textDecoration: "underline" }}>
-              {a.email}
+              Mailen
             </a>
           )}
         </div>
-
-        {(a.onderwerp || a.interesse) && (
-          <p className="mb-3" style={body(12, T.ink(0.7))}>{a.onderwerp || a.interesse}</p>
-        )}
-
-        <div className="grid grid-cols-2 gap-2.5">
-          <Field label="Bood">
-            <input
-              style={inputStijl} value={bod} onChange={(e) => setBod(e.target.value)}
-              onBlur={() => bod !== a.bod && patch({ bod })} placeholder="—"
-            />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <Bewerk patch={patch} label="Naam" waarde={naam} zet={setNaam} huidig={a.naam} veld="naam" plaats="—" />
+          <Bewerk patch={patch} label="Telefoon" waarde={telefoon} zet={setTelefoon} huidig={a.telefoon} veld="telefoon" plaats="06 …" />
+          <Bewerk patch={patch} label="E-mail" waarde={email} zet={setEmail} huidig={a.email} veld="email" plaats="—" />
+          <Field label="Waar kwam het binnen">
+            <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
+              {Object.keys(KANAAL).map((w) => (
+                <option key={w} value={w}>{KANAAL[w].label}</option>
+              ))}
+            </select>
           </Field>
-          <Field label="Wil inruilen">
-            <input
-              style={inputStijl} value={inruil} onChange={(e) => setInruil(e.target.value)}
-              onBlur={() => inruil !== a.inruil && patch({ inruil })} placeholder="—"
-            />
+        </div>
+      </Panel>
+
+      {/* De handel: waar het over gaat bij ons, wat hij bood, wat hij inruilt. */}
+      <Panel title="De deal">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <Field label="Onze auto waar hij op reageert">
+            <select
+              style={inputStijl}
+              value={a.auto_id != null ? String(a.auto_id) : ""}
+              onChange={(e) => {
+                const gekozenAuto = autos.find((x) => String(x.id) === e.target.value);
+                patch({
+                  auto_naam: gekozenAuto ? `${gekozenAuto.merk ?? ""} ${gekozenAuto.model ?? ""}`.trim() : "",
+                  kenteken: gekozenAuto?.kenteken ?? a.kenteken,
+                });
+              }}
+            >
+              <option value="">— geen / andere auto —</option>
+              {autos.map((x) => (
+                <option key={x.id} value={String(x.id)}>
+                  {`${x.merk ?? ""} ${x.model ?? ""}`.trim()}{x.kenteken ? ` · ${x.kenteken}` : ""}
+                </option>
+              ))}
+            </select>
           </Field>
+          <Bewerk patch={patch} label="Waar het over gaat" waarde={onderwerp} zet={setOnderwerp}
+            huidig={a.onderwerp} veld="onderwerp" plaats="Vraagt of de prijs kan zakken" />
+          <Bewerk patch={patch} label="Bood" waarde={bod} zet={setBod} huidig={a.bod} veld="bod" plaats="—" />
+          <Bewerk patch={patch} label="Wil inruilen" waarde={inruil} zet={setInruil} huidig={a.inruil} veld="inruil" plaats="—" />
+          <Bewerk patch={patch} label="Kenteken" waarde={kentekenVeld} zet={setKentekenVeld}
+            huidig={a.kenteken} veld="kenteken" plaats="AB-123-C" />
         </div>
 
         <div className="mt-2.5">
-          <Field label="Notitie">
-            <textarea
-              style={{ ...inputStijl, minHeight: 60, resize: "vertical" }}
-              value={notitie} onChange={(e) => setNotitie(e.target.value)}
-              onBlur={() => notitie !== a.notitie && patch({ notitie })}
-            />
-          </Field>
+          <Bewerk patch={patch} label="Notitie" waarde={notitie} zet={setNotitie} huidig={a.notitie}
+            veld="notitie" regels={3} plaats="Belt maandag terug" />
         </div>
 
         <div className="flex flex-wrap gap-1.5 mt-3">
-          {Object.entries(STATUS).map(([w, s]) => (
+          {Object.entries(STATUS).map(([w, st]) => (
             <Chip key={w} active={a.status === w} onClick={() => patch({ status: w })}>
-              {s.label}
+              {st.label}
             </Chip>
           ))}
         </div>

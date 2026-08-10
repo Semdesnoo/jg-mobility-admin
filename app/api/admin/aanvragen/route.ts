@@ -110,6 +110,11 @@ export async function POST(req: Request) {
       autoNaam: tekst(b.autoNaam),
       bod: tekst(b.bod),
       inruil: tekst(b.inruil),
+      // De auto uit ZIJN advertentie plus de link erheen, en wat hij letterlijk zei.
+      // Zonder deze drie moet je bij elk gesprek terugzoeken waar het over ging.
+      advertentieTitel: tekst(b.advertentieTitel),
+      advertentieUrl: tekst(b.advertentieUrl),
+      bericht: tekst(b.bericht),
     });
     return Response.json({ aanvraag }, { status: 201 });
   } catch {
