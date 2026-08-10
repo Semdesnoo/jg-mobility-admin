@@ -20,7 +20,12 @@ const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[]
   { id: "archief", label: "Archief", Icon: Archive, context: "Bewaarde analyses per kwartaal" },
 ];
 
-export default function InkoopContent() {
+export default function InkoopContent({
+  kenteken,
+}: {
+  /** Vanuit een aanvraag doorgestuurd: begin meteen op de taxatietool met dit kenteken. */
+  kenteken?: string;
+} = {}) {
   const [tab, setTab] = useState<TabId>("taxatie");
 
   // Gedeelde data: één keer ophalen in de shell, alle tabs lezen eruit.
@@ -139,7 +144,13 @@ export default function InkoopContent() {
       {/* ── Inhoud ── */}
       <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1800, margin: "0 auto" }}>
         {tab === "taxatie" && (
-          <TaxatieTab dossiers={dossiers} prestaties={prestaties} onOpgeslagen={laadDossiers} onTab={setTab} />
+          <TaxatieTab
+            dossiers={dossiers}
+            prestaties={prestaties}
+            onOpgeslagen={laadDossiers}
+            onTab={setTab}
+            startKenteken={kenteken}
+          />
         )}
         {tab === "markt" && <MarktTab />}
         {tab === "prestaties" && <PrestatiesTab data={prestaties} />}

@@ -35,6 +35,7 @@ import {
   Banknote,
   ChevronRight,
   Radar,
+  Inbox,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -48,9 +49,10 @@ import BoekhoudingContent from "./BoekhoudingContent";
 import InkoopFacturenContent from "./InkoopFacturenContent";
 import SocialContent from "./SocialContent";
 import VerkopersContent from "./VerkopersContent";
+import AanvragenContent from "./AanvragenContent";
 import GmailWidget from "./GmailWidget";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen";
 
 type Auto = {
   id: number;
@@ -105,6 +107,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
     icon: Car,
     items: [
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
+      { id: "aanvragen",  label: "Aanvragen",        icon: Inbox },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
       { id: "verkopers",  label: "Verkopersradar",   icon: Radar },
@@ -294,8 +297,13 @@ export default function DashboardHub() {
   // Optioneel focus-doel: naar welk dossier of welke auto de bestemming moet
   // springen. Zo brengt een knop op de ene pagina je rechtstreeks naar de plek
   // op de andere pagina waar je iets moet aanpassen, in plaats van naar een lijst.
-  const [navFocus, setNavFocus] = useState<{ dossierId?: number; autoId?: number } | null>(null);
-  const gaNaarTab = (doel: Tab, focus?: { dossierId?: number; autoId?: number }) => {
+  const [navFocus, setNavFocus] = useState<{
+    dossierId?: number;
+    autoId?: number;
+    /** Vanuit een aanvraag doortaxeren: de taxatietool begint dan met dit kenteken. */
+    kenteken?: string;
+  } | null>(null);
+  const gaNaarTab = (doel: Tab, focus?: { dossierId?: number; autoId?: number; kenteken?: string }) => {
     const groepVanTab = NAV_GROUPS.find((g) => g.items.some((i) => i.id === doel));
     if (groepVanTab) setGroep(groepVanTab.title);
     setTab(doel);
@@ -510,7 +518,12 @@ export default function DashboardHub() {
         {tab === "voorraad" && <VoorraadContent autos={autos} refresh={refresh} />}
         {tab === "klanten" && <KlantenContent />}
         {tab === "afspraken" && <AfsprakenContent />}
-        {tab === "inkoop" && <InkoopContent />}
+        {tab === "inkoop" && (
+          <InkoopContent kenteken={navFocus?.kenteken} />
+        )}
+        {tab === "aanvragen" && (
+          <AanvragenContent onNaarTaxatie={(kenteken) => gaNaarTab("inkoop", { kenteken })} />
+        )}
         {tab === "cosignatie" && <CosignatieContent />}
         {tab === "verkopers" && <VerkopersContent />}
         {tab === "facturen" && <FacturenContent />}

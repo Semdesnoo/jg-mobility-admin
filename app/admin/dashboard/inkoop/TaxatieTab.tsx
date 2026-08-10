@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart2, Check, Clock, Gauge, History, Info, Plus, RotateCcw, Search, X,
 } from "lucide-react";
@@ -80,11 +80,14 @@ export default function TaxatieTab({
   prestaties,
   onOpgeslagen,
   onTab,
+  startKenteken,
 }: {
   dossiers: InkoopDossier[] | null;
   prestaties: PrestatiesData | null;
   onOpgeslagen: () => Promise<void> | void;
   onTab: (tab: TabId) => void;
+  /** Vanuit het aanvragenoverzicht doorgestuurd: begin met dit kenteken al opgezocht. */
+  startKenteken?: string;
 }) {
   const [kenteken, setKenteken] = useState("");
   const [rdw, setRdw] = useState<RdwData | null>(null);
@@ -131,7 +134,7 @@ export default function TaxatieTab({
     return () => clearInterval(t);
   }, [laden]);
 
-  const rdwOpzoeken = async (raw: string) => {
+  const rdwOpzoeken = useCallback(async (raw: string) => {
     const k = raw.trim();
     if (!k) return;
     setRdwLaden(true);
@@ -152,7 +155,22 @@ export default function TaxatieTab({
       setRdwFout("RDW-opzoeking mislukt");
     }
     setRdwLaden(false);
-  };
+  }, [wis]);
+
+  // Kom je hier vanuit een aanvraag ("Taxeer AB-123-C"), dan hoeft dat kenteken niet nog
+  // een keer overgetypt te worden.
+  //
+  // Wat al opgepakt is staat in een ref en niet in een terugmeldknop naar de bovenliggende
+  // pagina. Zo'n knop is bij elke render een andere functie, en dan gaat het effect
+  // eindeloos opnieuw af of moet de dependency-lijst een leugen vertellen. Hier hoeft
+  // niemand iets terug te melden: dit scherm weet zelf wat het al gedaan heeft.
+  const gedaanVoor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!startKenteken || gedaanVoor.current === startKenteken) return;
+    gedaanVoor.current = startKenteken;
+    setKenteken(startKenteken);
+    rdwOpzoeken(startKenteken);
+  }, [startKenteken, rdwOpzoeken]);
 
   const analyseer = () => {
     if (!rdw || laden) return;

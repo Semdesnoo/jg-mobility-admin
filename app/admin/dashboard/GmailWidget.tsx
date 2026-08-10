@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Mail, RefreshCw, Send, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { Mail, RefreshCw, Send, ChevronDown, ChevronUp, AlertCircle, Inbox } from "lucide-react";
 
 type EmailSummary = {
   id: string;
@@ -59,6 +59,10 @@ export default function GmailWidget() {
   const [replyText, setReplyText] = useState("");
   const [replying, setReplying] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
+  // "Zet in overzicht": van welke mail loopt het, en welke staan er al in.
+  const [zetBezig, setZetBezig] = useState(false);
+  const [inOverzicht, setInOverzicht] = useState<Set<string>>(new Set());
+  const [zetFout, setZetFout] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/gmail/status")
@@ -78,7 +82,6 @@ export default function GmailWidget() {
   }, [tab]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (connected) laadBerichten();
   }, [connected, laadBerichten]);
 
@@ -368,6 +371,50 @@ export default function GmailWidget() {
                         }}
                         dangerouslySetInnerHTML={{ __html: detail.body || "(leeg)" }}
                       />
+                      {/* Een mail die een klantvraag is hoort in het dagoverzicht, niet
+                          alleen in dit postvak. De AI haalt er naam, nummer, kenteken en
+                          waar het over gaat uit, zodat je niets hoeft over te typen. */}
+                      {!replyOpen && (
+                        <div className="flex flex-wrap items-center gap-3 mb-2">
+                          <button
+                            onClick={async () => {
+                              if (zetBezig) return;
+                              setZetBezig(true);
+                              setZetFout("");
+                              try {
+                                const res = await fetch("/api/admin/aanvragen/uit-mail", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ messageId: detail.id }),
+                                });
+                                const d = await res.json().catch(() => ({}));
+                                if (!res.ok) { setZetFout(d.error || "Toevoegen mislukt"); return; }
+                                setInOverzicht((p) => new Set(p).add(detail.id));
+                              } catch (e) {
+                                setZetFout(e instanceof Error ? e.message : String(e));
+                              } finally {
+                                setZetBezig(false);
+                              }
+                            }}
+                            disabled={zetBezig || inOverzicht.has(detail.id)}
+                            className="flex items-center gap-1.5 py-1.5 text-xs font-semibold transition-all hover:opacity-70 disabled:opacity-50"
+                            style={{ color: inOverzicht.has(detail.id) ? "#16a34a" : "#001337", fontFamily: "var(--font-inter)" }}
+                          >
+                            <Inbox size={11} />
+                            {inOverzicht.has(detail.id)
+                              ? "Staat in het overzicht"
+                              : zetBezig
+                                ? "Bezig…"
+                                : "Zet in overzicht"}
+                          </button>
+                          {zetFout && (
+                            <span className="text-xs" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
+                              {zetFout}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       {!replyOpen ? (
                         <button
                           onClick={() => setReplyOpen(true)}

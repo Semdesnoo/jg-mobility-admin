@@ -127,14 +127,23 @@ export function useAiTaken(): Ctx {
   return ctx;
 }
 
-/** Handige haak voor één opdracht. */
+/**
+ * Handige haak voor één opdracht.
+ *
+ * `start` en `wis` zijn gememoiseerd. Dat is geen optimalisatie maar een voorwaarde om ze
+ * te kunnen gebruiken: zonder memoisatie is het bij elke render een andere functie, en dan
+ * kun je ze nergens in een dependency-lijst zetten zonder een effect dat eindeloos opnieuw
+ * afgaat. Alles wat deze haak aanroept erft dat probleem, tot in de functies die op hun
+ * beurt weer `wis` gebruiken.
+ */
 export function useAiTaak<T>(id: string) {
   const { start, lees, wis } = useAiTaken();
-  return {
-    taak: lees<T>(id),
-    start: (label: string, fn: (stap: (t: string) => void) => Promise<T>) => start<T>(id, label, fn),
-    wis: () => wis(id),
-  };
+  const startTaak = useCallback(
+    (label: string, fn: (stap: (t: string) => void) => Promise<T>) => start<T>(id, label, fn),
+    [start, id]
+  );
+  const wisTaak = useCallback(() => wis(id), [wis, id]);
+  return { taak: lees<T>(id), start: startTaak, wis: wisTaak };
 }
 
 /**
