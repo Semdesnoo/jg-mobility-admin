@@ -253,6 +253,57 @@ export async function POST(req: Request) {
   const nettoMarge = Math.round(brutoMarge - btwAfdracht - kostenNum);
   const margePercentage = verwachteVerkoop > 0 ? Math.round((nettoMarge / verwachteVerkoop) * 100) : 0;
 
+  // ── Is deze auto aantrekkelijk om te verkopen? ──
+  //
+  // Hier stond ooit een cijfer /10. Dat is eruit gehaald omdat een model het getal
+  // noemde en niemand kon nagaan waar het vandaan kwam. Nagerekend over de 18 oude
+  // taxaties die het veld nog hebben: dat cijfer liep 0,77 mee met de verkoopprijs.
+  // Het mat dus vooral het prijskaartje, niet of de deal goed was.
+  //
+  // Wat er hieronder staat is een vergelijking van twee getallen die allebei al
+  // uitgerekend zijn, zonder weging en zonder verzonnen constante:
+  //
+  //   wat je overhoudt  (jouw marge en kosten, in euro's op deze auto)
+  //   de spreiding      (hoever losse auto's in prijs uiteenlopen NA correctie voor
+  //                      kilometerstand en leeftijd — dus juist het deel dat je met
+  //                      de gegevens die je hebt niet kunt verklaren)
+  //
+  // Loopt de markt verder uiteen dan wat je verdient, dan bepaalt niet je inkoopprijs
+  // maar de staat en uitvoering van dít exemplaar of je er geld aan overhoudt. Dat is
+  // iets anders dan "slechte auto" — het betekent dat je beter moet kijken.
+  //
+  // Bewust GEEN onderdeel hiervan: hoeveel van dit model er landelijk te koop staat.
+  // Dat getal staat wel in de opgehaalde pagina, maar veel aanbod kan net zo goed
+  // "populair" als "onverkoopbaar" betekenen, en uit één momentopname is dat niet te
+  // scheiden. Een cijfer dat twee tegengestelde dingen kan betekenen is geen cijfer.
+  const spreiding = fit?.spreiding ?? 0;
+  const eur = (x: number) => `€ ${Math.round(x).toLocaleString("nl-NL")}`;
+  const verkoopbaarheid =
+    !live || schoon.length < 4
+      ? {
+          oordeel: "onbekend" as const,
+          reden: `Maar ${schoon.length} vergelijkbare advertenties gevonden — te weinig om te zien hoe eensgezind de markt is.`,
+        }
+      : nettoMarge <= 0
+        ? {
+            oordeel: "verlies" as const,
+            reden: `Bij deze marge en kosten houd je aan deze auto niets over. Dat ligt niet aan de markt maar aan de rekensom.`,
+          }
+        : spreiding <= nettoMarge * 0.5
+          ? {
+              oordeel: "voorspelbaar" as const,
+              reden: `Vergelijkbare auto's wijken onderling ${eur(spreiding)} af, tegen ${eur(nettoMarge)} die je overhoudt. De markt is het hier redelijk eens over de prijs.`,
+            }
+          : spreiding <= nettoMarge
+            ? {
+                oordeel: "wisselvallig" as const,
+                reden: `Vergelijkbare auto's wijken onderling ${eur(spreiding)} af, tegen ${eur(nettoMarge)} die je overhoudt. Je marge is nog groter dan die onzekerheid, maar veel ruimte is er niet.`,
+              }
+            : {
+                oordeel: "grillig" as const,
+                reden: `Vergelijkbare auto's wijken onderling ${eur(spreiding)} af — meer dan de ${eur(nettoMarge)} die je overhoudt. Bij dit model beslist de staat en uitvoering van dit exemplaar dus meer dan je inkoopprijs.`,
+              };
+
   return Response.json({
     // Alleen de velden die ergens op gebaseerd zijn. Wat het model niet kan weten
     // (landelijk aanbod, prijstrend, hoe gewild het model is) staat er niet meer in —
@@ -285,6 +336,8 @@ export async function POST(req: Request) {
       btw_afdracht: btwAfdracht,
       netto_marge: nettoMarge,
       marge_percentage: margePercentage,
+      verkoopbaarheid: verkoopbaarheid.oordeel,
+      verkoopbaarheid_reden: verkoopbaarheid.reden,
       geschatte_kosten: kostenNum,
       gewenste_marge: margeNum,
       catalogusprijs: catalogus,

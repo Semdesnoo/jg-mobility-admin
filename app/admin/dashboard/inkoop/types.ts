@@ -90,6 +90,13 @@ export type Berekening = {
   gem_prijs?: number;
   per_duizend_km?: number;
   spreiding?: number;
+  /**
+   * Is deze auto aantrekkelijk om te verkopen? Vergelijkt wat je overhoudt met hoever
+   * de vraagprijzen van de gevonden auto's uiteenlopen. Geen weging, geen constante —
+   * twee getallen die allebei al uitgerekend zijn. Zie taxeer/route.ts.
+   */
+  verkoopbaarheid?: "voorspelbaar" | "wisselvallig" | "grillig" | "verlies" | "onbekend";
+  verkoopbaarheid_reden?: string;
   /** Hoeveel van de vergelijking dealeraanbod is, en hoeveel particulier. */
   aantal_dealer?: number;
   aantal_particulier?: number;
@@ -99,7 +106,11 @@ export type Berekening = {
   // ── Verouderd, alleen nog voor het archief ──
   /** @deprecated was per definitie gelijk aan de ingestelde marge; zegt dus niets */
   geschatte_marge?: number;
-  /** @deprecated leunde op geraden cijfers */
+  /**
+   * @deprecated Een cijfer /10 dat een model noemde. Nagerekend over de 18 taxaties die
+   * het veld nog hebben: het liep 0,77 mee met de verkoopprijs, dus het mat het
+   * prijskaartje en niet of de deal goed was. Vervangen door {@link verkoopbaarheid}.
+   */
   aantrekkelijkheid?: number;
 };
 

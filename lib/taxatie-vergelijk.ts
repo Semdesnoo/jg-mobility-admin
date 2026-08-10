@@ -98,6 +98,44 @@ export type Zoekvraag = {
  * De zoekpagina onder /lst/ is voor gewone bezoekers toegestaan; we halen er hooguit een
  * paar pagina's per taxatie op en bewaren niets van wat we niet gebruiken.
  */
+/** Welke modelschrijfwijze op AutoScout24 echt bestaat. Scheelt mislukte pogingen. */
+const as24Modellen = new Map<string, string | null>();
+
+/**
+ * Van "Tiguan 1.5 TSI R-Line" naar iets waar AutoScout24 een pagina voor heeft.
+ *
+ * Het modelveld in de voorraad bevat vaak de hele uitvoering, en soms nog een keer het
+ * merk ("Fiat FIAT 500"). De zoek-URL is /lst/{merk}/{model}, en zo'n naam geeft dan een
+ * 404 die nergens zichtbaar wordt: je krijgt gewoon nul vergelijkbare auto's, precies
+ * alsof het model zeldzaam is. Gemeten op de eigen voorraad gebeurde dat bij 7 van de 13
+ * merk/model-combinaties — meer dan de helft van de auto's kreeg dus helemaal geen
+ * marktvergelijking, zonder dat iemand dat kon zien.
+ *
+ * Van lang naar kort proberen, want de volledige naam is specifieker als hij bestaat:
+ * "Golf GTE" is een echte pagina en een betere vergelijking dan "Golf".
+ */
+function modelVarianten(merk: string, model: string): string[] {
+  let woorden = model.trim().split(/\s+/).filter(Boolean);
+  if (woorden.length > 1 && slug(woorden[0]) === slug(merk)) woorden = woorden.slice(1);
+
+  const uit: string[] = [];
+  for (let n = woorden.length; n >= 1; n--) {
+    const s = slug(woorden.slice(0, n).join(" "));
+    if (s && !uit.includes(s)) uit.push(s);
+  }
+
+  // BMW kent geen "216i" of "330e" als model — daar heet het de serie waar zo'n type in
+  // valt: 2er en 3er. Het typenummer begint met het seriecijfer, dus dat is af te leiden.
+  // Zonder deze regel blijven juist de BMW's zonder marktvergelijking zitten.
+  if (slug(merk) === "bmw") {
+    // Let op de letter die er vaak achter plakt: 216i, 330e, 520d. Een woordgrens eisen
+    // na het derde cijfer laat juist die typen vallen.
+    const cijfer = woorden.join(" ").match(/\b([1-8])\d{2}[a-z]?\b/i);
+    if (cijfer) uit.push(`${cijfer[1]}er`);
+  }
+  return uit;
+}
+
 export async function haalVergelijkbaar(
   v: Zoekvraag,
   maxPaginas = 2
@@ -128,9 +166,16 @@ export async function haalVergelijkbaar(
   const uit: Vergelijkbare[] = [];
   const gezien = new Set<string>();
 
+  // Welke schrijfwijze van het model heeft AutoScout24 echt? De eerste die auto's oplevert.
+  const sleutel = `${slug(v.merk)}|${slug(v.model)}`;
+  const onthouden = as24Modellen.get(sleutel);
+  const teProberen =
+    onthouden === undefined ? modelVarianten(v.merk, v.model) : onthouden ? [onthouden] : [];
+
+  for (const modelSlug of teProberen) {
   for (let pagina = 1; pagina <= maxPaginas; pagina++) {
     p.set("page", String(pagina));
-    const url = `https://www.autoscout24.nl/lst/${slug(v.merk)}/${slug(v.model)}?${p}`;
+    const url = `https://www.autoscout24.nl/lst/${slug(v.merk)}/${modelSlug}?${p}`;
 
     let html = "";
     try {
@@ -183,6 +228,17 @@ export async function haalVergelijkbaar(
     // Minder dan een volle pagina betekent dat we aan het eind zijn.
     if (stukken.length < 15) break;
   }
+
+    // Deze schrijfwijze leverde auto's op — dan hoeven de kortere niet meer, en de
+    // volgende taxatie van dezelfde auto begint meteen goed.
+    if (uit.length > 0) {
+      as24Modellen.set(sleutel, modelSlug);
+      break;
+    }
+  }
+  // Geen enkele variant werkte. Onthouden, zodat we niet elke keer opnieuw alle
+  // schrijfwijzen aflopen voor een model dat AutoScout24 simpelweg niet kent.
+  if (uit.length === 0) as24Modellen.set(sleutel, null);
 
   return uit;
 }

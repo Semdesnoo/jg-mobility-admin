@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import {
   T, num, micro, body, klein, fmt, fmtGetal, fmtKm, scoreKleur,
-  Panel, SectionRule, Meter, Pill, ScoreRing,
+  Panel, SectionRule, Meter, Pill,
   Field, inputStijl, Btn, Chip, Spinner, Foutmelding, PanelVoet,
   Th, Td, TabelWrap, rijStijl,
 } from "./ui";
@@ -36,6 +36,44 @@ const KOSTEN_PRESETS = [
 ];
 
 const MARGE_PRESETS = [8, 10, 12, 15, 20];
+
+/**
+ * Is deze auto aantrekkelijk om te verkopen?
+ *
+ * Hier stond een ring met een cijfer /10. Dat kwam uit een model en niemand kon nagaan
+ * waar het vandaan kwam; nagerekend liep het vooral mee met de prijs van de auto. Wat er
+ * nu staat is een oordeel met de reden er letterlijk onder, zodat je het kunt controleren
+ * en desnoods kunt negeren. Een oordeel zonder reden is net zo waardeloos als een cijfer
+ * zonder uitleg, dus die twee horen bij elkaar te staan.
+ */
+function Verkoopbaarheid({ oordeel, reden }: { oordeel?: string; reden?: string }) {
+  const stand: Record<string, { label: string; kleur: string }> = {
+    voorspelbaar: { label: "Voorspelbaar", kleur: "#4ade80" },
+    wisselvallig: { label: "Wisselvallig", kleur: "#fbbf24" },
+    grillig: { label: "Grillige prijzen", kleur: "#fb923c" },
+    verlies: { label: "Levert niets op", kleur: "#f87171" },
+    onbekend: { label: "Te weinig gegevens", kleur: "rgba(255,255,255,0.35)" },
+  };
+  const s = oordeel ? stand[oordeel] : undefined;
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full xl:w-40">
+      <p style={{ ...micro("rgba(255,255,255,0.4)"), fontSize: 8.5 }}>Verkoopbaarheid</p>
+      <div className="flex items-center gap-2">
+        <span
+          className="flex-shrink-0 rounded-full"
+          style={{ width: 8, height: 8, backgroundColor: s?.kleur ?? "rgba(255,255,255,0.2)" }}
+        />
+        <span style={{ fontFamily: T.inter, fontSize: 12, fontWeight: 700, color: s?.kleur ?? "rgba(255,255,255,0.35)" }}>
+          {s?.label ?? "Nog niet bepaald"}
+        </span>
+      </div>
+      {reden && (
+        <p style={{ ...klein("rgba(255,255,255,0.5)"), textWrap: "pretty" }}>{reden}</p>
+      )}
+    </div>
+  );
+}
 
 export default function TaxatieTab({
   dossiers,
@@ -727,16 +765,7 @@ export default function TaxatieTab({
               className="flex xl:flex-col items-center justify-between xl:justify-center gap-4 p-5 flex-shrink-0"
               style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
             >
-              {b?.aantrekkelijkheid != null ? (
-                <ScoreRing score={b.aantrekkelijkheid} tone="donker" />
-              ) : (
-                <div
-                  className="flex items-center justify-center rounded-full flex-shrink-0"
-                  style={{ width: 60, height: 60, border: "3px solid rgba(255,255,255,0.15)", ...num(24, "rgba(255,255,255,0.2)") }}
-                >
-                  ?
-                </div>
-              )}
+              <Verkoopbaarheid oordeel={b?.verkoopbaarheid} reden={b?.verkoopbaarheid_reden} />
               <div className="flex flex-col gap-2 w-full xl:w-40">
                 <Btn variant="wit" size="sm" full disabled={!b} onClick={slaOp}>
                   {opgeslagen ? <><Check size={12} /> Opgeslagen</> : <><Plus size={12} /> Opslaan als dossier</>}
