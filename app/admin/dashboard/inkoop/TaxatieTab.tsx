@@ -5,7 +5,7 @@ import {
   BarChart2, Check, Clock, Gauge, History, Info, Plus, RotateCcw, Search, X,
 } from "lucide-react";
 import {
-  T, num, micro, body, fmt, fmtGetal, fmtKm, scoreKleur,
+  T, num, micro, body, klein, fmt, fmtGetal, fmtKm, scoreKleur,
   Panel, SectionRule, Meter, Pill, ScoreRing,
   Field, inputStijl, Btn, Chip, Spinner, Foutmelding, PanelVoet,
   Th, Td, TabelWrap, rijStijl,
@@ -402,7 +402,7 @@ export default function TaxatieTab({
             </span>
           </div>
 
-          <p className="mt-2" style={{ fontFamily: T.inter, fontSize: 10.5, color: rdwFout ? T.rood : T.ink(0.4) }}>
+          <p className="mt-2" style={klein(rdwFout ? T.rood : T.ink(0.4))}>
             {rdwFout
               ? rdwFout
               : rdwLaden
@@ -417,7 +417,7 @@ export default function TaxatieTab({
               <p style={{ fontFamily: T.play, fontSize: 17, fontWeight: 700, color: T.navy }}>
                 {rdw.merk} {rdw.model}
               </p>
-              <p className="mt-0.5 mb-3" style={{ fontFamily: T.inter, fontSize: 11, color: T.ink(0.45) }}>
+              <p className="mt-0.5 mb-3" style={{ fontFamily: T.inter, fontSize: 11.5, color: T.ink(0.45) }}>
                 {[rdw.bouwjaar, rdw.brandstof, rdw.bodytype, rdw.kleur].filter(Boolean).join(" · ")}
               </p>
               <dl className="flex flex-col">
@@ -496,7 +496,7 @@ export default function TaxatieTab({
                     </Chip>
                   ))}
                 </div>
-                <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.45), lineHeight: 1.5 }}>
+                <p className="mt-1.5" style={klein(T.ink(0.45))}>
                   {uitvoering
                     ? `Analyseer opnieuw om alleen ${uitvoering}-uitvoeringen mee te rekenen.`
                     : "Het kenteken zegt niets over de uitvoering. Weet je hem, kies hem dan — dat scheelt vaak duizenden euro's."}
@@ -514,7 +514,7 @@ export default function TaxatieTab({
                   BTW-auto
                 </Chip>
               </div>
-              <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.45), lineHeight: 1.5 }}>
+              <p className="mt-1.5" style={klein(T.ink(0.45))}>
                 {btwType === "marge"
                   ? "Koop je van een particulier, dan is het altijd marge. Je draagt 21/121 over je winst af."
                   : "Alleen bij inkoop van een bedrijf met btw-factuur. De 21% gaat eerst van de verkoopprijs af."}
@@ -548,7 +548,7 @@ export default function TaxatieTab({
                     type="button"
                     onClick={() => { setKosten(0); setPosten([]); }}
                     className="flex items-center gap-1 transition-all hover:opacity-60"
-                    style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.4) }}
+                    style={klein()}
                   >
                     <RotateCcw size={9} /> wissen
                   </button>
@@ -577,7 +577,7 @@ export default function TaxatieTab({
                       type="button"
                       onClick={() => verwijderPost(p.id, p.bedrag)}
                       className="inline-flex items-center gap-1 px-1.5 py-0.5 transition-all hover:opacity-60"
-                      style={{ fontFamily: T.inter, fontSize: 10, color: T.navy, backgroundColor: "rgba(0,19,55,0.06)" }}
+                      style={{ ...klein(T.navy), backgroundColor: "rgba(0,19,55,0.06)" }}
                     >
                       {p.label} {fmt(p.bedrag)} <X size={9} />
                     </button>
@@ -589,7 +589,7 @@ export default function TaxatieTab({
             <Btn variant="primair" size="lg" full disabled={!klaarVoorAnalyse || laden} onClick={analyseer}>
               {laden ? <><Spinner size={14} tone="donker" /> Markt analyseren…</> : <><BarChart2 size={15} /> Analyseer markt</>}
             </Btn>
-            <p className="-mt-2" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.35), lineHeight: 1.5 }}>
+            <p className="-mt-2" style={klein(T.ink(0.35))}>
               {klaarVoorAnalyse
                 ? "Doorzoekt Marktplaats, AutoScout24 en Gaspedaal · 20-45 seconden"
                 : !rdw ? "Vul eerst een kenteken in" : "Vul de kilometerstand in om te kunnen analyseren"}
@@ -626,7 +626,7 @@ export default function TaxatieTab({
                     <span className="block truncate" style={{ fontFamily: T.inter, fontSize: 11.5, fontWeight: 600, color: T.navy }}>
                       {d.merk} {d.model}
                     </span>
-                    <span className="block truncate" style={{ fontFamily: T.inter, fontSize: 9.5, color: T.ink(0.35) }}>
+                    <span className="block truncate" style={klein(T.ink(0.35))}>
                       {d.kenteken || d.datum}
                     </span>
                   </span>
@@ -687,7 +687,7 @@ export default function TaxatieTab({
                         {s.klaar && <Check size={8} strokeWidth={4} style={{ color: T.navy }} />}
                       </span>
                     )}
-                    <span style={{ fontFamily: T.inter, fontSize: 10.5, color: s.klaar ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.4)" }}>
+                    <span style={klein(s.klaar ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.4)")}>
                       {s.label}
                     </span>
                   </span>
@@ -794,19 +794,19 @@ export default function TaxatieTab({
                     {/* Titel en balk */}
                     <div className="min-w-0">
                       <div className="flex items-baseline gap-2 flex-wrap">
-                        <span style={{ fontFamily: T.inter, fontSize: 12, fontWeight: s.subtotaal ? 700 : 600, color: T.navy }}>
+                        <span style={{ fontFamily: T.inter, fontSize: 11.5, fontWeight: s.subtotaal ? 700 : 600, color: T.navy }}>
                           {s.titel}
                         </span>
                         {s.chip && <Pill color={s.chip.kleur}>{s.chip.tekst}</Pill>}
                         {wacht && s.wachtOp && (
-                          <span style={{ fontFamily: T.inter, fontSize: 9.5, color: T.ink(0.4) }}>{s.wachtOp}</span>
+                          <span style={klein()}>{s.wachtOp}</span>
                         )}
                       </div>
-                      <p className="truncate mt-0.5" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.42) }}>
+                      <p className="truncate mt-0.5" style={klein()}>
                         {s.uitleg}
                       </p>
                       {!wacht && s.extra && (
-                        <p className="truncate" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.42) }}>
+                        <p className="truncate" style={klein()}>
                           {s.extra}
                         </p>
                       )}
@@ -887,7 +887,7 @@ export default function TaxatieTab({
               <Meter value={Math.min(scanStap, 45)} max={45} color={T.navy} height={3} />
             </div>
             {scanStap > 45 && (
-              <p className="mt-2" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.amber }}>
+              <p className="mt-2" style={klein(T.amber)}>
                 Dit duurt langer dan gebruikelijk — nog even geduld.
               </p>
             )}
@@ -957,18 +957,18 @@ export default function TaxatieTab({
             <Panel
               title="Marktprijzen"
               actions={
-                <span style={{ ...micro(b.live ? T.groen : T.amber), fontSize: 9 }}>
+                <span style={micro(b.live ? T.groen : T.amber)}>
                   {b.live ? `${m.aantal_gevonden ?? 0} advertenties gevonden` : "geen live advertenties"}
                 </span>
               }
               className="xl:col-span-5"
             >
               <p style={num(30)}>{fmt(m.gemiddelde_prijs)}</p>
-              <p className="mt-1 mb-5" style={body(11.5, T.ink(0.42))}>gemiddelde vraagprijs online</p>
+              <p className="mt-1 mb-5" style={klein()}>gemiddelde vraagprijs online</p>
 
               {/* Prijsspreiding met markeringen */}
               <div className="mb-5">
-                <div className="flex justify-between mb-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.4) }}>
+                <div className="flex items-baseline justify-between gap-3 mb-1.5" style={klein()}>
                   <span>Min {fmt(m.min_prijs)}</span>
                   <span>Max {fmt(m.max_prijs)}</span>
                 </div>
@@ -1009,13 +1009,11 @@ export default function TaxatieTab({
                     deze auto er landelijk te koop staan. Wat er nu staat is geteld. */}
                 <div>
                   <p className="mb-1.5" style={micro()}>Gevonden advertenties</p>
-                  <p style={num(28)}>
-                    {m.aantal_gevonden ?? 0}
-                    <span style={{ fontFamily: T.inter, fontSize: 12, fontWeight: 400, color: T.ink(0.4), marginLeft: 6 }}>
-                      vergelijkbaar
-                    </span>
-                  </p>
-                  <p className="mt-1.5" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.4) }}>
+                  <div className="flex items-baseline gap-1.5">
+                    <span style={num(28)}>{m.aantal_gevonden ?? 0}</span>
+                    <span style={klein()}>vergelijkbaar</span>
+                  </div>
+                  <p className="mt-1.5" style={klein()}>
                     {!b.live
                       ? "Geen live advertenties opgehaald — dit is een schatting uit modelkennis."
                       : (m.aantal_gevonden ?? 0) >= 5
@@ -1065,11 +1063,11 @@ export default function TaxatieTab({
 
             <Panel title="Advies" className="xl:col-span-3">
               <div style={{ borderLeft: `2px solid ${T.navy}`, paddingLeft: 12 }}>
-                <p style={{ fontFamily: T.play, fontSize: 14, lineHeight: 1.7, color: T.navy }}>{m.advies}</p>
+                <p style={{ ...body(12, T.navy), lineHeight: 1.6, textWrap: "pretty" }}>{m.advies}</p>
               </div>
               <div className="mt-4 pt-4 flex flex-col gap-2" style={{ borderTop: `1px solid ${T.line}` }}>
                 {m.betrouwbaarheid && (
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-baseline justify-between gap-3">
                     <span style={micro()}>Betrouwbaarheid</span>
                     <Pill
                       color={m.betrouwbaarheid === "hoog" ? T.groen : m.betrouwbaarheid === "midden" ? T.amber : T.rood}
@@ -1078,14 +1076,14 @@ export default function TaxatieTab({
                     </Pill>
                   </div>
                 )}
-                <div className="flex items-center justify-between">
+                <div className="flex items-baseline justify-between gap-3">
                   <span style={micro()}>Advertenties gebruikt</span>
                   <span style={num(13)}>{m.aantal_gevonden ?? m.vergelijkbare?.length ?? 0}</span>
                 </div>
                 {eigenMerk && (
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-baseline justify-between gap-3">
                     <span style={micro()}>{rdw?.merk} bij JG</span>
-                    <span style={{ fontFamily: T.inter, fontSize: 11, fontWeight: 600, color: scoreKleur(eigenMerk.verkoopPercentage, 100) }}>
+                    <span style={{ fontFamily: T.inter, fontSize: 11.5, fontWeight: 600, color: scoreKleur(eigenMerk.verkoopPercentage, 100) }}>
                       {eigenMerk.verkocht}/{eigenMerk.totaal} verkocht · {eigenMerk.verkoopPercentage}%
                     </span>
                   </div>
@@ -1107,7 +1105,7 @@ export default function TaxatieTab({
                 <tr style={{ borderBottom: `1.5px solid ${T.line2}` }}>
                   <Th>Advertentie</Th>
                   <Th align="center" onClick={() => sorteerOp("bouwjaar")} actief={sorteer.kolom === "bouwjaar"}>Bouwjaar</Th>
-                  <Th align="center" onClick={() => sorteerOp("km")} actief={sorteer.kolom === "km"}>Km</Th>
+                  <Th align="right" onClick={() => sorteerOp("km")} actief={sorteer.kolom === "km"}>Km</Th>
                   <Th align="center">Platform</Th>
                   <Th align="right" onClick={() => sorteerOp("prijs")} actief={sorteer.kolom === "prijs"}>Vraagprijs</Th>
                   <Th align="right">Δ t.o.v. gem.</Th>
@@ -1124,11 +1122,11 @@ export default function TaxatieTab({
                       title={uitschieter ? "Uitschieter — wijkt meer dan 25% van het gemiddelde af" : undefined}
                     >
                       <Td sterk>{v.titel}</Td>
-                      <Td align="center">{v.bouwjaar ?? "—"}</Td>
-                      <Td align="center">{v.km != null ? fmtKm(v.km) : "—"}</Td>
+                      <Td align="center" cijfer>{v.bouwjaar ?? "—"}</Td>
+                      <Td align="right" cijfer>{v.km != null ? fmtKm(v.km) : "—"}</Td>
                       <Td align="center">{v.platform ?? "—"}</Td>
                       <Td align="right" cijfer>{fmt(v.prijs)}</Td>
-                      <Td align="right" color={delta > 0 ? T.rood : T.groen}>
+                      <Td align="right" cijfer color={delta > 0 ? T.rood : T.groen}>
                         {delta > 0 ? "+" : ""}{delta}%
                       </Td>
                     </tr>
@@ -1202,14 +1200,14 @@ export default function TaxatieTab({
                       <div key={s.merk}>
                         <div className="flex items-center justify-between mb-1">
                           <span style={{ fontFamily: T.play, fontSize: 13.5, fontWeight: 700, color: T.navy }}>{s.merk}</span>
-                          <span style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.45) }}>
+                          <span style={klein(T.ink(0.45))}>
                             {s.verkocht} verkocht · {s.beschikbaar} op voorraad · gem. {fmt(s.gemPrijs)}
                           </span>
                         </div>
                         <Meter value={s.verkoopPercentage} max={100} color={scoreKleur(s.verkoopPercentage, 100)} />
                       </div>
                     ))}
-                    <p className="mt-1" style={{ fontFamily: T.inter, fontSize: 10.5, color: T.ink(0.4) }}>
+                    <p className="mt-1" style={klein()}>
                       {eigenMerk
                         ? `U verkocht ${eigenMerk.verkocht} van de ${eigenMerk.totaal} ${eigenMerk.merk}'s die u had — dat is uw eigen doorloop op dit merk.`
                         : "Vul een kenteken in om te zien hoe dat merk het bij u doet."}
@@ -1245,11 +1243,11 @@ export default function TaxatieTab({
 
         {/* Colofon */}
         <div className="flex items-center justify-between gap-4 flex-wrap pt-1">
-          <p style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.35) }}>
+          <p style={klein(T.ink(0.35))}>
             Bronnen: RDW open data · Marktplaats · AutoScout24 · Gaspedaal · JG koerslijst
           </p>
           {b?.bron && (
-            <p style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.35) }}>
+            <p style={klein(T.ink(0.35))}>
               Waardebepaling op basis van: {b.bron}
             </p>
           )}

@@ -62,6 +62,23 @@ export const body = (size = 12.5, color: string = T.ink(0.65)): CSSProperties =>
   lineHeight: 1.65,
 });
 
+/**
+ * Toelichtende tekst: het regeltje onder een bedrag, de hint bij een veld, de uitleg
+ * bij een stap.
+ *
+ * Er stonden negen verschillende maten kleine tekst op de taxatiepagina — 7, 8.5, 9,
+ * 9.5, 10, 10.5, 11, 11.5 en 12 — en twee regels die naast elkaar dezelfde rol hadden
+ * kregen verschillende maten. Daardoor lijnde niets op en oogde de pagina rommelig,
+ * ook al klopte elke regel op zichzelf. Alles wat toelicht gaat nu door deze helper,
+ * zodat het oog de regels als één soort herkent.
+ */
+export const klein = (color: string = T.ink(0.42)): CSSProperties => ({
+  fontFamily: T.inter,
+  fontSize: 10.5,
+  lineHeight: 1.5,
+  color,
+});
+
 // ── Formatters ────────────────────────────────────────────────────
 export const fmt = (n: number) => `€ ${Math.round(n).toLocaleString("nl-NL")}`;
 export const fmtKort = (n: number) =>
