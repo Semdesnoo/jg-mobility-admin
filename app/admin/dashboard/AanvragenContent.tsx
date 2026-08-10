@@ -201,8 +201,8 @@ export default function AanvragenContent({
           body="Zet met de knop hierboven een aanvraag erbij, of klik bij een mail in het E-mail-tabblad op “Zet in overzicht”."
         />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 items-start">
-          <div className="xl:col-span-2 flex flex-col gap-4">
+        <div className="flex flex-col xl:flex-row gap-4 items-start">
+          <div className="w-full xl:w-[340px] xl:flex-none flex flex-col gap-4">
             {blad === "dag"
               ? perDag.map(([datum, rijen]) => (
                   <div key={datum}>
@@ -234,7 +234,7 @@ export default function AanvragenContent({
                 ))}
           </div>
 
-          <div className="xl:col-span-3 xl:sticky xl:top-4">
+          <div className="w-full xl:flex-1 xl:min-w-0">
             {openAanvraag ? (
               <Detail
                 key={openAanvraag.id}
@@ -565,6 +565,12 @@ function Detail({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Twee kolommen in plaats van een stapel. Als alles onder elkaar staat is dit
+          paneel drie schermen hoog en scrol je langs contactgegevens heen op weg naar de
+          deal -- terwijl er ruimte zat naast staat. Onder 1024px valt het vanzelf terug
+          op een stapel, want dan is naast elkaar onleesbaar smal. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+      <div className="flex flex-col gap-3">
       {/* Waar het over gaat. Bovenaan, want dit is waaraan je de aanvraag herkent —
           niet aan de naam. */}
       <Panel
@@ -581,7 +587,7 @@ function Detail({
             {advTitel || advUrl}
           </a>
         )}
-        <div className="grid grid-cols-1 gap-2.5">
+        <div className="grid grid-cols-1 gap-2">
           <Bewerk patch={patch} label="Auto uit zijn advertentie" waarde={advTitel} zet={setAdvTitel}
             huidig={a.advertentie_titel} veld="advertentie_titel"
             plaats="Mercedes-Benz CLA 250 224pk 7G-DCT 2020 Zwart" />
@@ -590,53 +596,29 @@ function Detail({
             plaats="https://www.marktplaats.nl/v/..." />
         </div>
 
-        <div className="mt-2.5">
-          <Bewerk patch={patch} label="Wat hij zei" waarde={bericht} zet={setBericht}
-            huidig={a.bericht} veld="bericht" regels={5}
-            plaats="Zijn eigen woorden — plak hier het bericht dat hij stuurde." />
-        </div>
-      </Panel>
-
-      {/* Wie het is. */}
-      <Panel title="Contact">
-        <div className="flex flex-wrap gap-3 mb-2.5">
-          {a.telefoon && (
-            <a href={`tel:${a.telefoon}`} style={{ ...klein(T.navy), textDecoration: "underline" }}>
-              Bellen
-            </a>
-          )}
-          {a.telefoon && (
-            <a
-              href={`https://wa.me/${a.telefoon.replace(/\D/g, "").replace(/^0/, "31")}`}
-              target="_blank" rel="noopener noreferrer"
-              style={{ ...klein(T.groen), textDecoration: "underline" }}
-            >
-              WhatsApp
-            </a>
-          )}
-          {a.email && (
-            <a href={`mailto:${a.email}`} style={{ ...klein(T.navy), textDecoration: "underline" }}>
-              Mailen
-            </a>
-          )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-          <Bewerk patch={patch} label="Naam" waarde={naam} zet={setNaam} huidig={a.naam} veld="naam" plaats="—" />
-          <Bewerk patch={patch} label="Telefoon" waarde={telefoon} zet={setTelefoon} huidig={a.telefoon} veld="telefoon" plaats="06 …" />
-          <Bewerk patch={patch} label="E-mail" waarde={email} zet={setEmail} huidig={a.email} veld="email" plaats="—" />
-          <Field label="Waar kwam het binnen">
-            <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
-              {Object.keys(KANAAL).map((w) => (
-                <option key={w} value={w}>{KANAAL[w].label}</option>
-              ))}
-            </select>
-          </Field>
+        <div className="mt-3">
+          <p className="mb-1" style={{ ...micro(), fontSize: 9 }}>Wat hij zei</p>
+          <textarea
+            value={bericht}
+            onChange={(e) => setBericht(e.target.value)}
+            onBlur={() => bericht !== a.bericht && patch({ bericht })}
+            placeholder="Zijn eigen woorden — plak hier het bericht dat hij stuurde."
+            style={{
+              ...inputStijl,
+              minHeight: 96,
+              resize: "vertical",
+              fontSize: 12.5,
+              lineHeight: 1.7,
+              backgroundColor: "rgba(0,19,55,0.025)",
+              borderLeft: `3px solid ${T.navy}`,
+            }}
+          />
         </div>
       </Panel>
 
       {/* De handel: waar het over gaat bij ons, wat hij bood, wat hij inruilt. */}
       <Panel title="De deal">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           <Field label="Onze auto waar hij op reageert">
             <select
               style={inputStijl}
@@ -667,7 +649,7 @@ function Detail({
 
         <div className="mt-2.5">
           <Bewerk patch={patch} label="Notitie" waarde={notitie} zet={setNotitie} huidig={a.notitie}
-            veld="notitie" regels={3} plaats="Belt maandag terug" />
+            veld="notitie" regels={2} plaats="Belt maandag terug" />
         </div>
 
         <div className="flex flex-wrap gap-1.5 mt-3">
@@ -678,6 +660,47 @@ function Detail({
           ))}
         </div>
       </Panel>
+      </div>
+
+      {/* Rechterkolom: wie het is, wie er nog meer wacht, en wat je nu doet. */}
+      <div className="flex flex-col gap-3">
+      {/* Wie het is. */}
+      <Panel title="Contact">
+        <div className="flex flex-wrap gap-3 mb-2.5">
+          {a.telefoon && (
+            <a href={`tel:${a.telefoon}`} style={{ ...klein(T.navy), textDecoration: "underline" }}>
+              Bellen
+            </a>
+          )}
+          {a.telefoon && (
+            <a
+              href={`https://wa.me/${a.telefoon.replace(/\D/g, "").replace(/^0/, "31")}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ ...klein(T.groen), textDecoration: "underline" }}
+            >
+              WhatsApp
+            </a>
+          )}
+          {a.email && (
+            <a href={`mailto:${a.email}`} style={{ ...klein(T.navy), textDecoration: "underline" }}>
+              Mailen
+            </a>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <Bewerk patch={patch} label="Naam" waarde={naam} zet={setNaam} huidig={a.naam} veld="naam" plaats="—" />
+          <Bewerk patch={patch} label="Telefoon" waarde={telefoon} zet={setTelefoon} huidig={a.telefoon} veld="telefoon" plaats="06 …" />
+          <Bewerk patch={patch} label="E-mail" waarde={email} zet={setEmail} huidig={a.email} veld="email" plaats="—" />
+          <Field label="Waar kwam het binnen">
+            <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
+              {Object.keys(KANAAL).map((w) => (
+                <option key={w} value={w}>{KANAAL[w].label}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </Panel>
+
 
       {/* Wie er nog meer achter dezelfde auto aan zit. Dit is waarom dit scherm bestaat:
           bel je er een, dan wil je de rest ernaast hebben staan. */}
@@ -753,6 +776,9 @@ function Detail({
           )}
         </div>
       </Panel>
+
+      </div>
+      </div>
 
       <div className="flex gap-2">
         <Btn
