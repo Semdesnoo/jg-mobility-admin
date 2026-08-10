@@ -66,7 +66,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const velden: Partial<Record<Veld, string>> = {};
+  const velden: Partial<Record<Veld, string>> & { auto_id?: number | null } = {};
+
+  // auto_id staat bewust NIET in AANPASBAAR: het is een getal en de rest is tekst. Wel
+  // aanpasbaar moet het zijn — anders blijft de koppeling met de auto na het aanmaken
+  // voorgoed staan en wordt de rij tegenstrijdig zodra iemand een andere auto kiest.
+  // Een lege waarde betekent hier bewust "ontkoppelen".
+  if (body.auto_id !== undefined) {
+    const rauw = body.auto_id;
+    if (rauw === null || rauw === "") velden.auto_id = null;
+    else if (Number.isFinite(Number(rauw))) velden.auto_id = Number(rauw);
+    else {
+      return Response.json(
+        { error: "De gekozen auto werd niet herkend. Kies hem opnieuw uit de lijst." },
+        { status: 400 }
+      );
+    }
+  }
+
   for (const veld of AANPASBAAR) {
     const waarde = body[veld];
     // `null` telt hier als "niet meegestuurd". Een veld leegmaken doe je met een lege

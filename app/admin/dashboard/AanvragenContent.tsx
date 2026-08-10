@@ -453,46 +453,52 @@ function NieuweAanvraag({
 /**
  * Eén bewerkbaar veld dat opslaat zodra je eruit klikt.
  *
- * Staat bewust HIER en niet binnen het detailpaneel. Een component die tijdens het
- * renderen wordt gemaakt is bij elke toetsaanslag een ander component, dus React gooit
- * het invoerveld weg en bouwt het opnieuw op — en dan ben je na elke letter je cursor kwijt.
+ * ONBEHEERD, EN DAT IS HET HELE PUNT
+ * Hier stond eerst een kopie van elke waarde in de state van het paneel. Die kopie werd
+ * één keer gevuld bij het openen en daarna nooit meer bijgewerkt. Verandert er dan iets
+ * aan de serverkant — de antwoordknop zet "Re: " voor het onderwerp, de autokeuze zet een
+ * ander kenteken — dan liep die kopie achter. En omdat er bij het verlaten van het veld
+ * werd vergeleken met de NIEUWE serverwaarde, schreef één keer erin klikken en weer
+ * wegklikken de oude waarde er stilzwijgend overheen. Zonder dat je iets typte.
+ *
+ * Nu leest het veld rechtstreeks wat er staat. `key={huidig}` laat het opnieuw beginnen
+ * zodra de opgeslagen waarde verandert, dus wat je ziet is wat er in de database staat.
+ * Typen blijft gewoon behouden: `huidig` verandert niet terwijl jij aan het typen bent.
  *
  * Alles is aanpasbaar, ook wat de AI uit een mail haalde: dat is een gok, en aan de balie
  * typ je niet meteen alles goed.
  */
 function Bewerk({
-  label, waarde, zet, huidig, veld, patch, plaats, regels,
+  label, huidig, veld, patch, plaats, regels,
 }: {
   label: string;
-  waarde: string;
-  zet: (v: string) => void;
-  /** Wat er in de database staat; alleen bij een echt verschil slaan we op. */
+  /** Wat er nu in de database staat. Tevens de beginwaarde van het veld. */
   huidig: string;
   veld: string;
   patch: (velden: Record<string, unknown>) => Promise<boolean>;
   plaats?: string;
   regels?: number;
 }) {
-  const bewaar = () => {
-    if (waarde !== huidig) patch({ [veld]: waarde });
+  const bewaar = (w: string) => {
+    if (w !== huidig) patch({ [veld]: w });
   };
   return (
     <Field label={label}>
       {regels ? (
         <textarea
-          style={{ ...inputStijl, minHeight: regels * 20, resize: "vertical", lineHeight: 1.55 }}
-          value={waarde}
-          onChange={(e) => zet(e.target.value)}
-          onBlur={bewaar}
+          key={huidig}
+          defaultValue={huidig}
           placeholder={plaats}
+          onBlur={(e) => bewaar(e.target.value)}
+          style={{ ...inputStijl, minHeight: regels * 20, resize: "vertical", lineHeight: 1.55 }}
         />
       ) : (
         <input
-          style={inputStijl}
-          value={waarde}
-          onChange={(e) => zet(e.target.value)}
-          onBlur={bewaar}
+          key={huidig}
+          defaultValue={huidig}
           placeholder={plaats}
+          onBlur={(e) => bewaar(e.target.value)}
+          style={inputStijl}
         />
       )}
     </Field>
@@ -513,17 +519,8 @@ function Detail({
 }) {
   // Lokaal bewerken zonder dat een herlaadactie je aanpassing overschrijft. Het component
   // krijgt key={a.id}, dus bij een andere aanvraag begint het opnieuw.
-  const [naam, setNaam] = useState(a.naam);
-  const [telefoon, setTelefoon] = useState(a.telefoon);
-  const [email, setEmail] = useState(a.email);
-  const [onderwerp, setOnderwerp] = useState(a.onderwerp);
-  const [kentekenVeld, setKentekenVeld] = useState(a.kenteken);
-  const [advTitel, setAdvTitel] = useState(a.advertentie_titel);
-  const [advUrl, setAdvUrl] = useState(a.advertentie_url);
-  const [bericht, setBericht] = useState(a.bericht);
-  const [bod, setBod] = useState(a.bod);
-  const [inruil, setInruil] = useState(a.inruil);
-  const [notitie, setNotitie] = useState(a.notitie);
+  // Alleen het antwoord houdt eigen state: dat wordt door de AI-opdracht gezet en moet
+  // meteen zichtbaar zijn, ook voordat de lijst opnieuw is opgehaald.
   const [antwoord, setAntwoord] = useState(a.antwoord);
   const [gekopieerd, setGekopieerd] = useState(false);
   const [bezig, setBezig] = useState(false);
@@ -577,21 +574,21 @@ function Detail({
         title="De advertentie"
         actions={<span style={{ ...micro(k.kleur), fontSize: 9 }}>{k.label}</span>}
       >
-        {advUrl && (
+        {a.advertentie_url && (
           <a
-            href={advUrl} target="_blank" rel="noopener noreferrer"
+            href={a.advertentie_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 mb-2.5 hover:opacity-70 transition-all"
             style={{ ...body(12, T.navy), textDecoration: "underline", overflowWrap: "anywhere" }}
           >
             <ExternalLink size={12} style={{ flexShrink: 0 }} />
-            {advTitel || advUrl}
+            {a.advertentie_titel || a.advertentie_url}
           </a>
         )}
         <div className="grid grid-cols-1 gap-2">
-          <Bewerk patch={patch} label="Auto uit zijn advertentie" waarde={advTitel} zet={setAdvTitel}
+          <Bewerk patch={patch} label="Auto uit zijn advertentie"
             huidig={a.advertentie_titel} veld="advertentie_titel"
             plaats="Mercedes-Benz CLA 250 224pk 7G-DCT 2020 Zwart" />
-          <Bewerk patch={patch} label="Link naar de advertentie" waarde={advUrl} zet={setAdvUrl}
+          <Bewerk patch={patch} label="Link naar de advertentie"
             huidig={a.advertentie_url} veld="advertentie_url"
             plaats="https://www.marktplaats.nl/v/..." />
         </div>
@@ -599,9 +596,9 @@ function Detail({
         <div className="mt-3">
           <p className="mb-1" style={{ ...micro(), fontSize: 9 }}>Wat hij zei</p>
           <textarea
-            value={bericht}
-            onChange={(e) => setBericht(e.target.value)}
-            onBlur={() => bericht !== a.bericht && patch({ bericht })}
+            key={a.bericht}
+            defaultValue={a.bericht}
+            onBlur={(e) => e.target.value !== a.bericht && patch({ bericht: e.target.value })}
             placeholder="Zijn eigen woorden — plak hier het bericht dat hij stuurde."
             style={{
               ...inputStijl,
@@ -625,9 +622,14 @@ function Detail({
               value={a.auto_id != null ? String(a.auto_id) : ""}
               onChange={(e) => {
                 const gekozenAuto = autos.find((x) => String(x.id) === e.target.value);
+                // auto_id MOET mee. Zonder dat sprong de keuzelijst na het herladen
+                // terug naar "geen auto" (de waarde komt uit a.auto_id) en bleef de
+                // aanvraag in het tabblad Per auto onder de vórige auto hangen — met de
+                // naam van de nieuwe erbij. Een rij die zichzelf tegenspreekt.
                 patch({
+                  auto_id: gekozenAuto ? gekozenAuto.id : null,
                   auto_naam: gekozenAuto ? `${gekozenAuto.merk ?? ""} ${gekozenAuto.model ?? ""}`.trim() : "",
-                  kenteken: gekozenAuto?.kenteken ?? a.kenteken,
+                  kenteken: gekozenAuto?.kenteken ?? "",
                 });
               }}
             >
@@ -639,16 +641,15 @@ function Detail({
               ))}
             </select>
           </Field>
-          <Bewerk patch={patch} label="Waar het over gaat" waarde={onderwerp} zet={setOnderwerp}
-            huidig={a.onderwerp} veld="onderwerp" plaats="Vraagt of de prijs kan zakken" />
-          <Bewerk patch={patch} label="Bood" waarde={bod} zet={setBod} huidig={a.bod} veld="bod" plaats="—" />
-          <Bewerk patch={patch} label="Wil inruilen" waarde={inruil} zet={setInruil} huidig={a.inruil} veld="inruil" plaats="—" />
-          <Bewerk patch={patch} label="Kenteken" waarde={kentekenVeld} zet={setKentekenVeld}
-            huidig={a.kenteken} veld="kenteken" plaats="AB-123-C" />
+          <Bewerk patch={patch} label="Waar het over gaat"
+            huidig={a.interesse} veld="interesse" plaats="Vraagt of de prijs kan zakken" />
+          <Bewerk patch={patch} label="Bood" huidig={a.bod} veld="bod" plaats="—" />
+          <Bewerk patch={patch} label="Wil inruilen" huidig={a.inruil} veld="inruil" plaats="—" />
+          <Bewerk patch={patch} label="Kenteken" huidig={a.kenteken} veld="kenteken" plaats="AB-123-C" />
         </div>
 
         <div className="mt-2.5">
-          <Bewerk patch={patch} label="Notitie" waarde={notitie} zet={setNotitie} huidig={a.notitie}
+          <Bewerk patch={patch} label="Notitie" huidig={a.notitie}
             veld="notitie" regels={2} plaats="Belt maandag terug" />
         </div>
 
@@ -688,9 +689,9 @@ function Detail({
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Bewerk patch={patch} label="Naam" waarde={naam} zet={setNaam} huidig={a.naam} veld="naam" plaats="—" />
-          <Bewerk patch={patch} label="Telefoon" waarde={telefoon} zet={setTelefoon} huidig={a.telefoon} veld="telefoon" plaats="06 …" />
-          <Bewerk patch={patch} label="E-mail" waarde={email} zet={setEmail} huidig={a.email} veld="email" plaats="—" />
+          <Bewerk patch={patch} label="Naam" huidig={a.naam} veld="naam" plaats="—" />
+          <Bewerk patch={patch} label="Telefoon" huidig={a.telefoon} veld="telefoon" plaats="06 …" />
+          <Bewerk patch={patch} label="E-mail" huidig={a.email} veld="email" plaats="—" />
           <Field label="Waar kwam het binnen">
             <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
               {Object.keys(KANAAL).map((w) => (

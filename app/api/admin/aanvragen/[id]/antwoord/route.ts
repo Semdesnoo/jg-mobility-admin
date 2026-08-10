@@ -189,12 +189,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .filter(Boolean)
     .join("\n");
 
+  // Zijn eigen woorden gaan mee. Een antwoord dat alleen op onze samenvatting rust mist
+  // waar hij het echt over had, en dat merkt hij.
   const opdracht = `Schrijf het antwoord op deze aanvraag.
 
 WAT WE VAN DEZE KLANT WETEN
 Naam: ${aanvraag.naam || "onbekend — gebruik dan de aanhef zonder naam"}
-Waar het over gaat: ${aanvraag.interesse || "—"}
+Waar het over gaat: ${aanvraag.interesse || aanvraag.onderwerp || "—"}
 Onderwerp van zijn bericht: ${aanvraag.onderwerp || "—"}
+Zijn auto: ${aanvraag.advertentie_titel || "—"}
+Wat hij zelf schreef: ${aanvraag.bericht ? `
+"${aanvraag.bericht.slice(0, 900)}"
+` : "—"}
+Wat hij bood: ${aanvraag.bod || "—"}
+Wat hij wil inruilen: ${aanvraag.inruil || "—"}
 Kenteken: ${aanvraag.kenteken || "—"}
 Budget dat hij noemde: ${aanvraag.budget || "—"}
 Onze eigen notitie erbij: ${aanvraag.notitie || "—"}

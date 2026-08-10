@@ -233,9 +233,19 @@ const TE_WIJZIGEN = [
 
 export async function wijzigAanvraag(
   id: string,
-  velden: Partial<Record<(typeof TE_WIJZIGEN)[number], string>>
+  velden: Partial<Record<(typeof TE_WIJZIGEN)[number], string>> & { auto_id?: number | null }
 ): Promise<Aanvraag | null> {
   await init();
+
+  // auto_id apart, want het is een getal en niet zomaar tekst. Zonder deze regel bleef de
+  // koppeling na het aanmaken voorgoed staan: koos je in het scherm een andere auto, dan
+  // veranderde alleen de naam en werd de rij intern tegenstrijdig — auto_naam "BMW 3"
+  // terwijl auto_id nog naar de Golf wees, en dan groepeert hij onder de verkeerde auto.
+  if (velden.auto_id !== undefined) {
+    const w = velden.auto_id;
+    const nummer = w === null || w === ("" as unknown) ? null : Number(w);
+    await sql`UPDATE leads SET auto_id = ${Number.isFinite(nummer as number) ? nummer : null} WHERE id = ${id}`;
+  }
   for (const veld of TE_WIJZIGEN) {
     const w = velden[veld];
     if (w === undefined) continue;
