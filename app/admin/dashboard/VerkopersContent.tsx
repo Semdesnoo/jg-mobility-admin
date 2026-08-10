@@ -1683,6 +1683,16 @@ function NakijkenTab({
   const [vinkBezig, setVinkBezig] = useState<string | null>(null);
   // Meldingen die het afvinken niet tegenhouden maar wel het vermelden waard zijn.
   const [melding, setMelding] = useState("");
+  // Meerdere tegelijk aanwijzen om er in één keer teksten voor te laten schrijven.
+  const [kiesStand, setKiesStand] = useState(false);
+  const [aangevinkt, setAangevinkt] = useState<Set<string>>(new Set());
+  const wissel = (id: string) =>
+    setAangevinkt((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   const alle = useMemo(() => leads ?? [], [leads]);
   // De wachtrij: alles wat jij hebt afgevinkt en nog gemaild moet worden.
@@ -1697,6 +1707,58 @@ function NakijkenTab({
     [alle]
   );
   const lijst = blad === "klaar" ? wachtrij : archief;
+
+  /**
+   * Laat de AI teksten schrijven voor alles wat je hebt aangevinkt.
+   *
+   * Eén voor één, niet allemaal tegelijk: het gaat om tientallen seconden per bericht en
+   * een handvol parallelle aanvragen loopt tegen de snelheidslimiet aan. Zo zie je hem
+   * bovendien vorderen in plaats van minutenlang niets.
+   *
+   * Elk antwoord wordt echt gelezen. Dat klinkt vanzelfsprekend, maar in een eerdere
+   * versie van deze lus werd de uitkomst weggegooid — een ontbrekende sleutel zag er
+   * daardoor uit als veertig geslaagde berichten.
+   */
+  const schrijfReeks = (ids: string[]) => {
+    if (schrijfTaak?.bezig || ids.length === 0) return;
+    onFout("");
+    const rijen = ids.map((id) => alle.find((l) => l.id === id)).filter(Boolean) as Lead[];
+
+    startSchrijven(`${rijen.length} teksten schrijven`, async (stap) => {
+      const mislukt: string[] = [];
+      let klaar = 0;
+
+      for (const lead of rijen) {
+        const naam = `${lead.merk} ${lead.model}`.trim() || lead.titel.slice(0, 30);
+        stap(`${klaar + 1} van ${rijen.length} · ${naam}`);
+        try {
+          if (!lead.bouwjaar) {
+            const vr = await fetch(`/api/admin/verkopers/${lead.id}/verrijk`, { method: "POST" });
+            const vd = await vr.json().catch(() => ({}));
+            if (vd?.handelaar) { mislukt.push(`${naam}: handelaar, uit de lijst gehaald`); continue; }
+          }
+          const res = await fetch(`/api/admin/verkopers/${lead.id}/bericht`, { method: "POST" });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) { mislukt.push(`${naam}: ${d.error || "schrijven mislukt"}`); continue; }
+          klaar++;
+        } catch (e) {
+          mislukt.push(`${naam}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      await herlaad().catch(() => null);
+      setAangevinkt(new Set());
+      // Deels gelukt is geen mislukking, maar je hoort wél te horen wat er is overgeslagen.
+      if (mislukt.length) {
+        onFout(
+          `${klaar} van de ${rijen.length} teksten geschreven. Niet gelukt: ${mislukt.slice(0, 4).join(" · ")}${
+            mislukt.length > 4 ? ` en nog ${mislukt.length - 4}` : ""
+          }`
+        );
+      }
+      return { leadId: "" };
+    });
+  };
 
   /**
    * Laat de AI een tekst schrijven voor één advertentie.
@@ -1775,6 +1837,11 @@ function NakijkenTab({
     () => wachtrij.filter((l) => l.bericht_kort || l.bericht_mail).length,
     [wachtrij]
   );
+  // Waar nog geen tekst voor ligt — precies wat je in één keer wilt laten schrijven.
+  const zonderTekst = useMemo(
+    () => wachtrij.filter((l) => !l.bericht_kort && !l.bericht_mail),
+    [wachtrij]
+  );
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">
@@ -1807,7 +1874,63 @@ function NakijkenTab({
                   {metTekst} met tekst
                 </span>
               )}
+              {blad === "klaar" && (
+                <button
+                  type="button"
+                  onClick={() => { setKiesStand((v) => !v); setAangevinkt(new Set()); }}
+                  className={`self-center px-2.5 py-1 transition-all hover:opacity-75${metTekst > 0 ? "" : " ml-auto"}`}
+                  style={{
+                    ...micro(kiesStand ? "#ffffff" : T.ink(0.5)),
+                    fontSize: 9,
+                    backgroundColor: kiesStand ? T.navy : "transparent",
+                    border: `1px solid ${kiesStand ? T.navy : T.line2}`,
+                  }}
+                >
+                  {kiesStand ? "Klaar met kiezen" : "Meerdere kiezen"}
+                </button>
+              )}
             </div>
+
+            {/* Wat je hebt aangevinkt, en wat je ermee kunt. Blijft boven de lijst staan
+                zodat je kunt doorscrollen en tussendoor advertenties kunt openen. */}
+            {blad === "klaar" && kiesStand && (
+              <div
+                className="flex flex-wrap items-center gap-2 px-3 py-2.5 mb-1 sticky top-0 z-10"
+                style={{ backgroundColor: T.navy }}
+              >
+                <span style={{ ...micro("rgba(255,255,255,0.55)"), fontSize: 9 }}>
+                  {aangevinkt.size} gekozen
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAangevinkt(new Set(zonderTekst.map((l) => l.id)))}
+                  className="px-2 py-1 transition-all hover:opacity-75"
+                  style={{ ...micro("rgba(255,255,255,0.8)"), fontSize: 9, border: "1px solid rgba(255,255,255,0.25)" }}
+                >
+                  Alles zonder tekst ({zonderTekst.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAangevinkt(new Set())}
+                  disabled={aangevinkt.size === 0}
+                  className="px-2 py-1 transition-all hover:opacity-75 disabled:opacity-30"
+                  style={{ ...micro("rgba(255,255,255,0.8)"), fontSize: 9, border: "1px solid rgba(255,255,255,0.25)" }}
+                >
+                  Wis
+                </button>
+                <div className="ml-auto">
+                  <Btn
+                    variant="wit"
+                    size="sm"
+                    disabled={aangevinkt.size === 0 || !!schrijfTaak?.bezig}
+                    onClick={() => schrijfReeks([...aangevinkt])}
+                  >
+                    <Sparkles size={11} />
+                    {schrijfTaak?.bezig ? "Bezig…" : `Schrijf ${aangevinkt.size || ""} tekst${aangevinkt.size === 1 ? "" : "en"}`}
+                  </Btn>
+                </div>
+              </div>
+            )}
 
             {lijst.map((l) => (
               <WachtrijKaart
@@ -1816,6 +1939,9 @@ function NakijkenTab({
                 actief={l.id === gekozen.id}
                 afvinkbaar={blad === "klaar"}
                 vinkt={vinkBezig === l.id}
+                kiesStand={kiesStand && blad === "klaar"}
+                aangevinkt={aangevinkt.has(l.id)}
+                onKies={() => wissel(l.id)}
                 onClick={() => setGekozenId(l.id)}
                 onAfvinken={() => vinkAf(l)}
               />
@@ -1869,6 +1995,9 @@ function WachtrijKaart({
   actief,
   afvinkbaar,
   vinkt,
+  kiesStand,
+  aangevinkt,
+  onKies,
   onClick,
   onAfvinken,
 }: {
@@ -1877,6 +2006,10 @@ function WachtrijKaart({
   /** Alleen in de wachtrij; in het archief is er niets meer af te vinken. */
   afvinkbaar: boolean;
   vinkt: boolean;
+  /** Staat de lijst in kiesstand? Dan opent klikken niet maar vinkt het aan. */
+  kiesStand: boolean;
+  aangevinkt: boolean;
+  onKies: () => void;
   onClick: () => void;
   onAfvinken: () => void;
 }) {
@@ -1901,9 +2034,33 @@ function WachtrijKaart({
         }`,
       }}
     >
+      {/* In kiesstand een vakje voor de rij. Los van de rest, zodat aanvinken en openen
+          elkaar niet in de weg zitten. */}
+      {kiesStand && (
+        <button
+          type="button"
+          onClick={onKies}
+          aria-label={aangevinkt ? "Uitvinken" : "Aanvinken"}
+          className="flex items-center justify-center flex-shrink-0 transition-all hover:opacity-70"
+          style={{ width: 34, borderRight: `1px solid ${actief ? "rgba(255,255,255,0.2)" : T.line}` }}
+        >
+          <span
+            className="flex items-center justify-center"
+            style={{
+              width: 15,
+              height: 15,
+              border: `1.5px solid ${aangevinkt ? T.navy : T.ink(0.28)}`,
+              backgroundColor: aangevinkt ? T.navy : "transparent",
+            }}
+          >
+            {aangevinkt && <Check size={10} color="#ffffff" />}
+          </span>
+        </button>
+      )}
+
       <button
         type="button"
-        onClick={onClick}
+        onClick={kiesStand ? onKies : onClick}
         className="flex-1 min-w-0 text-left hover:opacity-85 transition-all"
         style={{ padding: "10px 12px" }}
       >
@@ -1941,6 +2098,29 @@ function WachtrijKaart({
           </span>
         </div>
       </button>
+
+      {/* De advertentie openen zonder de rij te verlaten. In kiesstand loop je de lijst
+          langs en wil je er tussendoor een paar bekijken voor je ze aanvinkt; dan is
+          telkens naar het paneel rechts moeten juist wat je niet wilt. */}
+      {lead.advertentie_url && (
+        <a
+          href={lead.advertentie_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title="Advertentie openen in een nieuw tabblad"
+          aria-label="Advertentie openen"
+          className="flex items-center justify-center transition-all hover:opacity-70"
+          style={{
+            width: 36,
+            flexShrink: 0,
+            borderLeft: `1px solid ${actief ? "rgba(255,255,255,0.2)" : T.line}`,
+            color: actief ? "rgba(255,255,255,0.75)" : T.ink(0.4),
+          }}
+        >
+          <ExternalLink size={13} />
+        </a>
+      )}
 
       {/* Afvinken zodra je het bericht zelf hebt verstuurd. Hier in de rij, zodat je er
           een reeks achter elkaar kunt wegwerken zonder telkens naar rechts te hoeven. */}

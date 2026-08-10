@@ -90,6 +90,15 @@ Als u hier interesse in heeft kunt u mij terug mailen, bellen of een appje sture
 
 STOP DAARNA.
 
+WITREGELS TUSSEN DE ALINEA'S — DIT IS GEEN DETAIL
+Elk genummerd onderdeel hierboven is een eigen alinea, met een lege regel ertussen. Dus twee
+regelafbrekingen achter elkaar (\\n\\n), niet één. Ook boven de afsluitende regel hoort een lege
+regel.
+
+De verkoper leest dit op zijn telefoon in een berichtenbox. Vijf zinnen achter elkaar geplakt
+zijn daar een muur tekst waar hij bij de tweede zin op afhaakt, hoe goed de zinnen ook zijn.
+Aan een bericht dat niet gelezen wordt heeft niemand iets.
+
 NIETS ONDER DIE REGEL
 Eindig bij die afsluitende regel. Schrijf er géén "Met vriendelijke groet" onder, géén naam, géén
 bedrijfsnaam, géén adres en géén website. Het telefoonnummer staat al in die regel; alles wat je er
@@ -120,6 +129,40 @@ Geef UITSLUITEND dit JSON-object terug, zonder tekst eromheen:
   "bericht_mail": "de e-mail, u-vorm, met regelafbrekingen als \\n, eindigend BIJ de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer: geen groet, geen naam, geen bedrijfsnaam, geen adres en geen website.",
   "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 700 tot 1100 tekens; regelafbrekingen als \\n; u-vorm; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en eindig met exact de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer — geen groet, geen naam, geen bedrijfsnaam, geen website."
 }`;
+
+/** De afsluitende regel. Hier hoort altijd een witregel boven. */
+const SLOTREGEL = "Als u hier interesse in heeft";
+
+/**
+ * Zorgt dat de witregels tussen de alinea's blijven staan.
+ *
+ * De opdracht schrijft ze voor, maar een model dat zich één keer verslikt levert een muur
+ * tekst op waar niemand doorheen komt — en juist die tekst plakt iemand met de hand in de
+ * berichtenbox van een verkoper. Die persoon leest hem op zijn telefoon; zonder witregels
+ * haakt hij af bij de tweede zin. Daarom hier afgedwongen in plaats van gehoopt.
+ *
+ * Bewust voorzichtig: er wordt niets bij verzonnen. Alleen wat er staat wordt opgeruimd —
+ * losse regelafbrekingen worden alinea's, drie of meer witregels worden er één, en de
+ * slotregel krijgt gegarandeerd lucht boven zich.
+ */
+export function netAlineas(tekst: string): string {
+  let t = (tekst ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!t) return "";
+
+  // Het model gebruikte enkele regelafbrekingen als alineascheiding. Dat is bedoeld als
+  // "hier hoort een nieuwe alinea", dus maak er ook een echte van.
+  if (!t.includes("\n\n") && t.includes("\n")) t = t.replace(/\n/g, "\n\n");
+
+  // Drie of meer witregels achter elkaar zijn geen opmaak maar een ongelukje.
+  t = t.replace(/\n{3,}/g, "\n\n");
+
+  // De slotregel hoort los te staan, ook als hij tegen de vorige alinea aan is geplakt.
+  const i = t.lastIndexOf(SLOTREGEL);
+  if (i > 0 && !t.slice(0, i).endsWith("\n\n")) {
+    t = `${t.slice(0, i).replace(/\s+$/, "")}\n\n${t.slice(i)}`;
+  }
+  return t.trim();
+}
 
 function extractLaatsteJson(text: string): string | null {
   const eind = text.lastIndexOf("}");
@@ -215,8 +258,8 @@ export async function genereerBericht(
   }
 
   const onderwerp = (d.onderwerp ?? "").trim();
-  const berichtMail = (d.bericht_mail ?? "").trim();
-  const berichtKort = (d.bericht_kort ?? "").trim();
+  const berichtMail = netAlineas(d.bericht_mail ?? "");
+  const berichtKort = netAlineas(d.bericht_kort ?? "");
   if (!berichtMail || !onderwerp) return null;
 
   await sql`
