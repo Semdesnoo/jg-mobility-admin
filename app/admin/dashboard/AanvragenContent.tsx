@@ -134,6 +134,9 @@ export default function AanvragenContent({
   const [blad, setBlad] = useState<"dag" | "auto">("dag");
   const [toonAf, setToonAf] = useState(false);
   const [zoek, setZoek] = useState("");
+  // De bewerkstand staat hier en niet in het detailpaneel, zodat de knop in de balk
+  // bovenaan kan staan in plaats van op een eigen regel boven de kolommen.
+  const [bewerken, setBewerken] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [kanaalFilter, setKanaalFilter] = useState("");
   const [nieuw, setNieuw] = useState(false);
@@ -287,13 +290,32 @@ export default function AanvragenContent({
           </button>
         )}
 
-        <div className="ml-auto flex items-center gap-2.5">
-          <span style={klein()}>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden md:inline" style={klein()}>
             {zichtbaar.length === (aanvragen ?? []).length
               ? `${zichtbaar.length} ${zichtbaar.length === 1 ? "aanvraag" : "aanvragen"}`
               : `${zichtbaar.length} van ${(aanvragen ?? []).length}`}
             {vandaag > 0 && ` · ${vandaag} vandaag`}
           </span>
+          {openAanvraag && (
+            <button
+              type="button"
+              onClick={() => setBewerken((v) => !v)}
+              className="flex items-center gap-1.5 transition-all hover:opacity-80 whitespace-nowrap"
+              style={{
+                padding: "7px 11px",
+                fontFamily: T.inter,
+                fontSize: 12,
+                fontWeight: 600,
+                color: bewerken ? "#ffffff" : T.ink(0.55),
+                backgroundColor: bewerken ? T.navy : "transparent",
+                border: `1px solid ${bewerken ? T.navy : T.line2}`,
+              }}
+            >
+              {bewerken ? <Check size={12} /> : <Pencil size={12} />}
+              {bewerken ? "Klaar" : "Bewerken"}
+            </button>
+          )}
           <Btn size="sm" onClick={() => setNieuw((v) => !v)}>
             <Plus size={12} /> Nieuwe aanvraag
           </Btn>
@@ -327,7 +349,16 @@ export default function AanvragenContent({
         />
       ) : (
         <div className="flex flex-col xl:flex-row gap-4 items-start">
-          <div className="w-full xl:w-[340px] xl:flex-none flex flex-col gap-4">
+          {/* De lijst in een eigen paneel. Stond hij los, dan begon de eerste kaart onder
+              een dagkopje terwijl de panelen ernaast bovenaan begonnen — dat scheelde net
+              genoeg om scheef te ogen. Met een eigen kop staan alle vier de blokken op
+              dezelfde hoogte. */}
+          <div className="w-full xl:w-[340px] xl:flex-none">
+            <Panel
+              title={blad === "dag" ? "Per dag" : "Per auto"}
+              meta={`${zichtbaar.length}`}
+            >
+            <div className="flex flex-col gap-4">
             {blad === "dag"
               ? perDag.map(([datum, rijen]) => (
                   <div key={datum}>
@@ -357,6 +388,8 @@ export default function AanvragenContent({
                     </div>
                   </div>
                 ))}
+            </div>
+            </Panel>
           </div>
 
           <div className="w-full xl:flex-1 xl:min-w-0">
@@ -375,6 +408,7 @@ export default function AanvragenContent({
                 onFout={setFout}
                 onSluit={() => setOpen(null)}
                 onNaarTaxatie={onNaarTaxatie}
+                bewerken={bewerken}
               />
             ) : null}
           </div>
@@ -622,7 +656,8 @@ function Bewerk({
       <Field label={label}>
         <p
           style={{
-            padding: "9px 0",
+            padding: "9px 12px",
+            border: "1px solid transparent",
             fontFamily: T.inter,
             fontSize: 13,
             lineHeight: 1.5,
@@ -663,7 +698,7 @@ function Bewerk({
 
 /** Alles over één aanvraag, plus wie er nog meer achter dezelfde auto aan zit. */
 function Detail({
-  a, autos, anderen, herlaad, onFout, onSluit, onNaarTaxatie,
+  a, autos, anderen, herlaad, onFout, onSluit, onNaarTaxatie, bewerken,
 }: {
   a: Aanvraag;
   autos: Auto[];
@@ -672,16 +707,14 @@ function Detail({
   onFout: (s: string) => void;
   onSluit: () => void;
   onNaarTaxatie?: (kenteken: string) => void;
+  /** Staat het potlood in de balk bovenaan aan? Dan gaan alle velden open. */
+  bewerken: boolean;
 }) {
   // Lokaal bewerken zonder dat een herlaadactie je aanpassing overschrijft. Het component
   // krijgt key={a.id}, dus bij een andere aanvraag begint het opnieuw.
   // Alleen het antwoord houdt eigen state: dat wordt door de AI-opdracht gezet en moet
   // meteen zichtbaar zijn, ook voordat de lijst opnieuw is opgehaald.
   const [antwoord, setAntwoord] = useState(a.antwoord);
-  // Standaard lees je. Elf invoervelden naast elkaar maken van een aanvraag een formulier
-  // terwijl je meestal alleen even wilt zien wie het was en wat hij vroeg. Het potlood
-  // zet ze allemaal tegelijk open.
-  const [bewerken, setBewerken] = useState(false);
   const [gekopieerd, setGekopieerd] = useState(false);
   const [bezig, setBezig] = useState(false);
 
@@ -722,29 +755,6 @@ function Detail({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* De potloodknop. Een aanvraag lees je vaker dan je hem aanpast, dus staat het
-          scherm standaard dicht: rustiger, korter, en niets kan per ongeluk veranderen.
-          Eén knop opent alle velden tegelijk -- een potlood per veld zou elf potloden
-          betekenen. */}
-      <div className="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setBewerken((v) => !v)}
-          className="flex items-center gap-1.5 px-3 py-1.5 transition-all hover:opacity-80"
-          style={{
-            fontFamily: T.inter,
-            fontSize: 11.5,
-            fontWeight: 600,
-            color: bewerken ? "#ffffff" : T.ink(0.55),
-            backgroundColor: bewerken ? T.navy : "transparent",
-            border: `1px solid ${bewerken ? T.navy : T.line2}`,
-          }}
-        >
-          {bewerken ? <Check size={12} /> : <Pencil size={12} />}
-          {bewerken ? "Klaar met bewerken" : "Bewerken"}
-        </button>
-      </div>
-
       {/* Twee kolommen in plaats van een stapel. Als alles onder elkaar staat is dit
           paneel drie schermen hoog en scrol je langs contactgegevens heen op weg naar de
           deal -- terwijl er ruimte zat naast staat. Onder 1024px valt het vanzelf terug
@@ -850,7 +860,7 @@ function Detail({
               ))}
             </select>
             ) : (
-              <p style={{ padding: "9px 0", fontFamily: T.inter, fontSize: 13, color: a.auto_naam ? T.navy : T.ink(0.3) }}>
+              <p style={{ padding: "9px 12px", border: "1px solid transparent", fontFamily: T.inter, fontSize: 13, color: a.auto_naam ? T.navy : T.ink(0.3) }}>
                 {a.auto_naam || "—"}
               </p>
             )}
@@ -914,7 +924,7 @@ function Detail({
                 ))}
               </select>
             ) : (
-              <p style={{ padding: "9px 0", fontFamily: T.inter, fontSize: 13, color: T.navy }}>
+              <p style={{ padding: "9px 12px", border: "1px solid transparent", fontFamily: T.inter, fontSize: 13, color: T.navy }}>
                 {KANAAL[a.bron]?.label ?? a.bron}
               </p>
             )}
