@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, type ReactNode } from "react";
 import {
   Plus, Trash2, Check, Phone, Mail, MessageCircle, Store,
   Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign, ExternalLink, Search,
+  Pencil,
 } from "lucide-react";
 import {
   T, micro, body, klein, Panel, Btn, Chip, Field, inputStijl,
@@ -593,19 +594,50 @@ function NieuweAanvraag({
  * typ je niet meteen alles goed.
  */
 function Bewerk({
-  label, huidig, veld, patch, plaats, regels,
+  label, huidig, veld, patch, bewerken, plaats, regels,
 }: {
   label: string;
   /** Wat er nu in de database staat. Tevens de beginwaarde van het veld. */
   huidig: string;
   veld: string;
   patch: (velden: Record<string, unknown>) => Promise<boolean>;
+  /** Staat het potlood aan? Zo niet, dan lees je alleen. */
+  bewerken: boolean;
   plaats?: string;
   regels?: number;
 }) {
   const bewaar = (w: string) => {
     if (w !== huidig) patch({ [veld]: w });
   };
+
+  // Leesstand.
+  //
+  // Waarom dit de uitlijning oplost: je ziet nooit twee soorten velden tegelijk. Staat het
+  // potlood uit, dan is ELK veld deze alinea; staat het aan, dan is elk veld een
+  // invoervak. Binnen één stand zijn ze dus allemaal even hoog, en daardoor staan de rijen
+  // in de drie kolommen op dezelfde hoogte. Eerder liepen ze uiteen doordat de ene kolom
+  // twee velden naast elkaar zette en de andere er één.
+  if (!bewerken) {
+    return (
+      <Field label={label}>
+        <p
+          style={{
+            padding: "9px 0",
+            fontFamily: T.inter,
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: huidig ? T.navy : T.ink(0.3),
+            minHeight: regels ? regels * 20 + 18 : undefined,
+            whiteSpace: regels ? "pre-wrap" : undefined,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {huidig || "—"}
+        </p>
+      </Field>
+    );
+  }
+
   return (
     <Field label={label}>
       {regels ? (
@@ -646,6 +678,10 @@ function Detail({
   // Alleen het antwoord houdt eigen state: dat wordt door de AI-opdracht gezet en moet
   // meteen zichtbaar zijn, ook voordat de lijst opnieuw is opgehaald.
   const [antwoord, setAntwoord] = useState(a.antwoord);
+  // Standaard lees je. Elf invoervelden naast elkaar maken van een aanvraag een formulier
+  // terwijl je meestal alleen even wilt zien wie het was en wat hij vroeg. Het potlood
+  // zet ze allemaal tegelijk open.
+  const [bewerken, setBewerken] = useState(false);
   const [gekopieerd, setGekopieerd] = useState(false);
   const [bezig, setBezig] = useState(false);
 
@@ -686,6 +722,29 @@ function Detail({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* De potloodknop. Een aanvraag lees je vaker dan je hem aanpast, dus staat het
+          scherm standaard dicht: rustiger, korter, en niets kan per ongeluk veranderen.
+          Eén knop opent alle velden tegelijk -- een potlood per veld zou elf potloden
+          betekenen. */}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setBewerken((v) => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 transition-all hover:opacity-80"
+          style={{
+            fontFamily: T.inter,
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: bewerken ? "#ffffff" : T.ink(0.55),
+            backgroundColor: bewerken ? T.navy : "transparent",
+            border: `1px solid ${bewerken ? T.navy : T.line2}`,
+          }}
+        >
+          {bewerken ? <Check size={12} /> : <Pencil size={12} />}
+          {bewerken ? "Klaar met bewerken" : "Bewerken"}
+        </button>
+      </div>
+
       {/* Twee kolommen in plaats van een stapel. Als alles onder elkaar staat is dit
           paneel drie schermen hoog en scrol je langs contactgegevens heen op weg naar de
           deal -- terwijl er ruimte zat naast staat. Onder 1024px valt het vanzelf terug
@@ -709,31 +768,50 @@ function Detail({
           </a>
         )}
         <div className="grid grid-cols-1 gap-2">
-          <Bewerk patch={patch} label="Auto uit zijn advertentie"
+          <Bewerk patch={patch} bewerken={bewerken} label="Auto uit zijn advertentie"
             huidig={a.advertentie_titel} veld="advertentie_titel"
             plaats="Mercedes-Benz CLA 250 224pk 7G-DCT 2020 Zwart" />
-          <Bewerk patch={patch} label="Link naar de advertentie"
+          <Bewerk patch={patch} bewerken={bewerken} label="Link naar de advertentie"
             huidig={a.advertentie_url} veld="advertentie_url"
             plaats="https://www.marktplaats.nl/v/..." />
         </div>
 
         <div className="mt-3">
           <p className="mb-1" style={{ ...micro(), fontSize: 9 }}>Wat hij zei</p>
-          <textarea
-            key={a.bericht}
-            defaultValue={a.bericht}
-            onBlur={(e) => e.target.value !== a.bericht && patch({ bericht: e.target.value })}
-            placeholder="Zijn eigen woorden — plak hier het bericht dat hij stuurde."
-            style={{
-              ...inputStijl,
-              minHeight: 96,
-              resize: "vertical",
-              fontSize: 12.5,
-              lineHeight: 1.7,
-              backgroundColor: "rgba(0,19,55,0.025)",
-              borderLeft: `3px solid ${T.navy}`,
-            }}
-          />
+          {bewerken ? (
+            <textarea
+              key={a.bericht}
+              defaultValue={a.bericht}
+              onBlur={(e) => e.target.value !== a.bericht && patch({ bericht: e.target.value })}
+              placeholder="Zijn eigen woorden — plak hier het bericht dat hij stuurde."
+              style={{
+                ...inputStijl,
+                minHeight: 96,
+                resize: "vertical",
+                fontSize: 12.5,
+                lineHeight: 1.7,
+                backgroundColor: "rgba(0,19,55,0.025)",
+                borderLeft: `3px solid ${T.navy}`,
+              }}
+            />
+          ) : (
+            <p
+              style={{
+                padding: "9px 12px",
+                minHeight: 96,
+                fontFamily: T.inter,
+                fontSize: 12.5,
+                lineHeight: 1.7,
+                color: a.bericht ? T.navy : T.ink(0.3),
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+                backgroundColor: "rgba(0,19,55,0.025)",
+                borderLeft: `3px solid ${T.navy}`,
+              }}
+            >
+              {a.bericht || "Nog niets vastgelegd van wat hij zei."}
+            </p>
+          )}
         </div>
       </Panel>
 
@@ -745,8 +823,9 @@ function Detail({
       <div className="flex flex-col gap-3">
       {/* De handel: waar het over gaat bij ons, wat hij bood, wat hij inruilt. */}
       <Panel title="De deal">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           <Field label="Onze auto waar hij op reageert">
+            {bewerken ? (
             <select
               style={inputStijl}
               value={a.auto_id != null ? String(a.auto_id) : ""}
@@ -770,16 +849,21 @@ function Detail({
                 </option>
               ))}
             </select>
+            ) : (
+              <p style={{ padding: "9px 0", fontFamily: T.inter, fontSize: 13, color: a.auto_naam ? T.navy : T.ink(0.3) }}>
+                {a.auto_naam || "—"}
+              </p>
+            )}
           </Field>
-          <Bewerk patch={patch} label="Waar het over gaat"
+          <Bewerk patch={patch} bewerken={bewerken} label="Waar het over gaat"
             huidig={a.interesse} veld="interesse" plaats="Vraagt of de prijs kan zakken" />
-          <Bewerk patch={patch} label="Bood" huidig={a.bod} veld="bod" plaats="—" />
-          <Bewerk patch={patch} label="Wil inruilen" huidig={a.inruil} veld="inruil" plaats="—" />
-          <Bewerk patch={patch} label="Kenteken" huidig={a.kenteken} veld="kenteken" plaats="AB-123-C" />
+          <Bewerk patch={patch} bewerken={bewerken} label="Bood" huidig={a.bod} veld="bod" plaats="—" />
+          <Bewerk patch={patch} bewerken={bewerken} label="Wil inruilen" huidig={a.inruil} veld="inruil" plaats="—" />
+          <Bewerk patch={patch} bewerken={bewerken} label="Kenteken" huidig={a.kenteken} veld="kenteken" plaats="AB-123-C" />
         </div>
 
         <div className="mt-2.5">
-          <Bewerk patch={patch} label="Notitie" huidig={a.notitie}
+          <Bewerk patch={patch} bewerken={bewerken} label="Notitie" huidig={a.notitie}
             veld="notitie" regels={2} plaats="Belt maandag terug" />
         </div>
 
@@ -818,16 +902,22 @@ function Detail({
             </a>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Bewerk patch={patch} label="Naam" huidig={a.naam} veld="naam" plaats="—" />
-          <Bewerk patch={patch} label="Telefoon" huidig={a.telefoon} veld="telefoon" plaats="06 …" />
-          <Bewerk patch={patch} label="E-mail" huidig={a.email} veld="email" plaats="—" />
+        <div className="grid grid-cols-1 gap-2">
+          <Bewerk patch={patch} bewerken={bewerken} label="Naam" huidig={a.naam} veld="naam" plaats="—" />
+          <Bewerk patch={patch} bewerken={bewerken} label="Telefoon" huidig={a.telefoon} veld="telefoon" plaats="06 …" />
+          <Bewerk patch={patch} bewerken={bewerken} label="E-mail" huidig={a.email} veld="email" plaats="—" />
           <Field label="Waar kwam het binnen">
-            <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
-              {Object.keys(KANAAL).map((w) => (
-                <option key={w} value={w}>{KANAAL[w].label}</option>
-              ))}
-            </select>
+            {bewerken ? (
+              <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
+                {Object.keys(KANAAL).map((w) => (
+                  <option key={w} value={w}>{KANAAL[w].label}</option>
+                ))}
+              </select>
+            ) : (
+              <p style={{ padding: "9px 0", fontFamily: T.inter, fontSize: 13, color: T.navy }}>
+                {KANAAL[a.bron]?.label ?? a.bron}
+              </p>
+            )}
           </Field>
         </div>
       </Panel>
