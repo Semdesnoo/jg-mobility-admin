@@ -24,13 +24,17 @@ WAT JG MOBILITY AANBIEDT — consignatie is de aanbevolen route
    papieren. JG rekent daarvoor een kleine fee. De auto krijgt veel meer bereik en verkoopt
    doorgaans sneller en voor een betere prijs dan bij particuliere verkoop.
 
-   TWEE DINGEN DIE JG ONDERSCHEIDEN — noem ze allebei, kort:
+   DRIE DINGEN DIE JG ONDERSCHEIDEN — noem ze alle drie, kort:
    a) Veel verschillende kanalen. De auto komt niet op één site te staan maar op een groot aantal
       verkoopkanalen tegelijk (waaronder Marktplaats, AutoScout24, AutoTrack, Gaspedaal en
       NederlandMobiel). Dat is precies waar een particulier zelf niet bij kan.
    b) Financiering voor de koper. JG regelt snel en eenvoudig een financiering voor
       geïnteresseerden. Dat verbreedt de groep mensen die de auto kán kopen, en dat scheelt in hoe
       snel hij weg is.
+   c) Social media. De auto komt op onze eigen TikTok en Instagram, met een filmpje en een post.
+      Dat bereikt mensen die helemaal niet op een verkoopsite zitten te zoeken — en juist daar
+      komt vaak een koper vandaan die je op Marktplaats nooit had gevonden. Een particulier die
+      zijn eigen auto verkoopt heeft dat bereik niet.
 
 2. Directe inkoop. Kan ook, en je bent er in één keer vanaf. Maar leg er eerlijk bij waaróm dat
    minder oplevert: bij inkoop moet JG een handelsprijs betalen, want JG moet de auto daarna zelf
@@ -79,9 +83,11 @@ OPBOUW
    "Wij hebben interesse in…" — en niet door het bedrijf in de derde persoon te noemen ("JG
    Mobility in Barendrecht heeft interesse"). Dat laatste klinkt als een brief over jezelf in
    plaats van een bericht van jezelf.
-3. Drie tot vier zinnen: consignatie uitgelegd in gewone taal, met de winst voor de verkoper. Noem
-   daarbij allebei de onderscheidende punten hierboven: de vele verkoopkanalen én dat wij
-   financiering voor de koper regelen.
+3. Drie tot vijf zinnen: consignatie uitgelegd in gewone taal, met de winst voor de verkoper. Noem
+   daarbij alle drie de onderscheidende punten hierboven: de vele verkoopkanalen, het filmpje op
+   onze TikTok en Instagram, én dat wij financiering voor de koper regelen. Zet die drie niet als
+   een opsomming achter elkaar maar verwerk ze in lopende zinnen — een lijstje leest als een
+   folder.
 4. Eén of twee zinnen: inkoop kan ook als hij er snel vanaf wil, maar dan hoort er een handelsprijs
    bij omdat JG de auto daarna zelf nog moet verkopen — via consignatie houdt hij dus meestal meer over.
 5. De afsluitende regel. Neem die LETTERLIJK over, woord voor woord:
@@ -127,7 +133,7 @@ Geef UITSLUITEND dit JSON-object terug, zonder tekst eromheen:
 {
   "onderwerp": "de e-mailonderwerpregel. Spreek de verkoper aan over ZIJN auto — dus 'Uw ${lead.merk} ${lead.model}${lead.bouwjaar ? ` uit ${lead.bouwjaar}` : ""} op ${lead.bron || "Marktplaats"}' of iets in die geest. NOOIT iets als '${lead.merk} ${lead.model} te koop': dat leest als een advertentie van hemzelf en niet als een bericht van een bedrijf. Geen reclametaal.",
   "bericht_mail": "de e-mail, u-vorm, met regelafbrekingen als \\n, eindigend BIJ de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer: geen groet, geen naam, geen bedrijfsnaam, geen adres en geen website.",
-  "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 700 tot 1100 tekens; regelafbrekingen als \\n; u-vorm; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en eindig met exact de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer — geen groet, geen naam, geen bedrijfsnaam, geen website."
+  "bericht_kort": "HET BELANGRIJKSTE VELD. Het bericht voor de berichtenbox van ${lead.bron || "het platform"}, waar het met de hand in geplakt wordt. Regels: 900 tot 1400 tekens; regelafbrekingen als \\n; u-vorm; geen onderwerpregel, begin meteen met de eerste zin; noem deze auto concreet; leg consignatie uit met de reden waarom inkoop minder oplevert; en eindig met exact de afsluitende regel uit de opbouw hierboven. Daaronder komt niets meer — geen groet, geen naam, geen bedrijfsnaam, geen website."
 }`;
 
 /** De afsluitende regel. Hier hoort altijd een witregel boven. */
