@@ -498,12 +498,19 @@ export default function AanvragenContent({
               een dagkopje terwijl de panelen ernaast bovenaan begonnen — dat scheelde net
               genoeg om scheef te ogen. Met een eigen kop staan alle vier de blokken op
               dezelfde hoogte. */}
-          <div className="w-full xl:w-[340px] xl:flex-none">
+          {/* De lijst blijft staan en scrolt in zichzelf. Zonder dit groeide de pagina mee
+              met het aantal aanvragen: bij tachtig regels sta je meters naar beneden te
+              scrollen terwijl het paneel waar je naartoe wilt allang uit beeld is. Nu is de
+              lijst nooit hoger dan het scherm en blijft het detail ernaast in zicht. */}
+          <div className="w-full xl:w-[340px] xl:flex-none xl:sticky" style={{ top: 16 }}>
             <Panel
               title={`${weergave === "archief" ? "Archief" : ""}${weergave === "archief" ? " · " : ""}${blad === "dag" ? "Per dag" : "Per auto"}`.trim()}
               meta={`${zichtbaar.length}`}
             >
-            <div className="flex flex-col gap-4">
+            {/* De hoogtegrens staat hier en niet op het paneel: de body van Panel is een
+                flex-item zonder min-height 0, dus die krimpt niet mee en zou een grens op
+                het paneel gewoon negeren. */}
+            <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
             {blad === "dag"
               ? perDag.map(([datum, rijen]) => (
                   <div key={datum}>
