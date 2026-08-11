@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // betekent, dus alleen invullen wat er echt in staat.
     kenteken, vin, klant_adres, klant_postcode, klant_stad,
     bodemprijs, fee_percentage, fee_vast, looptijd_maanden, uitbetaling_dagen,
-    bijzondere_afspraken, contract_nr, contract_op,
+    terugname_kosten, bijzondere_afspraken, contract_nr, contract_op,
   } = body;
 
   const getal = (w: unknown) =>
@@ -50,6 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       fee_vast          = COALESCE(${getal(fee_vast)},          fee_vast),
       looptijd_maanden  = COALESCE(${getal(looptijd_maanden)},  looptijd_maanden),
       uitbetaling_dagen = COALESCE(${getal(uitbetaling_dagen)}, uitbetaling_dagen),
+      terugname_kosten  = COALESCE(${getal(terugname_kosten)},  terugname_kosten),
       bijzondere_afspraken = COALESCE(${bijzondere_afspraken ?? null}, bijzondere_afspraken),
       contract_nr = COALESCE(${contract_nr ?? null}, contract_nr),
       contract_op = COALESCE(${contract_op ?? null}, contract_op),

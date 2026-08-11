@@ -34,9 +34,17 @@ type Cosignatie = {
   klant_adres?: string; klant_postcode?: string; klant_stad?: string;
   bodemprijs?: number; fee_percentage?: number; fee_vast?: number;
   looptijd_maanden?: number; uitbetaling_dagen?: number;
+  terugname_kosten?: number;
   bijzondere_afspraken?: string;
   contract_nr?: string; contract_op?: string;
 };
+
+/**
+ * De vaste voorwaarden van JG Mobility. Dit zijn geen verzonnen standaarden maar wat er in
+ * de praktijk wordt afgesproken, dus een nieuw contract staat meteen goed en er hoeft
+ * alleen iets aangepast te worden als er van wordt afgeweken.
+ */
+const STANDAARD = { fee: 10, looptijd: 6, uitbetaling: 0, terugname: 50 } as const;
 
 const getal = (w: unknown) => Number(String(w ?? "").replace(/[^0-9.,-]/g, "").replace(",", ".")) || 0;
 
@@ -183,10 +191,13 @@ export default function ContractenContent() {
       kenteken: c.kenteken, vin: c.vin, km: c.km, kleur: c.kleur, brandstof: c.brandstof,
       vraagprijs: getal(c.vraagprijs),
       bodemprijs: getal(c.bodemprijs),
-      fee_percentage: getal(c.fee_percentage),
       fee_vast: getal(c.fee_vast),
-      looptijd_maanden: getal(c.looptijd_maanden) || 6,
-      uitbetaling_dagen: getal(c.uitbetaling_dagen) || 3,
+      looptijd_maanden: getal(c.looptijd_maanden) || STANDAARD.looptijd,
+      fee_percentage: getal(c.fee_percentage) || STANDAARD.fee,
+      // Nul is hier een echte waarde ("dezelfde dag") en geen ontbrekende invoer, dus geen
+      // || maar een expliciete controle.
+      uitbetaling_dagen: c.uitbetaling_dagen == null ? STANDAARD.uitbetaling : getal(c.uitbetaling_dagen),
+      terugname_kosten: c.terugname_kosten == null ? STANDAARD.terugname : getal(c.terugname_kosten),
       bijzondere_afspraken: c.bijzondere_afspraken,
     };
     return genereerContractHTML(gegevens, logo);
@@ -318,18 +329,22 @@ export default function ContractenContent() {
                 }
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <Veld label="Vergoeding in %" waarde={gekozen.fee_percentage} veld="fee_percentage"
-                    patch={patch} plaats="7" achtervoegsel="%" />
+                  <Veld label="Vergoeding in %" waarde={gekozen.fee_percentage ?? STANDAARD.fee} veld="fee_percentage"
+                    patch={patch} plaats="10" achtervoegsel="%" />
                   <Veld label="Of een vast bedrag" waarde={gekozen.fee_vast} veld="fee_vast"
                     patch={patch} plaats="0" achtervoegsel="€" />
                   <Veld label="Vraagprijs" waarde={gekozen.vraagprijs} veld="vraagprijs"
                     patch={patch} plaats="18500" achtervoegsel="€" />
                   <Veld label="Niet verkopen onder" waarde={gekozen.bodemprijs} veld="bodemprijs"
                     patch={patch} plaats="17000" achtervoegsel="€" />
-                  <Veld label="Looptijd in maanden" waarde={gekozen.looptijd_maanden ?? 6} veld="looptijd_maanden"
+                  <Veld label="Looptijd in maanden" waarde={gekozen.looptijd_maanden ?? STANDAARD.looptijd} veld="looptijd_maanden"
                     patch={patch} plaats="6" />
-                  <Veld label="Uitbetalen binnen (werkdagen)" waarde={gekozen.uitbetaling_dagen ?? 3} veld="uitbetaling_dagen"
-                    patch={patch} plaats="3" />
+                  <Veld label="Uitbetalen na (werkdagen, 0 = dezelfde dag)"
+                    waarde={gekozen.uitbetaling_dagen ?? STANDAARD.uitbetaling} veld="uitbetaling_dagen"
+                    patch={patch} plaats="0" />
+                  <Veld label="Bij terugnemen: advertentiekosten"
+                    waarde={gekozen.terugname_kosten ?? STANDAARD.terugname} veld="terugname_kosten"
+                    patch={patch} plaats="50" achtervoegsel="€" />
                 </div>
                 <div className="mt-2">
                   <Field label="Bijzondere afspraken (komt onder de voorwaarden)">

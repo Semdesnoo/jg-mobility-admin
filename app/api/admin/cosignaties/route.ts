@@ -21,10 +21,11 @@ async function migrate() {
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS klant_postcode TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS klant_stad TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bodemprijs INTEGER DEFAULT 0`;
-    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS fee_percentage NUMERIC DEFAULT 0`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS fee_percentage NUMERIC DEFAULT 10`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS fee_vast INTEGER DEFAULT 0`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS looptijd_maanden INTEGER DEFAULT 6`;
-    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS uitbetaling_dagen INTEGER DEFAULT 3`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS uitbetaling_dagen INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS terugname_kosten INTEGER DEFAULT 50`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bijzondere_afspraken TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_nr TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_op TEXT DEFAULT ''`;

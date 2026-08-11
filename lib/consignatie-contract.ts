@@ -53,8 +53,10 @@ export type ContractGegevens = {
   fee_vast: number;
   /** Looptijd in maanden. */
   looptijd_maanden: number;
-  /** Hoeveel werkdagen na ontvangst van de koopsom JG doorbetaalt. */
+  /** Werkdagen na ontvangst van de koopsom. 0 betekent: dezelfde dag nog. */
   uitbetaling_dagen: number;
+  /** Wat de eigenaar betaalt als hij de auto tussentijds terugneemt. */
+  terugname_kosten: number;
   /** Vrije aanvulling die onder de voorwaarden komt te staan. */
   bijzondere_afspraken?: string;
 };
@@ -113,7 +115,9 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
         "Bezichtigingen en proefritten op afspraak, altijd onder begeleiding van een medewerker van JG Mobility en uitsluitend met een geldig rijbewijs en legitimatie van de bestuurder.",
         "De onderhandeling over de prijs, binnen de grenzen die hieronder zijn afgesproken.",
         "De volledige afhandeling: koopovereenkomst, vrijwaring, tenaamstelling en de betaling.",
-        "Voor deze werkzaamheden worden vooraf geen kosten in rekening gebracht. Er zijn geen instapkosten en geen advertentiekosten.",
+        c.terugname_kosten > 0
+          ? `Voor deze werkzaamheden worden vooraf geen kosten in rekening gebracht: geen instapkosten en geen advertentiekosten. Alleen wanneer de eigenaar de auto tussentijds terugneemt geldt de regeling uit artikel 7.`
+          : "Voor deze werkzaamheden worden vooraf geen kosten in rekening gebracht. Er zijn geen instapkosten en geen advertentiekosten.",
       ],
     },
     {
@@ -124,6 +128,7 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
           ? `JG Mobility verkoopt de auto niet voor minder dan ${euro(c.bodemprijs)} zonder voorafgaande instemming van de eigenaar. Binnen die grens mag JG Mobility zelfstandig onderhandelen.`
           : "Over elk bod dat afwijkt van de vraagprijs wordt eerst met de eigenaar overlegd.",
         "De vraagprijs kan tussentijds in onderling overleg worden aangepast. JG Mobility doet daarvoor een voorstel op basis van de reacties en het vergelijkbare aanbod; de eigenaar beslist.",
+        "JG Mobility spant zich in om de auto zo snel mogelijk en tegen een realistische marktprijs te verkopen.",
       ],
     },
     {
@@ -132,6 +137,7 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
         `De vergoeding voor JG Mobility bedraagt ${vergoeding || "het afgesproken bedrag"}.`,
         "De vergoeding is uitsluitend verschuldigd wanneer de auto daadwerkelijk verkocht is. Wordt de auto niet verkocht, dan is de eigenaar niets verschuldigd.",
         "De vergoeding wordt verrekend met de koopsom; de eigenaar ontvangt het restant. Hij hoeft dus niets over te maken.",
+        "In deze vergoeding is inbegrepen dat de koper bij JG Mobility één jaar garantie op de auto krijgt. Die garantie loopt via JG Mobility en niet via de eigenaar; de eigenaar wordt na de verkoop niet aangesproken op gebreken die onder die garantie vallen.",
         "Kosten die JG Mobility op verzoek van de eigenaar maakt buiten het bovenstaande om — bijvoorbeeld reparaties, een onderhoudsbeurt of een APK-keuring — worden vooraf afgestemd en apart in rekening gebracht.",
       ],
     },
@@ -139,7 +145,9 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
       kop: "5 · Verkoop en uitbetaling",
       leden: [
         "De koper betaalt aan JG Mobility. JG Mobility draagt zorg voor de vrijwaring en de tenaamstelling op naam van de koper.",
-        `De opbrengst minus de vergoeding wordt binnen ${c.uitbetaling_dagen} werkdagen na ontvangst van de volledige koopsom overgemaakt op het rekeningnummer van de eigenaar.`,
+        c.uitbetaling_dagen <= 0
+          ? "Zodra de auto verkocht is en JG Mobility de betaling heeft ontvangen, wordt de opbrengst minus de vergoeding diezelfde dag nog overgemaakt op het rekeningnummer van de eigenaar."
+          : `De opbrengst minus de vergoeding wordt binnen ${c.uitbetaling_dagen} werkdagen na ontvangst van de volledige koopsom overgemaakt op het rekeningnummer van de eigenaar.`,
         "De eigenaar ontvangt een afrekening waarop de verkoopprijs, de vergoeding en het uit te betalen bedrag staan vermeld.",
       ],
     },
@@ -156,10 +164,12 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
     {
       kop: "7 · Beëindigen",
       leden: [
-        "Beide partijen kunnen de overeenkomst tussentijds beëindigen met een opzegtermijn van zeven dagen, schriftelijk of per e-mail aan info@jgmobility.nl.",
+        "De eigenaar kan de overeenkomst altijd tussentijds beëindigen, schriftelijk of per e-mail aan info@jgmobility.nl. Ook JG Mobility kan de overeenkomst beëindigen.",
         "Is er op het moment van opzeggen al een koopovereenkomst met een koper gesloten, dan wordt die eerst afgewikkeld en is de vergoeding gewoon verschuldigd.",
         "Bij beëindiging haalt de eigenaar de auto binnen zeven dagen op, tijdens openingstijden en op afspraak. De sleutels en de papieren worden dan overhandigd.",
-        "Er worden bij beëindiging geen kosten in rekening gebracht voor de foto's, de advertenties of de tijd die tot dan toe is besteed.",
+        c.terugname_kosten > 0
+          ? `Neemt de eigenaar de auto tussentijds terug, dan wordt uitsluitend ${euro(c.terugname_kosten)} aan advertentiekosten in rekening gebracht. Voor de foto's, de advertentieteksten en de bestede tijd wordt niets berekend.`
+          : "Er worden bij beëindiging geen kosten in rekening gebracht.",
       ],
     },
     {
@@ -167,7 +177,8 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
       leden: [
         "De eigenaar verklaart dat hij eigenaar is van de auto, dat er geen financiering, lease of beslag op rust, en dat de kilometerstand naar zijn beste weten juist is.",
         "De eigenaar meldt bekende gebreken en schadeverleden vooraf. Komt er tijdens de verkoop iets aan het licht dat niet gemeld is, dan mag JG Mobility de advertentie aanpassen of de overeenkomst beëindigen.",
-        "De auto blijft verzekerd door de eigenaar zolang hij op zijn naam staat. JG Mobility is verzekerd voor het gebruik van de auto bij bezichtigingen en proefritten onder eigen begeleiding.",
+        "Proefritten worden gereden met de groene handelaarskentekenplaten van JG Mobility. Die zijn allrisk verzekerd, zodat schade die tijdens een proefrit ontstaat via die verzekering is gedekt. De eigen verzekering van de eigenaar wordt daarvoor dus niet aangesproken.",
+        "Buiten die proefritten blijft de auto verzekerd door de eigenaar zolang hij op zijn naam staat.",
         "JG Mobility gaat met de auto om als met de eigen voorraad. Schade die tijdens de bewaring bij JG Mobility ontstaat en aan JG Mobility is toe te rekenen, wordt door JG Mobility hersteld of vergoed.",
         "De auto wordt niet gebruikt voor andere doeleinden dan bezichtigingen, proefritten en het verplaatsen op of rond het terrein.",
       ],
@@ -233,6 +244,37 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
       </tr>`
     )
     .join("");
+
+  // Wat houdt de eigenaar over? Gerekend met de vraagprijs die bovenaan staat, zodat het
+  // voorbeeld nooit een ander percentage laat zien dan er is afgesproken. Dit is de vraag
+  // die anders elke keer telefonisch gesteld wordt.
+  const heeftVoorbeeld = c.vraagprijs > 0 && (c.fee_percentage > 0 || c.fee_vast > 0);
+  const kosten = Math.round((c.vraagprijs * c.fee_percentage) / 100) + c.fee_vast;
+  const netto = c.vraagprijs - kosten;
+  const voorbeeld = heeftVoorbeeld
+    ? `<div style="margin-bottom:26px;padding:16px 18px;background:#f8fafc;border-left:3px solid #001337;page-break-inside:avoid">
+         <div style="font-size:8.5pt;letter-spacing:1px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:9px">Wat u overhoudt — rekenvoorbeeld</div>
+         <table style="width:100%;max-width:340px">
+           <tr>
+             <td style="padding:3px 0;font-size:9.5pt;color:#334155">Verkoopprijs</td>
+             <td style="padding:3px 0;font-size:9.5pt;color:#1e293b;text-align:right;font-weight:600">${euro(c.vraagprijs)}</td>
+           </tr>
+           <tr>
+             <td style="padding:3px 0;font-size:9.5pt;color:#334155">Consignatiekosten${c.fee_percentage > 0 ? ` (${c.fee_percentage}%)` : ""}</td>
+             <td style="padding:3px 0;font-size:9.5pt;color:#1e293b;text-align:right;font-weight:600">− ${euro(kosten)}</td>
+           </tr>
+           <tr>
+             <td style="padding:7px 0 0;font-size:10pt;color:#001337;font-weight:700;border-top:1px solid #cbd5e1">U ontvangt</td>
+             <td style="padding:7px 0 0;font-size:11pt;color:#001337;text-align:right;font-weight:700;border-top:1px solid #cbd5e1">${euro(netto)}</td>
+           </tr>
+         </table>
+         <div style="margin-top:10px;font-size:8.5pt;color:#64748b;line-height:1.6">
+           Gerekend met de vraagprijs van nu. Wordt de auto voor een ander bedrag verkocht, dan
+           verandert de opbrengst mee — het percentage blijft hetzelfde. In deze kosten zit ook
+           de garantie van één jaar die de koper bij ons krijgt.
+         </div>
+       </div>`
+    : "";
 
   const voorwaarden = artikelen(c)
     .map(
@@ -328,6 +370,8 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
       </td>
     </tr>
   </table>
+
+  ${voorbeeld}
 
   <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:6px;margin-bottom:16px">Voorwaarden</div>
   ${voorwaarden}
