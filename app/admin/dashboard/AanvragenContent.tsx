@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import {
   Plus, Trash2, Check, Phone, Mail, MessageCircle, Store,
-  Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign, ExternalLink,
+  Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign, ExternalLink, Search,
 } from "lucide-react";
 import {
   T, micro, body, klein, Panel, Btn, Chip, Field, inputStijl,
@@ -66,6 +66,42 @@ const STATUS: Record<string, { label: string; kleur: string }> = {
   verloren: { label: "Verloren", kleur: T.ink(0.4) },
 };
 
+/** Alle filtervelden even hoog: de padding bepaalt de hoogte, niet een vaste maat. */
+const FILTER_VELD = { ...inputStijl, padding: "7px 10px", fontSize: 12.5 } as const;
+
+/**
+ * Eén knop uit een keuze. Aan elkaar vast betekent "kies er één"; losse chips zouden
+ * lezen als schakelaars die allemaal tegelijk aan kunnen staan.
+ */
+function Segment({
+  actief, onClick, children, omrand = false,
+}: {
+  actief: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  /** Los van een groep? Dan heeft hij zijn eigen rand nodig. */
+  omrand?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-3 transition-all hover:opacity-80 whitespace-nowrap"
+      style={{
+        padding: "7px 11px",
+        fontFamily: T.inter,
+        fontSize: 12,
+        fontWeight: 600,
+        color: actief ? "#ffffff" : T.ink(0.55),
+        backgroundColor: actief ? T.navy : "transparent",
+        border: omrand ? `1px solid ${actief ? T.navy : T.line2}` : "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** "vandaag" / "gisteren" / "maandag 10 augustus" — een datum die je zonder rekenen leest. */
 function dagKop(iso: string): string {
   const d = new Date(iso);
@@ -96,6 +132,9 @@ export default function AanvragenContent({
   const [fout, setFout] = useState("");
   const [blad, setBlad] = useState<"dag" | "auto">("dag");
   const [toonAf, setToonAf] = useState(false);
+  const [zoek, setZoek] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [kanaalFilter, setKanaalFilter] = useState("");
   const [nieuw, setNieuw] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -120,10 +159,24 @@ export default function AanvragenContent({
     if (Array.isArray(d?.aanvragen)) setAanvragen(d.aanvragen);
   };
 
-  const zichtbaar = useMemo(
-    () => (aanvragen ?? []).filter((a) => (toonAf ? true : !a.afgehandeld_op)),
-    [aanvragen, toonAf]
-  );
+  const zichtbaar = useMemo(() => {
+    const term = zoek.trim().toLowerCase();
+    return (aanvragen ?? []).filter((a) => {
+      if (!toonAf && a.afgehandeld_op) return false;
+      if (statusFilter && a.status !== statusFilter) return false;
+      if (kanaalFilter && a.bron !== kanaalFilter) return false;
+      if (!term) return true;
+      // Zoeken over alles waar je het aan zou herkennen: de persoon, zijn auto, onze auto,
+      // en wat hij letterlijk zei. Dat laatste is vaak het enige wat je nog weet.
+      return [
+        a.naam, a.telefoon, a.email, a.onderwerp, a.interesse,
+        a.advertentie_titel, a.auto_naam, a.kenteken, a.bericht, a.notitie,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [aanvragen, toonAf, zoek, statusFilter, kanaalFilter]);
 
   // Per dag, nieuwste dag eerst. De volgorde binnen een dag komt uit de API (nieuwste eerst).
   const perDag = useMemo(() => {
@@ -161,20 +214,83 @@ export default function AanvragenContent({
     <div className="px-4 md:px-8 py-4 md:py-6" style={{ maxWidth: 1500, margin: "0 auto" }}>
       {fout && <div className="mb-4"><Foutmelding>{fout}</Foutmelding></div>}
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <Chip active={blad === "dag"} onClick={() => setBlad("dag")}>
-          <CalendarDays size={11} /> Per dag
-        </Chip>
-        <Chip active={blad === "auto"} onClick={() => setBlad("auto")}>
-          <Car size={11} /> Per auto {perAuto.length > 0 && <span style={{ opacity: 0.6 }}>{perAuto.length}</span>}
-        </Chip>
-        <Chip active={toonAf} onClick={() => setToonAf((v) => !v)}>
-          {toonAf ? "Ook afgehandeld" : "Alleen open"} <span style={{ opacity: 0.6 }}>{nogTeDoen}</span>
-        </Chip>
-        <div className="ml-auto flex items-center gap-2">
-          {vandaag > 0 && (
-            <span style={klein()}>{vandaag} vandaag binnengekomen</span>
-          )}
+      {/* Eén balk in plaats van losse chips van verschillende breedte.
+          Geen vaste hoogte op de velden: die botst met de padding van het standaardveld
+          en knipt de tekst onderaan af. De padding bepaalt de hoogte, dan zijn ze
+          vanzelf allemaal even hoog. */}
+      <div
+        className="flex flex-wrap items-center gap-2 px-3 py-2.5 mb-4"
+        style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
+      >
+        {/* Twee knoppen die aan elkaar vast zitten lezen als één keuze; twee losse
+            chips lezen als twee dingen die allebei aan kunnen staan. */}
+        <div className="flex" style={{ border: `1px solid ${T.line2}` }}>
+          <Segment actief={blad === "dag"} onClick={() => setBlad("dag")}>
+            <CalendarDays size={11} /> Per dag
+          </Segment>
+          <Segment actief={blad === "auto"} onClick={() => setBlad("auto")}>
+            <Car size={11} /> Per auto
+          </Segment>
+        </div>
+
+        <div className="relative flex-1" style={{ minWidth: 200 }}>
+          <Search
+            size={13}
+            color={T.ink(0.3)}
+            style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+          />
+          <input
+            value={zoek}
+            onChange={(e) => setZoek(e.target.value)}
+            placeholder="Zoek op naam, auto, kenteken of wat hij zei…"
+            style={{ ...FILTER_VELD, paddingLeft: 28 }}
+          />
+        </div>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ ...FILTER_VELD, width: "auto", minWidth: 130, paddingRight: 26 }}
+        >
+          <option value="">Elke status</option>
+          {Object.entries(STATUS).map(([w, st]) => (
+            <option key={w} value={w}>{st.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={kanaalFilter}
+          onChange={(e) => setKanaalFilter(e.target.value)}
+          style={{ ...FILTER_VELD, width: "auto", minWidth: 130, paddingRight: 26 }}
+        >
+          <option value="">Elk kanaal</option>
+          {kanalen.map((w) => (
+            <option key={w} value={w}>{KANAAL[w]?.label ?? w}</option>
+          ))}
+        </select>
+
+        <Segment actief={!toonAf} onClick={() => setToonAf((v) => !v)} omrand>
+          {toonAf ? "Alles" : `Alleen open · ${nogTeDoen}`}
+        </Segment>
+
+        {(zoek || statusFilter || kanaalFilter) && (
+          <button
+            type="button"
+            onClick={() => { setZoek(""); setStatusFilter(""); setKanaalFilter(""); }}
+            className="transition-all hover:opacity-70"
+            style={{ ...klein(T.ink(0.45)), textDecoration: "underline" }}
+          >
+            wis filters
+          </button>
+        )}
+
+        <div className="ml-auto flex items-center gap-2.5">
+          <span style={klein()}>
+            {zichtbaar.length === (aanvragen ?? []).length
+              ? `${zichtbaar.length} ${zichtbaar.length === 1 ? "aanvraag" : "aanvragen"}`
+              : `${zichtbaar.length} van ${(aanvragen ?? []).length}`}
+            {vandaag > 0 && ` · ${vandaag} vandaag`}
+          </span>
           <Btn size="sm" onClick={() => setNieuw((v) => !v)}>
             <Plus size={12} /> Nieuwe aanvraag
           </Btn>
@@ -195,10 +311,16 @@ export default function AanvragenContent({
       {aanvragen === null ? (
         <div className="flex justify-center py-16"><Spinner size={22} /></div>
       ) : zichtbaar.length === 0 ? (
+        // Onderscheid maken tussen "er is niets" en "je filters laten niets door" — anders
+        // ga je een aanvraag zoeken die er gewoon is.
         <Empty
           icon={<Users size={30} color={T.ink(0.2)} />}
-          title="Nog niets vastgelegd"
-          body="Zet met de knop hierboven een aanvraag erbij, of klik bij een mail in het E-mail-tabblad op “Zet in overzicht”."
+          title={(aanvragen ?? []).length === 0 ? "Nog niets vastgelegd" : "Niets dat hieraan voldoet"}
+          body={
+            (aanvragen ?? []).length === 0
+              ? "Zet met de knop hierboven een aanvraag erbij, of klik bij een mail in het E-mail-tabblad op “Zet in overzicht”."
+              : `Er ${(aanvragen ?? []).length === 1 ? "staat 1 aanvraag" : `staan ${(aanvragen ?? []).length} aanvragen`} in het overzicht, maar geen enkele voldoet aan deze filters. Zet ze uit met “wis filters”.`
+          }
         />
       ) : (
         <div className="flex flex-col xl:flex-row gap-4 items-start">
