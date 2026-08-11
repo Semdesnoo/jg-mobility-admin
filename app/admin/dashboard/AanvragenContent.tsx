@@ -37,7 +37,7 @@ type Aanvraag = {
   status: string; aangemaakt: string;
   gmail_message_id: string | null;
   onderwerp: string; kenteken: string;
-  auto_id: number | null; auto_naam: string; bod: string; inruil: string;
+  auto_id: number | null; auto_naam: string; bod: string; ons_bod: string; inruil: string;
   advertentie_titel: string; advertentie_url: string; bericht: string;
   antwoord: string; antwoord_verstuurd_op: string | null; afgehandeld_op: string | null;
 };
@@ -555,6 +555,7 @@ function Regel({
   const feiten = [
     !toonAuto || !kop ? a.onderwerp || a.interesse : "",
     a.bod ? `bood ${a.bod}` : "",
+    a.ons_bod ? `wij ${a.ons_bod}` : "",
     a.inruil ? `inruil ${a.inruil}` : "",
   ].filter(Boolean);
 
@@ -634,7 +635,7 @@ function NieuweAanvraag({
 }) {
   const leeg = {
     naam: "", telefoon: "", email: "", bron: "whatsapp",
-    onderwerp: "", autoId: "", bod: "", inruil: "", notitie: "",
+    onderwerp: "", autoId: "", bod: "", onsBod: "", inruil: "", notitie: "",
     advertentieTitel: "", advertentieUrl: "", bericht: "",
   };
   const [f, setF] = useState(leeg);
@@ -706,6 +707,9 @@ function NieuweAanvraag({
         </Field>
         <Field label="Wat bood hij">
           <input style={inputStijl} value={f.bod} onChange={(e) => zet("bod", e.target.value)} placeholder="17.500" />
+        </Field>
+        <Field label="Wat wij bieden">
+          <input style={inputStijl} value={f.onsBod} onChange={(e) => zet("onsBod", e.target.value)} placeholder="18.000" />
         </Field>
         <Field label="Wil inruilen">
           <input style={inputStijl} value={f.inruil} onChange={(e) => zet("inruil", e.target.value)} placeholder="Polo 2014, 160.000 km" />
@@ -1002,7 +1006,12 @@ function Detail({
           </Field>
           <Bewerk patch={patch} bewerken={bewerken} label="Waar het over gaat"
             huidig={a.interesse} veld="interesse" plaats="Vraagt of de prijs kan zakken" />
-          <Bewerk patch={patch} bewerken={bewerken} label="Bood" huidig={a.bod} veld="bod" plaats="—" />
+          <Bewerk patch={patch} bewerken={bewerken} label="Wat hij vraagt of bood" huidig={a.bod} veld="bod" plaats="—" />
+          {/* Onze kant van hetzelfde gesprek. Stond er niet, terwijl dit het getal is
+              waar je hem op terugbelt. Vrije tekst met opzet: een bod is vaak
+              "18.000, of 19.500 in consignatie" en niet één bedrag. */}
+          <Bewerk patch={patch} bewerken={bewerken} label="Wat wij bieden" huidig={a.ons_bod}
+            veld="ons_bod" plaats="18.000 — of 19.500 in consignatie" />
           <Bewerk patch={patch} bewerken={bewerken} label="Wil inruilen" huidig={a.inruil} veld="inruil" plaats="—" />
           <Bewerk patch={patch} bewerken={bewerken} label="Kenteken" huidig={a.kenteken} veld="kenteken" plaats="AB-123-C" />
         </div>

@@ -45,6 +45,12 @@ export type Aanvraag = {
   auto_naam: string;
   /** Wat deze persoon geboden heeft. Vrije tekst: "17.500" of "17.5 met inruil". */
   bod: string;
+  /**
+   * Wat WIJ voor zijn auto bieden. Iets anders dan `bod`: dat is zijn kant van het
+   * gesprek, dit is de onze. Vrije tekst, want een bod is vaak "18.000 of 19.500 in
+   * consignatie" en niet één getal.
+   */
+  ons_bod: string;
   /** Wat hij wil inruilen, in zijn eigen woorden. Leeg als hij niets inruilt. */
   inruil: string;
   /**
@@ -98,6 +104,7 @@ async function init(): Promise<void> {
     "auto_id INTEGER",
     "auto_naam TEXT DEFAULT ''",
     "bod TEXT DEFAULT ''",
+    "ons_bod TEXT DEFAULT ''",
     "inruil TEXT DEFAULT ''",
     "advertentie_titel TEXT DEFAULT ''",
     "advertentie_url TEXT DEFAULT ''",
@@ -136,6 +143,7 @@ function rij(r: Record<string, unknown>): Aanvraag {
     auto_id: r.auto_id != null ? Number(r.auto_id) : null,
     auto_naam: (r.auto_naam as string) ?? "",
     bod: (r.bod as string) ?? "",
+    ons_bod: (r.ons_bod as string) ?? "",
     inruil: (r.inruil as string) ?? "",
     advertentie_titel: (r.advertentie_titel as string) ?? "",
     advertentie_url: (r.advertentie_url as string) ?? "",
@@ -181,6 +189,7 @@ export type NieuweAanvraag = {
   autoId?: number | null;
   autoNaam?: string;
   bod?: string;
+  onsBod?: string;
   inruil?: string;
   advertentieTitel?: string;
   advertentieUrl?: string;
@@ -202,14 +211,14 @@ export async function voegAanvraagToe(a: NieuweAanvraag): Promise<Aanvraag> {
     INSERT INTO leads (
       id, naam, telefoon, email, bron, interesse, budget, notitie,
       status, onderwerp, kenteken, gmail_message_id,
-      auto_id, auto_naam, bod, inruil,
+      auto_id, auto_naam, bod, ons_bod, inruil,
       advertentie_titel, advertentie_url, bericht
     ) VALUES (
       ${id}, ${a.naam ?? ""}, ${a.telefoon ?? ""}, ${a.email ?? ""},
       ${a.bron ?? "overig"}, ${a.interesse ?? ""}, ${a.budget ?? ""}, ${a.notitie ?? ""},
       'nieuw', ${a.onderwerp ?? ""}, ${(a.kenteken ?? "").toUpperCase()},
       ${a.gmailMessageId ?? null},
-      ${a.autoId ?? null}, ${a.autoNaam ?? ""}, ${a.bod ?? ""}, ${a.inruil ?? ""},
+      ${a.autoId ?? null}, ${a.autoNaam ?? ""}, ${a.bod ?? ""}, ${a.onsBod ?? ""}, ${a.inruil ?? ""},
       ${a.advertentieTitel ?? ""}, ${a.advertentieUrl ?? ""}, ${a.bericht ?? ""}
     )
     ON CONFLICT DO NOTHING
@@ -227,7 +236,7 @@ export async function voegAanvraagToe(a: NieuweAanvraag): Promise<Aanvraag> {
 const TE_WIJZIGEN = [
   "naam", "telefoon", "email", "bron", "interesse", "budget",
   "notitie", "status", "onderwerp", "kenteken", "antwoord",
-  "auto_naam", "bod", "inruil",
+  "auto_naam", "bod", "ons_bod", "inruil",
   "advertentie_titel", "advertentie_url", "bericht",
 ] as const;
 

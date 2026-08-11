@@ -109,6 +109,7 @@ export async function POST(req: Request) {
         : null,
       autoNaam: tekst(b.autoNaam),
       bod: tekst(b.bod),
+      onsBod: tekst(b.onsBod),
       inruil: tekst(b.inruil),
       // De auto uit ZIJN advertentie plus de link erheen, en wat hij letterlijk zei.
       // Zonder deze drie moet je bij elk gesprek terugzoeken waar het over ging.

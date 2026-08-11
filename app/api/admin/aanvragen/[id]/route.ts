@@ -36,6 +36,7 @@ const AANPASBAAR = [
   // Wat iemand bood en wat hij wil inruilen. Zonder deze drie slaan die velden in het
   // detailpaneel stil niets op: je typt "17.500", klikt weg, en het is verdwenen.
   "bod",
+  "ons_bod",
   "inruil",
   "auto_naam",
   "advertentie_titel",

@@ -201,7 +201,8 @@ Zijn auto: ${aanvraag.advertentie_titel || "—"}
 Wat hij zelf schreef: ${aanvraag.bericht ? `
 "${aanvraag.bericht.slice(0, 900)}"
 ` : "—"}
-Wat hij bood: ${aanvraag.bod || "—"}
+Wat hij vraagt of bood: ${aanvraag.bod || "—"}
+Wat WIJ bieden voor zijn auto: ${aanvraag.ons_bod || "— nog geen bod bepaald; noem in dat geval geen bedrag"}
 Wat hij wil inruilen: ${aanvraag.inruil || "—"}
 Kenteken: ${aanvraag.kenteken || "—"}
 Budget dat hij noemde: ${aanvraag.budget || "—"}
