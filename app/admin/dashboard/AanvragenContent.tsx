@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   Plus, Trash2, Check, Phone, Mail, MessageCircle, Store,
   Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign, ExternalLink, Search,
   Pencil,
+  ChevronDown,
 } from "lucide-react";
 import {
-  T, micro, body, klein, Panel, Btn, Chip, Field, inputStijl,
+  T, micro, body, klein, Panel, Btn, Field, inputStijl,
   Spinner, Empty, Foutmelding, Pill, PanelVoet,
 } from "./inkoop/ui";
 import { useAiTaak } from "./AiTaken";
@@ -64,7 +65,7 @@ const STATUS: Record<string, { label: string; kleur: string }> = {
   contact_gehad: { label: "Contact gehad", kleur: T.blauw },
   afspraak: { label: "Afspraak", kleur: "#7c3aed" },
   deal: { label: "Deal", kleur: T.groen },
-  verloren: { label: "Verloren", kleur: T.ink(0.4) },
+  verloren: { label: "Verloren", kleur: T.rood },
 };
 
 /** Alle filtervelden even hoog: de padding bepaalt de hoogte, niet een vaste maat. */
@@ -96,6 +97,110 @@ function Segment({
         color: actief ? "#ffffff" : T.ink(0.55),
         backgroundColor: actief ? T.navy : "transparent",
         border: omrand ? `1px solid ${actief ? T.navy : T.line2}` : "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Keuzelijst met een pictogram of een kleurstip per regel.
+ *
+ * Een gewone `<select>` kan dat niet: de browser tekent de opties zelf en negeert alles
+ * wat je erin zet behalve tekst. Voor het kanaal wil je het merkje van WhatsApp of
+ * Instagram zien, en voor de status meteen aan de kleur zien of iets goed of slecht
+ * afliep — dat leest sneller dan het woord.
+ */
+function Keuzelijst({
+  waarde, opties, leegLabel, onKies, breedte,
+}: {
+  waarde: string;
+  opties: { id: string; label: string; kleur?: string; Icon?: typeof Mail }[];
+  /** Regel bovenaan die "geen filter" betekent. Weglaten maakt kiezen verplicht. */
+  leegLabel?: string;
+  onKies: (id: string) => void;
+  /** Vaste breedte in de filterbalk; weglaten laat hem het veld vullen. */
+  breedte?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const vak = useRef<HTMLDivElement>(null);
+  const gekozen = opties.find((o) => o.id === waarde);
+
+  // Klik ergens anders sluit de lijst. Zonder dit blijft hij openstaan zodra je hem
+  // ergens naast aanklikt, en dan liggen er twee lijsten over het scherm.
+  useEffect(() => {
+    if (!open) return;
+    const buiten = (e: MouseEvent) => {
+      if (vak.current && !vak.current.contains(e.target as Node)) setOpen(false);
+    };
+    const ontsnap = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", buiten);
+    document.addEventListener("keydown", ontsnap);
+    return () => {
+      document.removeEventListener("mousedown", buiten);
+      document.removeEventListener("keydown", ontsnap);
+    };
+  }, [open]);
+
+  return (
+    <div ref={vak} className="relative" style={{ width: breedte ?? "100%" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 w-full text-left"
+        style={{ ...FILTER_VELD, paddingRight: 24 }}
+      >
+        {gekozen?.Icon && <gekozen.Icon size={12} color={gekozen.kleur ?? T.ink(0.5)} style={{ flexShrink: 0 }} />}
+        {gekozen && !gekozen.Icon && gekozen.kleur && (
+          <span className="rounded-full flex-shrink-0" style={{ width: 8, height: 8, backgroundColor: gekozen.kleur }} />
+        )}
+        <span className="flex-1 min-w-0 truncate" style={{ color: gekozen ? T.navy : T.ink(0.45) }}>
+          {gekozen?.label ?? leegLabel ?? "Kies…"}
+        </span>
+        <ChevronDown size={12} color={T.ink(0.35)} style={{ position: "absolute", right: 8, flexShrink: 0 }} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-auto"
+          style={{ backgroundColor: T.paper, border: `1px solid ${T.line2}`, boxShadow: "0 10px 30px rgba(0,19,55,0.14)" }}
+        >
+          {leegLabel && (
+            <Regelkeuze actief={!waarde} onClick={() => { onKies(""); setOpen(false); }}>
+              <span style={{ color: T.ink(0.45) }}>{leegLabel}</span>
+            </Regelkeuze>
+          )}
+          {opties.map((o) => (
+            <Regelkeuze key={o.id} actief={o.id === waarde} onClick={() => { onKies(o.id); setOpen(false); }}>
+              {o.Icon ? (
+                <o.Icon size={13} color={o.kleur ?? T.ink(0.5)} style={{ flexShrink: 0 }} />
+              ) : (
+                <span className="rounded-full flex-shrink-0" style={{ width: 8, height: 8, backgroundColor: o.kleur ?? T.ink(0.3) }} />
+              )}
+              <span className="truncate" style={{ color: o.kleur && !o.Icon ? o.kleur : T.navy, fontWeight: o.kleur && !o.Icon ? 600 : 400 }}>
+                {o.label}
+              </span>
+            </Regelkeuze>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Regelkeuze({
+  children, actief, onClick,
+}: { children: ReactNode; actief: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 w-full px-2.5 py-2 text-left transition-all hover:bg-[rgba(0,19,55,0.04)]"
+      style={{
+        fontFamily: T.inter,
+        fontSize: 12.5,
+        backgroundColor: actief ? "rgba(0,19,55,0.05)" : "transparent",
       }}
     >
       {children}
@@ -253,27 +358,26 @@ export default function AanvragenContent({
           />
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ ...FILTER_VELD, width: "auto", minWidth: 130, paddingRight: 26 }}
-        >
-          <option value="">Elke status</option>
-          {Object.entries(STATUS).map(([w, st]) => (
-            <option key={w} value={w}>{st.label}</option>
-          ))}
-        </select>
+        <Keuzelijst
+          waarde={statusFilter}
+          leegLabel="Elke status"
+          breedte={148}
+          onKies={setStatusFilter}
+          opties={Object.entries(STATUS).map(([id, st]) => ({ id, label: st.label, kleur: st.kleur }))}
+        />
 
-        <select
-          value={kanaalFilter}
-          onChange={(e) => setKanaalFilter(e.target.value)}
-          style={{ ...FILTER_VELD, width: "auto", minWidth: 130, paddingRight: 26 }}
-        >
-          <option value="">Elk kanaal</option>
-          {kanalen.map((w) => (
-            <option key={w} value={w}>{KANAAL[w]?.label ?? w}</option>
-          ))}
-        </select>
+        <Keuzelijst
+          waarde={kanaalFilter}
+          leegLabel="Elk kanaal"
+          breedte={148}
+          onKies={setKanaalFilter}
+          opties={kanalen.map((id) => ({
+            id,
+            label: KANAAL[id]?.label ?? id,
+            kleur: KANAAL[id]?.kleur,
+            Icon: KANAAL[id]?.Icon,
+          }))}
+        />
 
         <Segment actief={!toonAf} onClick={() => setToonAf((v) => !v)} omrand>
           {toonAf ? "Alles" : `Alleen open · ${nogTeDoen}`}
@@ -759,14 +863,16 @@ function Detail({
           paneel drie schermen hoog en scrol je langs contactgegevens heen op weg naar de
           deal -- terwijl er ruimte zat naast staat. Onder 1024px valt het vanzelf terug
           op een stapel, want dan is naast elkaar onleesbaar smal. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 items-start">
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
+      <div className="flex flex-col gap-3 h-full">
       {/* Waar het over gaat. Bovenaan, want dit is waaraan je de aanvraag herkent —
           niet aan de naam. */}
       <Panel
         title="De advertentie"
+        className="flex-1"
         actions={<span style={{ ...micro(k.kleur), fontSize: 9 }}>{k.label}</span>}
       >
+        <div className="flex flex-col h-full">
         {a.advertentie_url && (
           <a
             href={a.advertentie_url} target="_blank" rel="noopener noreferrer"
@@ -786,7 +892,7 @@ function Detail({
             plaats="https://www.marktplaats.nl/v/..." />
         </div>
 
-        <div className="mt-3">
+        <div className="mt-3 flex-1 flex flex-col">
           <p className="mb-1" style={{ ...micro(), fontSize: 9 }}>Wat hij zei</p>
           {bewerken ? (
             <textarea
@@ -794,6 +900,7 @@ function Detail({
               defaultValue={a.bericht}
               onBlur={(e) => e.target.value !== a.bericht && patch({ bericht: e.target.value })}
               placeholder="Zijn eigen woorden — plak hier het bericht dat hij stuurde."
+              className="flex-1"
               style={{
                 ...inputStijl,
                 minHeight: 96,
@@ -806,6 +913,7 @@ function Detail({
             />
           ) : (
             <p
+              className="flex-1"
               style={{
                 padding: "9px 12px",
                 minHeight: 96,
@@ -823,6 +931,7 @@ function Detail({
             </p>
           )}
         </div>
+        </div>
       </Panel>
 
       </div>
@@ -830,9 +939,9 @@ function Detail({
       {/* Eigen kolom: op een breed scherm staan advertentie, deal en contact naast
           elkaar. Onder 1536px schuift deze onder de eerste, onder 1024px wordt het
           een stapel. */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 h-full">
       {/* De handel: waar het over gaat bij ons, wat hij bood, wat hij inruilt. */}
-      <Panel title="De deal">
+      <Panel title="De deal" className="flex-1">
         <div className="grid grid-cols-1 gap-2">
           <Field label="Onze auto waar hij op reageert">
             {bewerken ? (
@@ -877,18 +986,41 @@ function Detail({
             veld="notitie" regels={2} plaats="Belt maandag terug" />
         </div>
 
+        {/* Kleur per status, ook als hij niet gekozen is: het stipje vertelt je wat je
+            kiest voordat je erop klikt. */}
         <div className="flex flex-wrap gap-1.5 mt-3">
-          {Object.entries(STATUS).map(([w, st]) => (
-            <Chip key={w} active={a.status === w} onClick={() => patch({ status: w })}>
-              {st.label}
-            </Chip>
-          ))}
+          {Object.entries(STATUS).map(([w, st]) => {
+            const aan = a.status === w;
+            return (
+              <button
+                key={w}
+                type="button"
+                onClick={() => patch({ status: w })}
+                className="flex items-center gap-1.5 transition-all hover:opacity-80"
+                style={{
+                  padding: "5px 10px",
+                  fontFamily: T.inter,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  color: aan ? "#ffffff" : st.kleur,
+                  backgroundColor: aan ? st.kleur : "transparent",
+                  border: `1px solid ${aan ? st.kleur : T.line2}`,
+                }}
+              >
+                <span
+                  className="rounded-full flex-shrink-0"
+                  style={{ width: 7, height: 7, backgroundColor: aan ? "#ffffff" : st.kleur }}
+                />
+                {st.label}
+              </button>
+            );
+          })}
         </div>
       </Panel>
       </div>
 
       {/* Derde kolom: wie het is, wie er nog meer wacht, en wat je nu doet. */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 h-full">
       {/* Wie het is. */}
       <Panel title="Contact">
         <div className="flex flex-wrap gap-3 mb-2.5">
@@ -918,11 +1050,13 @@ function Detail({
           <Bewerk patch={patch} bewerken={bewerken} label="E-mail" huidig={a.email} veld="email" plaats="—" />
           <Field label="Waar kwam het binnen">
             {bewerken ? (
-              <select style={inputStijl} value={a.bron} onChange={(e) => patch({ bron: e.target.value })}>
-                {Object.keys(KANAAL).map((w) => (
-                  <option key={w} value={w}>{KANAAL[w].label}</option>
-                ))}
-              </select>
+              <Keuzelijst
+                waarde={a.bron}
+                onKies={(w) => patch({ bron: w })}
+                opties={Object.entries(KANAAL).map(([id, k]) => ({
+                  id, label: k.label, kleur: k.kleur, Icon: k.Icon,
+                }))}
+              />
             ) : (
               <p style={{ padding: "9px 12px", border: "1px solid transparent", fontFamily: T.inter, fontSize: 13, color: T.navy }}>
                 {KANAAL[a.bron]?.label ?? a.bron}
@@ -960,7 +1094,7 @@ function Detail({
       )}
 
       {/* Doorpakken: taxeren of een antwoord laten schrijven. */}
-      <Panel title="Wat nu">
+      <Panel title="Wat nu" className="flex-1">
         <div className="flex flex-col gap-2">
           {kenteken && onNaarTaxatie && (
             <Btn variant="ghost" size="sm" full onClick={() => onNaarTaxatie(kenteken)}>

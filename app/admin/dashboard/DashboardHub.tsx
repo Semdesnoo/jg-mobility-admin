@@ -108,6 +108,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
     items: [
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
       { id: "aanvragen",  label: "Aanvragen",        icon: Inbox },
+      { id: "email",      label: "E-mail",           icon: Mail },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
       { id: "verkopers",  label: "Verkopersradar",   icon: Radar },
@@ -131,7 +132,6 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "inkoopfacturen", label: "Inkoopfacturen", icon: Wallet },
       { id: "klanten",    label: "Klanten",          icon: Users },
       { id: "calculator", label: "Marge Calculator", icon: Calculator },
-      { id: "email",      label: "E-mail",           icon: Mail },
     ],
   },
 ];

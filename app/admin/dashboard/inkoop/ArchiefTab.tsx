@@ -248,9 +248,23 @@ function TaxatieDetail({ r }: { r: TaxatieRij }) {
           <div className="flex flex-col gap-1">
             {markt!.vergelijkbare!.slice(0, 6).map((v, i) => (
               <div key={i} className="flex items-center justify-between gap-3 px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
-                <span className="min-w-0 truncate" style={{ fontFamily: T.inter, fontSize: 11, color: T.ink(0.6) }}>
-                  {[v.titel, v.bouwjaar || null, v.km ? fmtKm(v.km) : null, v.platform || null].filter(Boolean).join(" · ")}
-                </span>
+                {/* Ook hier klikbaar: een bewaarde taxatie haal je er juist bij om na te
+                    gaan waarop hij gebaseerd was, en dan wil je die advertenties zien. */}
+                {v.url ? (
+                  <a
+                    href={v.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 truncate hover:opacity-70 transition-all"
+                    style={{ fontFamily: T.inter, fontSize: 11, color: T.navy, textDecoration: "underline" }}
+                  >
+                    {[v.titel, v.bouwjaar || null, v.km ? fmtKm(v.km) : null, v.platform || null].filter(Boolean).join(" · ")}
+                  </a>
+                ) : (
+                  <span className="min-w-0 truncate" style={{ fontFamily: T.inter, fontSize: 11, color: T.ink(0.6) }}>
+                    {[v.titel, v.bouwjaar || null, v.km ? fmtKm(v.km) : null, v.platform || null].filter(Boolean).join(" · ")}
+                  </span>
+                )}
                 <span className="flex-shrink-0" style={num(12)}>{fmt(v.prijs)}</span>
               </div>
             ))}

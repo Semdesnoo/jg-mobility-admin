@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
-  BarChart2, Check, Clock, Gauge, History, Info, Plus, RotateCcw, Search, X,
+  BarChart2, Check, Clock, Gauge, History, Info, Plus, RotateCcw, Search, X, ExternalLink,
 } from "lucide-react";
 import {
   T, num, micro, body, klein, fmt, fmtGetal, fmtKm, scoreKleur,
@@ -1168,7 +1168,26 @@ export default function TaxatieTab({
                       style={{ ...rijStijl(i), borderLeft: uitschieter ? `2px solid ${T.amber}` : "2px solid transparent" }}
                       title={uitschieter ? "Uitschieter — wijkt meer dan 25% van het gemiddelde af" : undefined}
                     >
-                      <Td sterk>{v.titel}</Td>
+                      <Td sterk>
+                        {/* De titel is de link. Dit is het bewijs onder de taxatie, dus je
+                            moet er met één klik naartoe kunnen om zelf te kijken naar
+                            staat, opties en foto's — dat bepaalt het verschil binnen
+                            dezelfde spreiding. */}
+                        {v.url ? (
+                          <a
+                            href={v.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 hover:opacity-70 transition-all"
+                            style={{ color: T.navy, textDecoration: "underline" }}
+                          >
+                            {v.titel}
+                            <ExternalLink size={10} style={{ flexShrink: 0, opacity: 0.55 }} />
+                          </a>
+                        ) : (
+                          v.titel
+                        )}
+                      </Td>
                       <Td align="center" cijfer>{v.bouwjaar ?? "—"}</Td>
                       <Td align="right" cijfer>{v.km != null ? fmtKm(v.km) : "—"}</Td>
                       <Td align="center">{v.platform ?? "—"}</Td>
