@@ -202,16 +202,18 @@ export default function AanvragenContent({
     return [...m.values()].sort((x, y) => y.rijen.length - x.rijen.length);
   }, [zichtbaar]);
 
-  const openAanvraag = useMemo(
-    () => (aanvragen ?? []).find((a) => a.id === open) ?? null,
-    [aanvragen, open]
-  );
+  const openAanvraag = useMemo(() => {
+    const aangewezen = (aanvragen ?? []).find((a) => a.id === open);
+    // Niets aangewezen? Dan de bovenste uit de lijst. Anders rendert de rechterkolom
+    // niets en staat de halve pagina leeg terwijl er gewoon werk ligt.
+    return aangewezen ?? zichtbaar[0] ?? null;
+  }, [aanvragen, open, zichtbaar]);
 
   const nogTeDoen = (aanvragen ?? []).filter((a) => !a.afgehandeld_op).length;
   const vandaag = perDag[0]?.[0] === new Date().toISOString().slice(0, 10) ? perDag[0][1].length : 0;
 
   return (
-    <div className="px-4 md:px-8 py-4 md:py-6" style={{ maxWidth: 1500, margin: "0 auto" }}>
+    <div className="px-4 md:px-6 py-4 md:py-5 w-full">
       {fout && <div className="mb-4"><Foutmelding>{fout}</Foutmelding></div>}
 
       {/* Eén balk in plaats van losse chips van verschillende breedte.
@@ -688,7 +690,7 @@ function Detail({
           paneel drie schermen hoog en scrol je langs contactgegevens heen op weg naar de
           deal -- terwijl er ruimte zat naast staat. Onder 1024px valt het vanzelf terug
           op een stapel, want dan is naast elkaar onleesbaar smal. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 items-start">
       <div className="flex flex-col gap-3">
       {/* Waar het over gaat. Bovenaan, want dit is waaraan je de aanvraag herkent —
           niet aan de naam. */}
@@ -735,6 +737,12 @@ function Detail({
         </div>
       </Panel>
 
+      </div>
+
+      {/* Eigen kolom: op een breed scherm staan advertentie, deal en contact naast
+          elkaar. Onder 1536px schuift deze onder de eerste, onder 1024px wordt het
+          een stapel. */}
+      <div className="flex flex-col gap-3">
       {/* De handel: waar het over gaat bij ons, wat hij bood, wat hij inruilt. */}
       <Panel title="De deal">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -785,7 +793,7 @@ function Detail({
       </Panel>
       </div>
 
-      {/* Rechterkolom: wie het is, wie er nog meer wacht, en wat je nu doet. */}
+      {/* Derde kolom: wie het is, wie er nog meer wacht, en wat je nu doet. */}
       <div className="flex flex-col gap-3">
       {/* Wie het is. */}
       <Panel title="Contact">
