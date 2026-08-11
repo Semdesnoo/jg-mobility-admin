@@ -36,6 +36,7 @@ import {
   ChevronRight,
   Radar,
   Inbox,
+  FileSignature,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -50,10 +51,11 @@ import InkoopFacturenContent from "./InkoopFacturenContent";
 import SocialContent from "./SocialContent";
 import VerkopersContent from "./VerkopersContent";
 import AanvragenContent from "./AanvragenContent";
+import ContractenContent from "./ContractenContent";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
 
 type Auto = {
   id: number;
@@ -131,6 +133,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "boekhouding", label: "Boekhouding", icon: Banknote },
       { id: "facturen", label: "Verkoopfacturen", icon: FileText },
       { id: "inkoopfacturen", label: "Inkoopfacturen", icon: Wallet },
+      { id: "contracten", label: "Consignatiecontract", icon: FileSignature },
       { id: "klanten",    label: "Klanten",          icon: Users },
       { id: "calculator", label: "Marge Calculator", icon: Calculator },
     ],
@@ -522,6 +525,7 @@ export default function DashboardHub() {
         {tab === "inkoop" && (
           <InkoopContent kenteken={navFocus?.kenteken} />
         )}
+        {tab === "contracten" && <ContractenContent />}
         {tab === "aanvragen" && (
           <AanvragenContent onNaarTaxatie={(kenteken) => gaNaarTab("inkoop", { kenteken })} />
         )}

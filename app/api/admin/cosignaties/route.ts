@@ -12,6 +12,22 @@ async function migrate() {
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bodytype TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS apk TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS vermogen TEXT DEFAULT ''`;
+    // Contractgegevens. Stonden nergens vast: er was wel een consignatie in het systeem
+    // maar geen enkele afspraak over geld, looptijd of ondergrens -- terwijl dat precies
+    // is waar je later ruzie over krijgt.
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS kenteken TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS vin TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS klant_adres TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS klant_postcode TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS klant_stad TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bodemprijs INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS fee_percentage NUMERIC DEFAULT 0`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS fee_vast INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS looptijd_maanden INTEGER DEFAULT 6`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS uitbetaling_dagen INTEGER DEFAULT 3`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bijzondere_afspraken TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_nr TEXT DEFAULT ''`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_op TEXT DEFAULT ''`;
   } catch { /* table may not exist yet */ }
 }
 
