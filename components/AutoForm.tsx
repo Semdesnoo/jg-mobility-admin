@@ -1,5 +1,6 @@
 "use client";
 
+import { verkleinFoto } from "@/lib/foto-verkleinen";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -357,9 +358,14 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
       const fotoUrls = await Promise.all(
         fotos.map(async (item, i) => {
           if (item.kind === "bestaand") return item.url;
-          const ext = item.file.name.split(".").pop()?.toLowerCase() || "jpg";
+          // Eerst verkleinen. Een telefoonfoto van 4 MB wordt zo een paar honderd kB, en
+          // dat scheelt niet alleen opslag: de beeldoptimalisatie van de website haalt het
+          // origineel op voor élke maat die hij maakt, dus een grote foto kost telkens
+          // opnieuw dataverkeer. Zie lib/foto-verkleinen.ts.
+          const klein = await verkleinFoto(item.file);
+          const ext = klein.bestand.name.split(".").pop()?.toLowerCase() || "jpg";
           const pad = `autos/${kentekenPad}/${String(i + 1).padStart(2, "0")}.${ext}`;
-          const blob = await upload!(pad, item.file, {
+          const blob = await upload!(pad, klein.bestand, {
             access: "public",
             handleUploadUrl: "/api/admin/upload-photos",
           });
