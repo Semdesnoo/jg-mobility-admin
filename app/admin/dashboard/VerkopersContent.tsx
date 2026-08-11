@@ -42,6 +42,7 @@ import {
   micro,
   num,
   body,
+  klein,
   Panel,
   Stat,
   Pill,
@@ -1692,6 +1693,10 @@ function NakijkenTab({
 }) {
   // Welke lijst je bekijkt: wat er nog te doen is, of wat er al gedaan is.
   const [blad, setBlad] = useState<"klaar" | "archief">("klaar");
+  // Met tachtig klaargezette en negenendertig verstuurde berichten is doorscrollen geen
+  // doen; je zoekt één auto terug, meestal omdat iemand belt.
+  const [zoek, setZoek] = useState("");
+  const [merkFilter, setMerkFilter] = useState("");
 
   // Het schrijven draait in de takenlaag boven de tabbladen. Dat moet, om twee redenen:
   // het duurt tientallen seconden en dit tabblad wordt uit het geheugen gegooid zodra je
@@ -1728,7 +1733,26 @@ function NakijkenTab({
       ),
     [alle]
   );
-  const lijst = blad === "klaar" ? wachtrij : archief;
+  const basislijst = blad === "klaar" ? wachtrij : archief;
+
+  // Welke merken er in déze lijst zitten. Een vaste merkenlijst zou vol staan met merken
+  // waar niets van in je wachtrij ligt.
+  const merkenInLijst = useMemo(
+    () => [...new Set(basislijst.map((l) => l.merk).filter(Boolean))].sort(),
+    [basislijst]
+  );
+
+  const lijst = useMemo(() => {
+    const term = zoek.trim().toLowerCase();
+    return basislijst.filter((l) => {
+      if (merkFilter && l.merk !== merkFilter) return false;
+      if (!term) return true;
+      return [l.merk, l.model, l.titel, l.plaats, l.naam, l.bouwjaar]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [basislijst, zoek, merkFilter]);
 
   /**
    * Laat de AI teksten schrijven voor alles wat je hebt aangevinkt.
@@ -1891,6 +1915,11 @@ function NakijkenTab({
               <Chip active={blad === "archief"} onClick={() => setBlad("archief")}>
                 Archief {archief.length > 0 && <span style={{ opacity: 0.6 }}>{archief.length}</span>}
               </Chip>
+              {blad === "archief" && archief.length > 0 && (
+                <span className="ml-auto self-center" style={{ ...micro(), fontSize: 9 }}>
+                  {lijst.length === archief.length ? `${archief.length}` : `${lijst.length} van ${archief.length}`}
+                </span>
+              )}
               {blad === "klaar" && metTekst > 0 && (
                 <span className="ml-auto self-center" style={{ ...micro(T.groen), fontSize: 9 }}>
                   {metTekst} met tekst
@@ -1951,6 +1980,47 @@ function NakijkenTab({
                     {schrijfTaak?.bezig ? "Bezig…" : `Schrijf ${aangevinkt.size || ""} tekst${aangevinkt.size === 1 ? "" : "en"}`}
                   </Btn>
                 </div>
+              </div>
+            )}
+
+            {/* Zoeken en filteren op merk. Werkt in allebei de lijsten, maar is vooral in
+                het archief nodig: daar staat alles wat de deur uit is en zoek je terug
+                wat je iemand ook alweer geschreven had. */}
+            {basislijst.length > 4 && (
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="relative flex-1" style={{ minWidth: 120 }}>
+                  <Search
+                    size={12}
+                    color={T.ink(0.3)}
+                    style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+                  />
+                  <input
+                    value={zoek}
+                    onChange={(e) => setZoek(e.target.value)}
+                    placeholder="Zoek op merk, model of plaats…"
+                    style={{ ...FILTER_VELD, paddingLeft: 26, fontSize: 11.5 }}
+                  />
+                </div>
+                <select
+                  value={merkFilter}
+                  onChange={(e) => setMerkFilter(e.target.value)}
+                  style={{ ...FILTER_VELD, width: "auto", minWidth: 104, paddingRight: 22, fontSize: 11.5 }}
+                >
+                  <option value="">Alle merken</option>
+                  {merkenInLijst.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {(zoek || merkFilter) && (
+                  <button
+                    type="button"
+                    onClick={() => { setZoek(""); setMerkFilter(""); }}
+                    className="flex-shrink-0 transition-all hover:opacity-70"
+                    style={{ ...klein(T.ink(0.45)), textDecoration: "underline" }}
+                  >
+                    wis
+                  </button>
+                )}
               </div>
             )}
 

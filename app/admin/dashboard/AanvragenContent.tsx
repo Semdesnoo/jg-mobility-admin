@@ -210,6 +210,27 @@ function Regelkeuze({
   );
 }
 
+/**
+ * Een advertentielink leesbaar maken.
+ *
+ * Marktplaats plakt er een halve kilobyte aan tracking achter (_gl, gclid, utm_ en zo verder).
+ * Voluit staat er dan vijfhonderd tekens onzin in het paneel waar niets in te herkennen valt.
+ * Hier blijft over waaraan je hem herkent: de site en het begin van het advertentiepad.
+ *
+ * Wat er getoond wordt is dus KORTER dan waar je heen gaat — de link zelf blijft compleet,
+ * want die tracking hoort soms bij hoe het platform de pagina opzoekt.
+ */
+function korteLink(url: string): string {
+  try {
+    const u = new URL(url);
+    const pad = u.pathname.replace(/\/+$/, "");
+    const kort = pad.length > 46 ? `${pad.slice(0, 46)}…` : pad;
+    return `${u.host.replace(/^www\./, "")}${kort}`;
+  } catch {
+    return url.length > 60 ? `${url.slice(0, 60)}…` : url;
+  }
+}
+
 /** "vandaag" / "gisteren" / "maandag 10 augustus" — een datum die je zonder rekenen leest. */
 function dagKop(iso: string): string {
   const d = new Date(iso);
@@ -910,16 +931,49 @@ function Detail({
             style={{ ...body(12, T.navy), textDecoration: "underline", overflowWrap: "anywhere" }}
           >
             <ExternalLink size={12} style={{ flexShrink: 0 }} />
-            {a.advertentie_titel || a.advertentie_url}
+            {a.advertentie_titel || korteLink(a.advertentie_url)}
           </a>
         )}
         <div className="grid grid-cols-1 gap-2">
           <Bewerk patch={patch} bewerken={bewerken} label="Auto uit zijn advertentie"
             huidig={a.advertentie_titel} veld="advertentie_titel"
             plaats="Mercedes-Benz CLA 250 224pk 7G-DCT 2020 Zwart" />
-          <Bewerk patch={patch} bewerken={bewerken} label="Link naar de advertentie"
-            huidig={a.advertentie_url} veld="advertentie_url"
-            plaats="https://www.marktplaats.nl/v/..." />
+          {/* In bewerkstand het hele adres, want dat moet je kunnen plakken en wijzigen.
+              In leesstand alleen het herkenbare deel — de rest is tracking. */}
+          {bewerken ? (
+            <Bewerk patch={patch} bewerken label="Link naar de advertentie"
+              huidig={a.advertentie_url} veld="advertentie_url"
+              plaats="https://www.marktplaats.nl/v/..." />
+          ) : (
+            <Field label="Link naar de advertentie">
+              {a.advertentie_url ? (
+                <a
+                  href={a.advertentie_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={a.advertentie_url}
+                  className="flex items-center gap-1.5 hover:opacity-70 transition-all"
+                  style={{
+                    padding: "9px 12px",
+                    border: "1px solid transparent",
+                    fontFamily: T.inter,
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: T.navy,
+                    textDecoration: "underline",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  <ExternalLink size={11} style={{ flexShrink: 0, opacity: 0.55 }} />
+                  {korteLink(a.advertentie_url)}
+                </a>
+              ) : (
+                <p style={{ padding: "9px 12px", border: "1px solid transparent", fontFamily: T.inter, fontSize: 13, color: T.ink(0.3) }}>
+                  —
+                </p>
+              )}
+            </Field>
+          )}
         </div>
 
         <div className="mt-3 flex-1 flex flex-col">
