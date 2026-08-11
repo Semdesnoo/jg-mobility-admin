@@ -52,6 +52,7 @@ import SocialContent from "./SocialContent";
 import VerkopersContent from "./VerkopersContent";
 import AanvragenContent from "./AanvragenContent";
 import ContractenContent from "./ContractenContent";
+import FotosOpruimen from "./FotosOpruimen";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
@@ -519,7 +520,13 @@ export default function DashboardHub() {
             onTab={gaNaarTab}
           />
         )}
-        {tab === "voorraad" && <VoorraadContent autos={autos} refresh={refresh} />}
+        {tab === "voorraad" && (
+          <>
+            {/* Eenmalig onderhoud; verdwijnt vanzelf zodra er niets meer te verkleinen is. */}
+            <FotosOpruimen />
+            <VoorraadContent autos={autos} refresh={refresh} />
+          </>
+        )}
         {tab === "klanten" && <KlantenContent />}
         {tab === "afspraken" && <AfsprakenContent />}
         {tab === "inkoop" && (
