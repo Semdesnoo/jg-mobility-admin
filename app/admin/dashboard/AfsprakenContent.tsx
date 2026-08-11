@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
+import { useDialoog } from "./Dialoog";
 import { Plus, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 type Afspraak = {
@@ -80,6 +81,7 @@ function maakLeegForm(): LeegForm {
 }
 
 export default function AfsprakenContent() {
+  const { vraag } = useDialoog();
   const [afspraken, setAfspraken] = useState<Afspraak[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -149,7 +151,24 @@ export default function AfsprakenContent() {
   };
 
   const verwijder = async (id: string) => {
-    if (!confirm("Afspraak verwijderen?")) return;
+    // Zet in de vraag wélke afspraak het is: dezelfde klant kan er meerdere hebben,
+    // en vanuit de kalender klik je op een klein knopje tussen andere afspraken.
+    const a = afspraken.find((x) => x.id === id);
+    // Het vraagteken hoort ook achter klant_naam: die kolom mag leeg zijn en de GET doet
+    // SELECT *, dus een NULL uit de database liet de verwijderknop hier stilletjes omvallen.
+    const klant = a?.klant_naam?.trim();
+    const dag = a?.datum ? dagLabel(String(a.datum).slice(0, 10)) : "";
+    // "op" hoort bij de datum. Zat het aan het hele blok vast, dan las een afspraak zonder
+    // datum als "Proefrit op om 10:00".
+    const wanneer = [dag ? `op ${dag}` : "", a?.tijd ? `om ${a.tijd}` : ""].filter(Boolean).join(" ");
+    const soort = a ? TYPES[a.type] ?? a.type : "Afspraak";
+    const bevestigd = await vraag({
+      titel: klant ? `Afspraak met ${klant} verwijderen?` : "Afspraak verwijderen?",
+      tekst: `${soort}${wanneer ? ` ${wanneer}` : ""}. De afspraak verdwijnt uit de agenda en uit de lijst. Dit is niet ongedaan te maken.`,
+      bevestig: "Verwijderen",
+      gevaar: true,
+    });
+    if (!bevestigd) return;
     await fetch(`/api/admin/afspraken/${id}`, { method: "DELETE" });
     setAfspraken((p) => p.filter((a) => a.id !== id));
     if (openId === id) setOpenId(null);

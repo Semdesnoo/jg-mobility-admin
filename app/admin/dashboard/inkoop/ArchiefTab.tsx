@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { History, Trash2, ChevronDown, ChevronRight, Archive, Search, Globe, Flame } from "lucide-react";
 import { T, num, micro, body, fmt, fmtKm } from "./ui";
+import { useDialoog } from "../Dialoog";
 import type { TaxatieResultaat, MarktOverzicht } from "./types";
 
 type TaxatieRij = {
@@ -37,6 +38,7 @@ function tempKleur(t: number): string {
 }
 
 export default function ArchiefTab() {
+  const { vraag } = useDialoog();
   const [taxaties, setTaxaties] = useState<TaxatieRij[] | null>(null);
   const [markten, setMarkten] = useState<MarktRij[] | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -60,7 +62,33 @@ export default function ArchiefTab() {
   }, []);
 
   const verwijder = async (it: Item) => {
-    if (!confirm("Deze analyse uit het archief verwijderen?")) return;
+    // Dezelfde naam als in de regel, plus kenteken en bewaarmoment: van dezelfde auto
+    // of dezelfde zoekterm staan er vaak meerdere analyses onder elkaar.
+    const naam =
+      it.soort === "taxatie"
+        ? `Taxatie van ${[it.merk, it.model].filter(Boolean).join(" ") || "onbekend voertuig"}`
+        : it.type === "zoek"
+          ? `Marktanalyse "${it.zoekterm || "zoekopdracht"}"`
+          : "Marktpuls Nederland";
+    const bewaard = datumTijd(it.aangemaakt);
+    const kenmerk = [
+      it.soort === "taxatie" && it.kenteken ? it.kenteken.toUpperCase() : null,
+      bewaard ? `bewaard op ${bewaard}` : null,
+    ].filter(Boolean).join(" · ");
+
+    const akkoord = await vraag({
+      titel: `${naam} verwijderen?`,
+      tekst:
+        `${kenmerk ? `${kenmerk}\n\n` : ""}` +
+        (it.soort === "taxatie"
+          ? "De bewaarde cijfers en de advertenties waarop de taxatie berustte verdwijnen mee. "
+          : "Het bewaarde marktbeeld met de hot modellen en de inzichten verdwijnt mee. ") +
+        "Opnieuw analyseren geeft de markt van vandaag, niet die van toen. Dit is niet ongedaan te maken.",
+      bevestig: "Verwijderen",
+      gevaar: true,
+    });
+    if (!akkoord) return;
+
     const pad = it.soort === "taxatie" ? "archief" : "markt-archief";
     await fetch(`/api/admin/inkoop/${pad}/${it.id}`, { method: "DELETE" });
     if (it.soort === "taxatie") setTaxaties((p) => (p ? p.filter((x) => x.id !== it.id) : p));

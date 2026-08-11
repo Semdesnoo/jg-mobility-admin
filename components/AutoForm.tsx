@@ -7,6 +7,7 @@ import Image from "next/image";
 import { X, Plus, ArrowLeft, Search, Upload, Sparkles } from "lucide-react";
 import type { Auto } from "@/lib/autos";
 import { useAiTaak } from "@/app/admin/dashboard/AiTaken";
+import { useDialoog } from "@/app/admin/dashboard/Dialoog";
 
 type Optie = { categorie: string; items: string[] };
 
@@ -112,6 +113,7 @@ const formulierVanAuto = (a: Auto): FormState => ({
 export default function AutoForm({ initial }: { initial?: Auto }) {
   const router = useRouter();
   const fotoInputRef = useRef<HTMLInputElement>(null);
+  const { vraagTekst } = useDialoog();
   const isBewerken = !!initial;
 
   const [form, setForm] = useState<FormState>(
@@ -318,8 +320,13 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
     );
   };
 
-  const voegCategorieToe = () => {
-    const naam = prompt("Naam van nieuwe categorie:");
+  const voegCategorieToe = async () => {
+    const naam = await vraagTekst({
+      titel: "Categorie toevoegen",
+      tekst: "De naam komt als kopje boven de opties die je eronder zet. Een categorie zonder opties wordt niet opgeslagen.",
+      plaats: "bijv. Veiligheid",
+      bevestig: "Toevoegen",
+    });
     if (naam?.trim()) {
       setOpties((prev) => [...prev, { categorie: naam.trim(), items: [] }]);
     }

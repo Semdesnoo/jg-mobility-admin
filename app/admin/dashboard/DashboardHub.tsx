@@ -51,6 +51,7 @@ import SocialContent from "./SocialContent";
 import VerkopersContent from "./VerkopersContent";
 import AanvragenContent from "./AanvragenContent";
 import GmailWidget from "./GmailWidget";
+import { useDialoog } from "./Dialoog";
 
 type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen";
 
@@ -836,10 +837,27 @@ function VoorraadTabel({
   // Alles bewerken loopt via de Bewerken-knop naar de bewerkpagina. Alleen de
   // status kan hier direct om — dat is de handeling die je het vaakst doet.
   const [statusBezig, setStatusBezig] = useState<number | null>(null);
+  const { vraag } = useDialoog();
 
   const zetStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
-    if (status === "gereserveerd" && !confirm("Wil je deze auto als Gereserveerd markeren?")) return;
-    if (status === "verkocht" && !confirm("Wil je deze auto als Verkocht markeren?")) return;
+    // Zet de auto in de vraag bij naam, zodat je in een lange lijst ziet welke rij je omzet.
+    const auto = autos.find((a) => a.id === id);
+    const naam = auto
+      ? `${auto.merk} ${auto.model}${auto.kenteken ? ` (${auto.kenteken})` : ""}`
+      : "Deze auto";
+
+    if (status === "gereserveerd" && !(await vraag({
+      titel: `${naam} reserveren?`,
+      tekst: "De auto blijft gewoon in de voorraad staan en krijgt op de website het label Gereserveerd. Je kunt de status later terugzetten.",
+      bevestig: "Reserveren",
+    }))) return;
+
+    if (status === "verkocht" && !(await vraag({
+      titel: `${naam} op verkocht zetten?`,
+      tekst: "De auto verhuist naar het overzicht Verkocht en krijgt op de website het label Verkocht. Als verkoopdatum wordt vandaag genoteerd. Je kunt de status later terugzetten.",
+      bevestig: "Verkocht melden",
+    }))) return;
+
     setStatusBezig(id);
     try {
       await fetch(`/api/admin/autos/${id}`, {
@@ -3648,6 +3666,7 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
   focus?: { dossierId?: number; autoId?: number } | null;
   onFocusGebruikt?: () => void;
 } = {}) {
+  const { vraag } = useDialoog();
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
   const [actief, setActief] = useState<Dossier | null>(null);
   const [laden, setLaden] = useState(true);
@@ -3752,8 +3771,13 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
   };
 
   const verwijderDossier = async (id: number) => {
-    const naam = dossiers.find((d) => d.id === id)?.auto_naam ?? "dit dossier";
-    if (!confirm(`Weet je zeker dat je "${naam}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+    const naam = dossiers.find((d) => d.id === id)?.auto_naam;
+    if (!(await vraag({
+      titel: naam ? `Dossier ${naam} verwijderen?` : "Dossier verwijderen?",
+      tekst: "De inkoopprijs, alle kostenregels en de berekende winst van dit dossier gaan verloren. Dit kan niet ongedaan worden gemaakt.",
+      bevestig: "Verwijderen",
+      gevaar: true,
+    }))) return;
     await fetch(`/api/admin/dossiers/${id}`, { method: "DELETE" });
     const rest = dossiers.filter((d) => d.id !== id);
     setDossiers(rest);

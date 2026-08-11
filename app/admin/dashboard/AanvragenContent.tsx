@@ -6,12 +6,14 @@ import {
   Globe, Calculator, Sparkles, Copy, Car, CalendarDays, Users, AtSign, ExternalLink, Search,
   Pencil,
   ChevronDown,
+  Archive,
 } from "lucide-react";
 import {
   T, micro, body, klein, Panel, Btn, Field, inputStijl,
   Spinner, Empty, Foutmelding, Pill, PanelVoet,
 } from "./inkoop/ui";
 import { useAiTaak } from "./AiTaken";
+import { useDialoog } from "./Dialoog";
 
 /**
  * Dagoverzicht van aanvragen.
@@ -237,7 +239,7 @@ export default function AanvragenContent({
   const [kanalen, setKanalen] = useState<string[]>(Object.keys(KANAAL));
   const [fout, setFout] = useState("");
   const [blad, setBlad] = useState<"dag" | "auto">("dag");
-  const [toonAf, setToonAf] = useState(false);
+  const [weergave, setWeergave] = useState<"open" | "archief">("open");
   const [zoek, setZoek] = useState("");
   // De bewerkstand staat hier en niet in het detailpaneel, zodat de knop in de balk
   // bovenaan kan staan in plaats van op een eigen regel boven de kolommen.
@@ -271,7 +273,9 @@ export default function AanvragenContent({
   const zichtbaar = useMemo(() => {
     const term = zoek.trim().toLowerCase();
     return (aanvragen ?? []).filter((a) => {
-      if (!toonAf && a.afgehandeld_op) return false;
+      // Open en archief zijn twee gescheiden lijsten. Alles door elkaar tonen maakt van
+      // het dagoverzicht juist weer een hooiberg.
+      if (weergave === "open" ? !!a.afgehandeld_op : !a.afgehandeld_op) return false;
       if (statusFilter && a.status !== statusFilter) return false;
       if (kanaalFilter && a.bron !== kanaalFilter) return false;
       if (!term) return true;
@@ -285,7 +289,7 @@ export default function AanvragenContent({
         .toLowerCase()
         .includes(term);
     });
-  }, [aanvragen, toonAf, zoek, statusFilter, kanaalFilter]);
+  }, [aanvragen, weergave, zoek, statusFilter, kanaalFilter]);
 
   // Per dag, nieuwste dag eerst. De volgorde binnen een dag komt uit de API (nieuwste eerst).
   const perDag = useMemo(() => {
@@ -319,6 +323,7 @@ export default function AanvragenContent({
   }, [aanvragen, open, zichtbaar]);
 
   const nogTeDoen = (aanvragen ?? []).filter((a) => !a.afgehandeld_op).length;
+  const inArchief = (aanvragen ?? []).filter((a) => a.afgehandeld_op).length;
   const vandaag = perDag[0]?.[0] === new Date().toISOString().slice(0, 10) ? perDag[0][1].length : 0;
 
   return (
@@ -379,9 +384,16 @@ export default function AanvragenContent({
           }))}
         />
 
-        <Segment actief={!toonAf} onClick={() => setToonAf((v) => !v)} omrand>
-          {toonAf ? "Alles" : `Alleen open · ${nogTeDoen}`}
-        </Segment>
+        {/* Twee lijsten die elkaar uitsluiten, net als Per dag en Per auto. Wat je
+            afvinkt gaat naar het archief en blijft daar staan; terughalen kan altijd. */}
+        <div className="flex" style={{ border: `1px solid ${T.line2}` }}>
+          <Segment actief={weergave === "open"} onClick={() => { setWeergave("open"); setOpen(null); }}>
+            Open · {nogTeDoen}
+          </Segment>
+          <Segment actief={weergave === "archief"} onClick={() => { setWeergave("archief"); setOpen(null); }}>
+            <Archive size={11} /> Archief · {inArchief}
+          </Segment>
+        </div>
 
         {(zoek || statusFilter || kanaalFilter) && (
           <button
@@ -444,11 +456,19 @@ export default function AanvragenContent({
         // ga je een aanvraag zoeken die er gewoon is.
         <Empty
           icon={<Users size={30} color={T.ink(0.2)} />}
-          title={(aanvragen ?? []).length === 0 ? "Nog niets vastgelegd" : "Niets dat hieraan voldoet"}
+          title={
+            weergave === "archief" && !zoek && !statusFilter && !kanaalFilter
+              ? "Archief is leeg"
+              : (aanvragen ?? []).length === 0
+                ? "Nog niets vastgelegd"
+                : "Niets dat hieraan voldoet"
+          }
           body={
-            (aanvragen ?? []).length === 0
-              ? "Zet met de knop hierboven een aanvraag erbij, of klik bij een mail in het E-mail-tabblad op “Zet in overzicht”."
-              : `Er ${(aanvragen ?? []).length === 1 ? "staat 1 aanvraag" : `staan ${(aanvragen ?? []).length} aanvragen`} in het overzicht, maar geen enkele voldoet aan deze filters. Zet ze uit met “wis filters”.`
+            weergave === "archief" && !zoek && !statusFilter && !kanaalFilter
+              ? "Wat je afvinkt als afgehandeld komt hier terecht. Het blijft bewaard en je kunt het altijd terughalen."
+              : (aanvragen ?? []).length === 0
+                ? "Zet met de knop hierboven een aanvraag erbij, of klik bij een mail in het E-mail-tabblad op “Zet in overzicht”."
+                : `Er ${(aanvragen ?? []).length === 1 ? "staat 1 aanvraag" : `staan ${(aanvragen ?? []).length} aanvragen`} in deze lijst, maar geen enkele voldoet aan deze filters. Zet ze uit met “wis filters”.`
           }
         />
       ) : (
@@ -459,7 +479,7 @@ export default function AanvragenContent({
               dezelfde hoogte. */}
           <div className="w-full xl:w-[340px] xl:flex-none">
             <Panel
-              title={blad === "dag" ? "Per dag" : "Per auto"}
+              title={`${weergave === "archief" ? "Archief" : ""}${weergave === "archief" ? " · " : ""}${blad === "dag" ? "Per dag" : "Per auto"}`.trim()}
               meta={`${zichtbaar.length}`}
             >
             <div className="flex flex-col gap-4">
@@ -579,6 +599,11 @@ function Regel({
             style={{ ...klein(actief ? "rgba(255,255,255,0.5)" : T.ink(0.45)), fontStyle: "italic" }}
           >
             &ldquo;{a.bericht}&rdquo;
+          </span>
+        )}
+        {a.afgehandeld_op && (
+          <span className="block truncate mt-0.5" style={klein(actief ? "rgba(255,255,255,0.5)" : T.groen)}>
+            afgehandeld op {new Date(a.afgehandeld_op).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
           </span>
         )}
         {feiten.length > 0 && (
@@ -822,6 +847,7 @@ function Detail({
   const [gekopieerd, setGekopieerd] = useState(false);
   const [bezig, setBezig] = useState(false);
 
+  const { vraag } = useDialoog();
   const { taak, start } = useAiTaak<{ id: string }>("aanvraag-antwoord");
 
   const patch = async (velden: Record<string, unknown>) => {
@@ -1151,17 +1177,39 @@ function Detail({
           size="sm"
           disabled={bezig}
           onClick={async () => {
+            // Afhandelen haalt hem uit je dagoverzicht, dus even bevestigen. Terughalen
+            // vragen we niet: dat zet alleen iets terug en is nooit een vergissing die pijn
+            // doet.
+            if (
+              !a.afgehandeld_op &&
+              !(await vraag({
+                titel: "Deze aanvraag afhandelen?",
+                tekst: `${a.naam || "Deze aanvraag"} verdwijnt uit je openstaande lijst en komt in het archief. Daar kun je hem altijd terughalen.`,
+                bevestig: "Afhandelen",
+              }))
+            ) {
+              return;
+            }
             setBezig(true);
             await patch({ afgehandeld: !a.afgehandeld_op });
             setBezig(false);
           }}
         >
-          <Check size={12} /> {a.afgehandeld_op ? "Terug in het overzicht" : "Afgehandeld"}
+          <Check size={12} /> {a.afgehandeld_op ? "Terughalen uit archief" : "Afgehandeld"}
         </Btn>
         <Btn
           variant="ghost" size="sm"
           onClick={async () => {
-            if (!confirm("Deze aanvraag verwijderen?")) return;
+            const wie = a.naam || a.email || a.telefoon;
+            const waarover = a.advertentie_titel || a.auto_naam || kenteken;
+            if (
+              !(await vraag({
+                titel: wie ? `Aanvraag van ${wie} verwijderen?` : "Aanvraag verwijderen?",
+                tekst: `${waarover ? `Het gaat over ${waarover}. ` : ""}Zijn bericht, de notitie en het geschreven antwoord gaan mee. Dit is niet terug te draaien.`,
+                bevestig: "Verwijderen",
+                gevaar: true,
+              }))
+            ) return;
             const res = await fetch(`/api/admin/aanvragen/${a.id}`, { method: "DELETE" });
             if (!res.ok) { onFout("Verwijderen mislukt"); return; }
             onSluit();

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
 import { Plus, Upload, Sparkles, Trash2, AlertTriangle, Check, Wallet, Mail, FileText, Paperclip } from "lucide-react";
 import InkoopFacturenOverzicht from "./InkoopFacturenOverzicht";
+import { useDialoog } from "./Dialoog";
 
 type InkoopFactuur = {
   id: string; leverancier: string; factuurnummer: string;
@@ -50,6 +51,7 @@ const veldStijl: React.CSSProperties = {
 const labelStijl: React.CSSProperties = { color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" };
 
 export default function InkoopFacturenContent() {
+  const { vraag } = useDialoog();
   const [data, setData] = useState<Overzicht | null>(null);
   const [weergave, setWeergave] = useState<"facturen" | "overzicht">("facturen");
   const [laden, setLaden] = useState(true);
@@ -322,7 +324,19 @@ export default function InkoopFacturenContent() {
   };
 
   const verwijder = async (f: InkoopFactuur) => {
-    if (!confirm(`Factuur van ${f.leverancier || "onbekende leverancier"} verwijderen?`)) return;
+    // Factuurnummer erbij als het bekend is: bij dezelfde leverancier is dat het
+    // enige waaraan je ziet welke van de twee je weggooit.
+    const kenmerk = [f.factuurnummer && `factuurnummer ${f.factuurnummer}`, euro(f.bedrag_incl)]
+      .filter(Boolean)
+      .join(" · ");
+    if (
+      !(await vraag({
+        titel: `Factuur van ${f.leverancier || "onbekende leverancier"} verwijderen?`,
+        tekst: `${kenmerk}\n\nDe factuur verdwijnt uit de lijst en telt niet meer mee in het maand- en kwartaaloverzicht. Dit kun je niet terugdraaien.`,
+        bevestig: "Verwijderen",
+        gevaar: true,
+      }))
+    ) return;
     await fetch(`/api/admin/inkoopfacturen/${f.id}`, { method: "DELETE" });
     await laad();
   };

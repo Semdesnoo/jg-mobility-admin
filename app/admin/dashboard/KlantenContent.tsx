@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Users, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { useDialoog } from "./Dialoog";
 
 type Klant = {
   id: string;
@@ -24,6 +25,7 @@ const S = {
 };
 
 export default function KlantenContent() {
+  const { vraag } = useDialoog();
   const [klanten, setKlanten] = useState<Klant[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -73,7 +75,14 @@ export default function KlantenContent() {
   };
 
   const verwijder = async (id: string) => {
-    if (!confirm("Klant verwijderen?")) return;
+    const klant = klanten.find((k) => k.id === id);
+    const bevestigd = await vraag({
+      titel: klant ? `${klant.naam} verwijderen?` : "Klant verwijderen?",
+      tekst: "De gegevens en de notitie van deze klant verdwijnen uit het klantenbestand. Dit is niet ongedaan te maken.",
+      bevestig: "Verwijderen",
+      gevaar: true,
+    });
+    if (!bevestigd) return;
     await fetch(`/api/admin/klanten/${id}`, { method: "DELETE" });
     setKlanten((p) => p.filter((k) => k.id !== id));
     if (openId === id) setOpenId(null);

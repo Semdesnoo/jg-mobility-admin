@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Handshake, ChevronDown, ChevronUp, Trash2, RefreshCw, Send, ExternalLink } from "lucide-react";
+import { useDialoog } from "./Dialoog";
 
 type Cosignatie = {
   id: string;
@@ -56,6 +57,7 @@ const LEEG: LeegForm = {
 };
 
 export default function CosignatieContent() {
+  const { vraag } = useDialoog();
   const [aanvragen, setAanvragen] = useState<Cosignatie[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -181,7 +183,18 @@ export default function CosignatieContent() {
   };
 
   const verwijder = async (id: string) => {
-    if (!confirm("Aanvraag verwijderen?")) return;
+    // De verwijderknop zit onderaan een uitgeklapte kaart, ver van de naam bovenin — dus
+    // noem in de vraag om wélke aanvraag het gaat.
+    const a = aanvragen.find((x) => x.id === id);
+    const auto = [a?.merk, a?.model, a?.bouwjaar].filter(Boolean).join(" ");
+    const wie = [a?.naam, auto].filter(Boolean).join(" — ") || "Deze aanvraag";
+    const bevestigd = await vraag({
+      titel: "Aanvraag verwijderen?",
+      tekst: `${wie} wordt definitief verwijderd, samen met de interne notitie en de opgehaalde marktprijzen. Dit is niet ongedaan te maken.`,
+      bevestig: "Verwijderen",
+      gevaar: true,
+    });
+    if (!bevestigd) return;
     await fetch(`/api/admin/cosignaties/${id}`, { method: "DELETE" });
     setAanvragen((p) => p.filter((a) => a.id !== id));
     if (openId === id) setOpenId(null);

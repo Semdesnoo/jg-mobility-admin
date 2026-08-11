@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useDialoog } from "./Dialoog";
 import { Plus, Target, ChevronDown, ChevronUp, Trash2, UserCheck } from "lucide-react";
 
 type Lead = {
@@ -55,6 +56,7 @@ export default function LeadsContent() {
   const [form, setForm] = useState<LeegForm>(LEEG);
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("alle");
+  const { vraag } = useDialoog();
 
   // Eerste lading: alleen een promise-keten starten, geen setState in de effectbody zelf.
   // De lijst wordt daarna bijgehouden door de acties hieronder, dus een aparte
@@ -93,7 +95,15 @@ export default function LeadsContent() {
   };
 
   const maakKlant = async (l: Lead) => {
-    if (!confirm(`Klant aanmaken voor ${l.naam || l.telefoon}?`)) return;
+    if (
+      !(await vraag({
+        titel: `Klant aanmaken voor ${l.naam || l.telefoon}?`,
+        tekst: "De naam, het telefoonnummer en het e-mailadres worden overgenomen in je klantenbestand.",
+        bevestig: "Klant aanmaken",
+      }))
+    ) {
+      return;
+    }
     await fetch("/api/admin/klanten", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,7 +113,16 @@ export default function LeadsContent() {
   };
 
   const verwijder = async (id: string) => {
-    if (!confirm("Lead verwijderen?")) return;
+    if (
+      !(await vraag({
+        titel: "Lead verwijderen?",
+        tekst: "De contactgegevens en de notitie verdwijnen mee. Dit is niet ongedaan te maken.",
+        bevestig: "Verwijderen",
+        gevaar: true,
+      }))
+    ) {
+      return;
+    }
     await fetch(`/api/admin/leads/${id}`, { method: "DELETE" });
     setLeads((p) => p.filter((l) => l.id !== id));
     if (openId === id) setOpenId(null);

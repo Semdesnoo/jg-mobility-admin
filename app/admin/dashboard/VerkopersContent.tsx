@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import VerkopersCriteria, { type Criteria as ZoekCriteria } from "./VerkopersCriteria";
 import { useAiTaak } from "./AiTaken";
+import { useDialoog } from "./Dialoog";
 
 /** Wat een zoekronde oplevert. Wordt bewaard in de takenlaag, zodat het er nog
  *  staat als je tussendoor naar een ander tabblad bent geweest. */
@@ -510,6 +511,7 @@ function LeadsTab({
   naarNakijken: (id: string, spring: boolean) => void;
   aantalKlaar: number;
 }) {
+  const { vraag } = useDialoog();
   const [filter, setFilter] = useState<"alle" | Status>("alle");
   // Filters op de lijst zelf. Met tweehonderd kaarten is scrollen geen doen.
   const [zoekterm, setZoekterm] = useState("");
@@ -564,11 +566,13 @@ function LeadsTab({
     if (zetBezigBulk || gekozen.size === 0) return;
     const ids = [...gekozen];
     if (
-      !confirm(
-        `${ids.length} verkopers weggooien?
-
-Ze verdwijnen uit de lijst en komen bij een volgende zoekronde niet meer terug.`
-      )
+      !(await vraag({
+        titel: `${ids.length} verkoper${ids.length === 1 ? "" : "s"} weggooien?`,
+        tekst:
+          "Weggegooide verkopers komen op de negeerlijst, zodat een volgende zoekronde ze niet opnieuw binnenhaalt. Dit is niet terug te draaien.",
+        bevestig: "Weggooien",
+        gevaar: true,
+      }))
     )
       return;
 
@@ -722,8 +726,16 @@ Ze verdwijnen uit de lijst en komen bij een volgende zoekronde niet meer terug.`
   };
 
   const verwijder = async (lead: Lead) => {
-    const wie = `${lead.merk} ${lead.model}`.trim() || "deze advertentie";
-    if (!confirm(`${wie} weggooien en de verkoper op de blokkadelijst zetten?\n\nZo komt hij bij een volgende zoekronde niet opnieuw naar boven.`)) return;
+    const wie = `${lead.merk} ${lead.model}`.trim() || "Deze advertentie";
+    if (
+      !(await vraag({
+        titel: `${wie} weggooien?`,
+        tekst: `De advertentie verdwijnt uit de lijst en komt bij een volgende zoekronde niet opnieuw naar boven. Is het e-mailadres of telefoonnummer van ${lead.naam || "de verkoper"} bekend, dan gaat dat ook op de blokkadelijst. Dit is niet terug te draaien.`,
+        bevestig: "Weggooien en blokkeren",
+        gevaar: true,
+      }))
+    )
+      return;
     zetBezig(lead.id, "weg");
     onFout("");
     try {
@@ -1369,6 +1381,7 @@ function NakijkPaneel({
   onFout: (s: string) => void;
   onVerwijderd: () => void;
 }) {
+  const { vraag } = useDialoog();
   // Geen useEffect die deze velden terugzet uit de lead: dit component krijgt een
   // key={lead.id} van de lijst, dus bij het wisselen van verkoper wordt het opnieuw
   // opgebouwd. Zou je hier synchroniseren, dan overschrijft elke herlaadactie de tekst
@@ -1442,7 +1455,16 @@ function NakijkPaneel({
   };
 
   const geenInteresse = async () => {
-    if (!confirm("Deze verkoper op de blokkadelijst zetten en uit de lijst verwijderen?")) return;
+    const auto = `${lead.merk} ${lead.model}`.trim() || lead.titel;
+    if (
+      !(await vraag({
+        titel: `Geen interesse in ${auto}?`,
+        tekst: `De advertentie verdwijnt uit Nakijken en komt bij een volgende zoekronde niet opnieuw naar boven. Bekende contactgegevens van ${lead.naam || "de verkoper"} gaan op de blokkadelijst — daar wordt bij het zoeken én vlak voor elke verzending op gecontroleerd. Dit is niet terug te draaien.`,
+        bevestig: "Weggooien en blokkeren",
+        gevaar: true,
+      }))
+    )
+      return;
     const res = await fetch(`/api/admin/verkopers/${lead.id}?blokkeer=1`, { method: "DELETE" });
     if (!res.ok) {
       onFout("Verwijderen mislukt");

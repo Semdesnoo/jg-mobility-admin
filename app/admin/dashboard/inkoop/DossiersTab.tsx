@@ -37,6 +37,7 @@ import {
 } from "./ui";
 import { STATUS_LABELS } from "./types";
 import type { InkoopDossier } from "./types";
+import { useDialoog } from "../Dialoog";
 
 type StatusFilter = "alle" | "nieuw" | "in_onderhandeling" | "akkoord" | "afgewezen";
 type Sortering = "nieuwste" | "bod" | "merk";
@@ -86,6 +87,7 @@ export default function DossiersTab({
   herlaad: () => Promise<void> | void;
   onNieuweTaxatie: () => void;
 }) {
+  const { vraag } = useDialoog();
   const [filter, setFilter] = useState<StatusFilter>("alle");
   const [zoek, setZoek] = useState("");
   const [sortering, setSortering] = useState<Sortering>("nieuwste");
@@ -163,7 +165,21 @@ export default function DossiersTab({
   };
 
   const verwijder = async (id: string) => {
-    if (!confirm("Dossier verwijderen?")) return;
+    // Noem het dossier bij naam in de vraag, zodat zichtbaar is wélke regel verdwijnt.
+    const d = dossiers?.find((x) => x.id === id);
+    const auto = [d?.merk, d?.model].filter(Boolean).join(" ");
+    const omschrijving = auto && d?.kenteken ? `${auto} (${d.kenteken})` : auto || d?.kenteken || "";
+
+    const akkoord = await vraag({
+      titel: omschrijving ? `Dossier ${omschrijving} verwijderen?` : "Dossier verwijderen?",
+      tekst:
+        "Het bod, de contactgegevens en de notitie verdwijnen mee. Dit kan niet ongedaan worden gemaakt — " +
+        "zet een afgeketste deal liever op \"Afgewezen\", dan blijft de historie bewaard.",
+      bevestig: "Verwijderen",
+      gevaar: true,
+    });
+    if (!akkoord) return;
+
     setBezig(true);
     setFout(null);
     try {
