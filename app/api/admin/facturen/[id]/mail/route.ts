@@ -1,117 +1,176 @@
 import { NextRequest } from "next/server";
 import { Resend } from "resend";
 import sql from "@/lib/db";
+import { factuurMail, bedankMail, type MailGegevens } from "@/lib/mail-sjabloon";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+/**
+ * Verstuurt de factuurmail of de bedankmail naar de klant.
+ *
+ * TWEE FOUTEN DIE HIER ZATEN
+ *
+ * 1. Het antwoord van Resend werd nooit gelezen. De SDK gooit geen fout bij een
+ *    afgekeurde verzending — hij geeft `{ data, error }` terug. Ging er iets mis (een
+ *    afzender die niet geverifieerd is, een ongeldig adres, een limiet), dan liep de code
+ *    gewoon door naar "gelukt", schreef het verzendmoment weg en meldde aan het scherm dat
+ *    de mail verstuurd was. De klant kreeg niets en jij zag een vinkje.
+ *
+ * 2. De grendel tegen twee keer versturen zat alleen in het scherm. Twee tabbladen, een
+ *    dubbelklik of een verversing en de klant kreeg dezelfde factuur twee keer.
+ *
+ * HOE HET NU WERKT
+ * Het verzendmoment wordt vastgelegd VÓÓR het versturen, met een UPDATE die alleen
+ * aanslaat als het veld nog leeg is. Verandert die update niets, dan was iemand anders
+ * eerder en weigeren we. Mislukt het versturen daarna alsnog, dan wordt het veld
+ * teruggezet zodat je opnieuw kunt proberen. Zo kan er nooit meer dan één mail uitgaan, en
+ * blijft een mislukte poging niet als "verstuurd" staan.
+ */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { pdfBase64, type } = await req.json();
+  const { pdfBase64, type } = await req.json().catch(() => ({}));
   const isBedankt = type === "bedankt";
+  const kolom = isBedankt ? "bedankmail_verstuurd_op" : "factuurmail_verstuurd_op";
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL;
-  if (!apiKey) return Response.json({ error: "RESEND_API_KEY niet ingesteld" }, { status: 500 });
-  if (!fromEmail) return Response.json({ error: "RESEND_FROM_EMAIL niet ingesteld" }, { status: 500 });
-  if (!pdfBase64) return Response.json({ error: "PDF ontbreekt" }, { status: 400 });
+  if (!apiKey) {
+    return Response.json(
+      { error: "RESEND_API_KEY ontbreekt in de instellingen. Zonder die sleutel kan er geen mail uit." },
+      { status: 500 }
+    );
+  }
+  if (!fromEmail) {
+    return Response.json(
+      { error: "RESEND_FROM_EMAIL ontbreekt in de instellingen. Zonder afzender kan er geen mail uit." },
+      { status: 500 }
+    );
+  }
+  if (!pdfBase64) {
+    return Response.json({ error: "De PDF ontbreekt. Probeer het opnieuw." }, { status: 400 });
+  }
 
-  const rows = await sql`SELECT * FROM facturen WHERE id = ${id}`;
-  if (rows.length === 0) return Response.json({ error: "Factuur niet gevonden" }, { status: 404 });
+  const rijen = await sql`SELECT * FROM facturen WHERE id = ${id}`;
+  if (rijen.length === 0) return Response.json({ error: "Deze factuur bestaat niet (meer)." }, { status: 404 });
 
-  const f = rows[0];
-  if (!f.klant_email) return Response.json({ error: "Klant heeft geen e-mailadres" }, { status: 400 });
+  const f = rijen[0];
+  if (!f.klant_email) {
+    return Response.json(
+      { error: "Deze klant heeft geen e-mailadres. Vul dat eerst in bij de factuur." },
+      { status: 400 }
+    );
+  }
 
-  // Prijzen zijn incl. BTW → totaal = wat de klant betaalt (geen *1.21 erbovenop).
-  // Dit moet gelijk zijn aan het eindtotaal op de PDF.
+  // Prijzen zijn incl. btw, dus het totaal is wat de klant betaalt. Moet gelijk zijn aan
+  // het eindtotaal op de PDF.
   let totaal = Number(f.verkoopprijs) || 0;
   try {
-    const regels = JSON.parse(f.regels || "[]");
+    const regels = JSON.parse((f.regels as string) || "[]");
     totaal += regels.reduce((s: number, r: { prijs: string }) => s + (Number(r.prijs) || 0), 0);
-  } catch { /* gebruik verkoopprijs */ }
+  } catch {
+    /* dan alleen de verkoopprijs */
+  }
 
-  const voertuig = [f.auto_merk, f.auto_model, f.auto_bouwjaar ? `(${f.auto_bouwjaar})` : ""].filter(Boolean).join(" ");
+  const gegevens: MailGegevens = {
+    klant_naam: (f.klant_naam as string) ?? "",
+    factuur_nr: (f.factuur_nr as string) ?? "",
+    voertuig: [f.auto_merk, f.auto_model, f.auto_bouwjaar ? `(${f.auto_bouwjaar})` : ""]
+      .filter(Boolean)
+      .join(" "),
+    kenteken: (f.auto_kenteken as string) ?? "",
+    totaal,
+    vervaldatum: (f.vervaldatum as string) ?? "",
+    betaalwijze: (f.betaalwijze as string) ?? "bank",
+  };
 
-  const betaalBody = `<!DOCTYPE html>
-<html>
-<body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-  <div style="border-bottom:3px solid #001337;padding-bottom:16px;margin-bottom:24px">
-    <span style="font-size:22px;font-weight:700;color:#001337;letter-spacing:2px">JG MOBILITY</span>
-  </div>
-  <p style="font-size:15px">Geachte ${f.klant_naam || "klant"},</p>
-  <p style="font-size:15px;line-height:1.6">Hartelijk dank voor uw aankoop bij JG Mobility! Wij hopen dat u veel plezier zult beleven aan uw voertuig.</p>
-  <p style="font-size:15px;line-height:1.6">In de bijlage vindt u de factuur voor uw aankoop. Wij verzoeken u vriendelijk het openstaande bedrag te voldoen vóór de vervaldatum.</p>
-  <div style="background:#f8fafc;border-left:4px solid #001337;padding:16px 20px;margin:24px 0;line-height:2">
-    <div><span style="color:#64748b;font-size:13px">FACTUURNUMMER</span><br><strong>${f.factuur_nr}</strong></div>
-    ${voertuig ? `<div><span style="color:#64748b;font-size:13px">VOERTUIG</span><br><strong>${voertuig}</strong></div>` : ""}
-    <div><span style="color:#64748b;font-size:13px">TOTAALBEDRAG</span><br><strong style="font-size:18px;color:#001337">€${totaal.toLocaleString("nl-NL")}</strong></div>
-    <div><span style="color:#64748b;font-size:13px">${f.vervaldatum ? "UITERLIJK BETALEN VOOR" : "BETAALTERMIJN"}</span><br><strong>${f.vervaldatum || "30 dagen na ontvangst"}</strong></div>
-  </div>
-  ${f.betaalwijze === "bank" ? `
-  <div style="background:#f0f9ff;border:1px solid #bae6fd;padding:16px 20px;margin:0 0 24px;border-radius:4px;line-height:2">
-    <strong style="color:#001337;display:block;margin-bottom:4px">Betaalgegevens</strong>
-    <span style="color:#475569">IBAN</span> &nbsp; NL94 ABNA 0154171638<br>
-    <span style="color:#475569">T.n.v.</span> &nbsp; JG Mobility<br>
-    <span style="color:#475569">Omschrijving</span> &nbsp; ${f.factuur_nr}
-  </div>` : `<p style="font-size:15px">Betaling geschiedt contant bij afhaling.</p>`}
-  <p style="font-size:15px;line-height:1.6">Heeft u vragen over uw factuur? Neem dan gerust contact met ons op via <a href="mailto:info@jgmobility.nl" style="color:#001337">info@jgmobility.nl</a>.</p>
-  <div style="border-top:1px solid #e2e8f0;padding-top:20px;margin-top:30px;font-size:13px;color:#64748b;line-height:1.8">
-    Met vriendelijke groet,<br><br>
-    <strong style="color:#001337;font-size:14px">JG Mobility</strong><br>
-    <a href="mailto:info@jgmobility.nl" style="color:#475569">info@jgmobility.nl</a><br>
-    <a href="https://www.jgmobility.nl" style="color:#475569">www.jgmobility.nl</a>
-  </div>
-</body>
-</html>`;
+  // ── De grendel. Claim het verzendmoment vóór we iets versturen. ──
+  //
+  // Alleen als het veld nog leeg is slaat deze UPDATE aan. Twee gelijktijdige verzoeken
+  // kunnen dus niet allebei doorlopen: de tweede krijgt nul rijen terug en stopt hier.
+  const nu = new Date().toISOString();
+  let geclaimd;
+  try {
+    geclaimd = isBedankt
+      ? await sql`
+          UPDATE facturen SET bedankmail_verstuurd_op = ${nu}
+          WHERE id = ${id} AND (bedankmail_verstuurd_op IS NULL OR bedankmail_verstuurd_op = '')
+          RETURNING id`
+      : await sql`
+          UPDATE facturen SET factuurmail_verstuurd_op = ${nu}
+          WHERE id = ${id} AND (factuurmail_verstuurd_op IS NULL OR factuurmail_verstuurd_op = '')
+          RETURNING id`;
+  } catch {
+    return Response.json(
+      { error: "Kon niet vastleggen dat de mail verstuurd wordt. Probeer het zo nog een keer." },
+      { status: 500 }
+    );
+  }
 
-  const bedankBody = `<!DOCTYPE html>
-<html>
-<body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-  <div style="border-bottom:3px solid #001337;padding-bottom:16px;margin-bottom:24px">
-    <span style="font-size:22px;font-weight:700;color:#001337;letter-spacing:2px">JG MOBILITY</span>
-  </div>
-  <p style="font-size:15px">Geachte ${f.klant_naam || "klant"},</p>
-  <p style="font-size:15px;line-height:1.6">Hartelijk dank voor het vertrouwen in JG Mobility. Wij wensen u heel veel rijplezier met ${voertuig || "uw nieuwe voertuig"}!</p>
-  <p style="font-size:15px;line-height:1.6">In de bijlage vindt u uw factuur, voorzien van een <strong>betaald</strong>-vermelding. Bewaar deze goed &mdash; u kunt hem altijd gebruiken als aankoop- en betaalbewijs.</p>
-  <div style="background:#f0fdf4;border-left:4px solid #15803d;padding:16px 20px;margin:24px 0;line-height:2">
-    <div><span style="color:#16a34a;font-size:13px;font-weight:700">&#10003; VOLDAAN</span></div>
-    <div><span style="color:#64748b;font-size:13px">FACTUURNUMMER</span><br><strong>${f.factuur_nr}</strong></div>
-    ${voertuig ? `<div><span style="color:#64748b;font-size:13px">VOERTUIG</span><br><strong>${voertuig}</strong></div>` : ""}
-    <div><span style="color:#64748b;font-size:13px">TOTAALBEDRAG</span><br><strong style="font-size:18px;color:#001337">€${totaal.toLocaleString("nl-NL")}</strong></div>
-  </div>
-  <p style="font-size:15px;line-height:1.6">Heeft u vragen? Neem gerust contact met ons op via <a href="mailto:info@jgmobility.nl" style="color:#001337">info@jgmobility.nl</a>.</p>
-  <div style="border-top:1px solid #e2e8f0;padding-top:20px;margin-top:30px;font-size:13px;color:#64748b;line-height:1.8">
-    Met vriendelijke groet,<br><br>
-    <strong style="color:#001337;font-size:14px">JG Mobility</strong><br>
-    <a href="mailto:info@jgmobility.nl" style="color:#475569">info@jgmobility.nl</a><br>
-    <a href="https://www.jgmobility.nl" style="color:#475569">www.jgmobility.nl</a>
-  </div>
-</body>
-</html>`;
+  if (geclaimd.length === 0) {
+    const al = (f[kolom] as string) ?? "";
+    const wanneer = al ? new Date(al).toLocaleString("nl-NL") : "eerder";
+    return Response.json(
+      {
+        error: `Deze mail is al verstuurd op ${wanneer}. Een klant twee keer dezelfde mail sturen komt onprofessioneel over; wil je hem toch opnieuw versturen, draai de verzending dan eerst terug.`,
+        alVerstuurd: true,
+        verstuurd_op: al,
+      },
+      { status: 409 }
+    );
+  }
+
+  /** De claim terugdraaien als het versturen niet lukt — anders blijft hij op "verstuurd" staan. */
+  const geefVrij = async () => {
+    if (isBedankt) {
+      await sql`UPDATE facturen SET bedankmail_verstuurd_op = NULL WHERE id = ${id}`.catch(() => null);
+    } else {
+      await sql`UPDATE facturen SET factuurmail_verstuurd_op = NULL WHERE id = ${id}`.catch(() => null);
+    }
+  };
+
+  const { onderwerp, html } = isBedankt ? bedankMail(gegevens) : factuurMail(gegevens);
 
   try {
     const resend = new Resend(apiKey);
-    await resend.emails.send({
+    // LET OP: de SDK gooit geen fout bij een afgekeurde verzending. Het antwoord MOET
+    // gelezen worden, anders ziet een mislukte mail eruit als een geslaagde.
+    const { data, error } = await resend.emails.send({
       from: `JG Mobility <${fromEmail}>`,
-      to: f.klant_email,
-      subject: isBedankt
-        ? `Bedankt voor uw aankoop bij JG Mobility — Factuur ${f.factuur_nr}`
-        : `Factuur ${f.factuur_nr} - JG Mobility`,
-      html: isBedankt ? bedankBody : betaalBody,
-      attachments: [{
-        filename: isBedankt ? `Factuur-${f.factuur_nr}-betaald.pdf` : `Factuur-${f.factuur_nr}.pdf`,
-        content: pdfBase64,
-      }],
+      to: f.klant_email as string,
+      replyTo: "info@jgmobility.nl",
+      subject: onderwerp,
+      html,
+      attachments: [
+        {
+          filename: isBedankt
+            ? `Factuur-${gegevens.factuur_nr}-betaald.pdf`
+            : `Factuur-${gegevens.factuur_nr}.pdf`,
+          content: pdfBase64,
+        },
+      ],
     });
 
-    // Leg het verzendmoment vast als blijvend bewijs. .catch() zodat een ontbrekende
-    // kolom (migratie nog niet gedraaid) nooit een al-verstuurde mail als fout rapporteert.
-    const verstuurdOp = new Date().toISOString();
-    if (isBedankt) {
-      await sql`UPDATE facturen SET bedankmail_verstuurd_op = ${verstuurdOp} WHERE id = ${id}`.catch(() => null);
-    } else {
-      await sql`UPDATE facturen SET factuurmail_verstuurd_op = ${verstuurdOp} WHERE id = ${id}`.catch(() => null);
+    if (error || !data?.id) {
+      await geefVrij();
+      return Response.json(
+        {
+          error: `De mail is niet verstuurd: ${error?.message ?? "de mailserver gaf geen bevestiging terug"}. Er is niets naar de klant gegaan.`,
+        },
+        { status: 502 }
+      );
     }
 
-    return Response.json({ ok: true, verstuurd_op: verstuurdOp });
+    return Response.json({ ok: true, verstuurd_op: nu, bericht_id: data.id });
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 500 });
+    await geefVrij();
+    return Response.json(
+      {
+        error: `De mail kon niet worden verstuurd: ${
+          err instanceof Error ? err.message : String(err)
+        }. Er is niets naar de klant gegaan.`,
+      },
+      { status: 502 }
+    );
   }
 }

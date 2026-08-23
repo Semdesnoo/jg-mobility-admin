@@ -2157,6 +2157,7 @@ function FacturenContent() {
   const [bewerkFactuur, setBewerkFactuur] = useState<Factuur | null>(null);
   const [rdwLaden, setRdwLaden] = useState(false);
   const [rdwStatus, setRdwStatus] = useState<"idle" | "gevonden" | "niet_gevonden">("idle");
+  const [adresStatus, setAdresStatus] = useState<"idle" | "bezig" | "gevonden" | "onbekend" | "mislukt">("idle");
   const [periode, setPeriode] = useState<"alles" | "week" | "maand" | "kwartaal" | "jaar">("alles");
   const [mailStatus, setMailStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   const [bedankStatus, setBedankStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
@@ -2827,6 +2828,40 @@ function FacturenContent() {
     </>
   );
 
+  /**
+   * Postcode plus huisnummer omzetten naar straat en plaats.
+   *
+   * Een adres van een rijbewijs overtypen gaat net iets te vaak mis — een straatnaam met
+   * een spatie erin, een plaatsnaam met een letter te weinig. Op een factuur is dat geen
+   * schoonheidsfoutje: die moet kloppen voor de administratie van allebei de partijen.
+   *
+   * Het huisnummer haalt hij uit wat er al in het adresveld staat, want daar typ je het
+   * toch in. Levert het niets op, dan gebeurt er niets en typ je het gewoon zelf.
+   */
+  const zoekAdres = async () => {
+    const pc = form.klant_postcode.replace(/\s+/g, "").toUpperCase();
+    if (!/^[1-9][0-9]{3}[A-Z]{2}$/.test(pc)) return;
+    const nummer = form.klant_adres.match(/\d+\s*[a-zA-Z]?/)?.[0]?.trim() ?? "";
+    setAdresStatus("bezig");
+    try {
+      const res = await fetch(`/api/admin/adres?postcode=${encodeURIComponent(pc)}&nummer=${encodeURIComponent(nummer)}`);
+      if (!res.ok) { setAdresStatus("mislukt"); return; }
+      const d = await res.json();
+      if (!d.gevonden) { setAdresStatus("onbekend"); return; }
+      setForm((f) => ({
+        ...f,
+        // Alleen aanvullen wat de dienst zeker weet. Stond er al een huisnummer, dan blijft
+        // dat staan -- die weet jij beter dan een register dat op de postcode zoekt.
+        klant_adres: `${d.straat} ${nummer || d.huisnummer}`.trim(),
+        klant_postcode: d.postcode || f.klant_postcode,
+        klant_stad: d.stad || f.klant_stad,
+      }));
+      setAdresStatus("gevonden");
+    } catch {
+      setAdresStatus("mislukt");
+    }
+  };
+
   // ── Nieuwe factuur ──────────────────────────────────────────
   if (view === "nieuw") {
     const secties: { titel: string; velden: { label: string; field: keyof FactuurForm; col?: number }[] }[] = [
@@ -2993,6 +3028,22 @@ function FacturenContent() {
             <div key={titel} className="mb-5" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
               <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
                 <p className="text-[10px] font-bold uppercase tracking-wider" style={labelStijl}>{titel}</p>
+                {titel === "Klantgegevens" && adresStatus === "bezig" && (
+                  <span className="text-[10px] flex items-center gap-1.5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                    <span className="inline-block w-2.5 h-2.5 rounded-full border border-current border-t-transparent animate-spin" />
+                    Adres opzoeken...
+                  </span>
+                )}
+                {titel === "Klantgegevens" && adresStatus === "gevonden" && (
+                  <span className="text-[10px]" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>
+                    ✓ Adres gevonden
+                  </span>
+                )}
+                {titel === "Klantgegevens" && adresStatus === "onbekend" && (
+                  <span className="text-[10px]" style={{ color: "#b45309", fontFamily: "var(--font-inter)" }}>
+                    Postcode niet gevonden — vul het adres zelf in
+                  </span>
+                )}
                 {titel === "Voertuig" && rdwLaden && (
                   <span className="text-[10px] flex items-center gap-1.5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
                     <span className="inline-block w-2.5 h-2.5 rounded-full border border-current border-t-transparent animate-spin" />
@@ -3027,7 +3078,18 @@ function FacturenContent() {
                       <input
                         type="text"
                         {...inp(field)}
-                        placeholder={vinVeld ? "Chassisnummer (17 tekens)" : undefined}
+                        // Zoeken zodra je uit het postcodeveld klikt. Niet tijdens het
+                        // typen: dan vuurt hij zes keer op een halve postcode.
+                        onBlur={field === "klant_postcode" ? zoekAdres : undefined}
+                        placeholder={
+                          vinVeld
+                            ? "Chassisnummer (17 tekens)"
+                            : field === "klant_postcode"
+                              ? "1234 AB — straat en plaats worden opgezocht"
+                              : field === "klant_adres"
+                                ? "Straat en huisnummer"
+                                : undefined
+                        }
                         className="w-full px-3 py-2 text-sm outline-none"
                         style={vinLeeg ? { ...veldStijl, border: "1px solid #fca5a5", backgroundColor: "#fff5f5" } : veldStijl}
                       />
