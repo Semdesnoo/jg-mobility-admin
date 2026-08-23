@@ -144,6 +144,29 @@ function romp(opts: {
 </html>`;
 }
 
+/**
+ * De platte-tekstversie die naast de opgemaakte mail wordt meegestuurd.
+ *
+ * WAAROM DIT ERTOE DOET
+ * Een mail met alleen HTML en geen tekstversie is voor spamfilters een signaal op zich —
+ * echte post van bedrijven stuurt allebei mee, bulkmail vaak niet. Zeker Outlook en
+ * Hotmail wegen dat mee. Het kost bijna niets en het is een van de weinige knoppen die je
+ * zelf in de hand hebt.
+ *
+ * Het is bovendien wat iemand ziet die zijn mail zonder opmaak leest, of met een
+ * schermlezer.
+ */
+function platteTekst(regels: (string | false)[]): string {
+  return regels
+    // Alleen de weggevallen regels eruit, NIET de lege. Met filter(Boolean) verdwijnen de
+    // lege strings mee — en dat zijn juist de witregels tussen de alinea's. De tekst wordt
+    // dan één blok waar niemand doorheen komt.
+    .filter((r): r is string => r !== false)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export type MailGegevens = {
   klant_naam: string;
   factuur_nr: string;
@@ -155,12 +178,38 @@ export type MailGegevens = {
 };
 
 /** De mail bij een openstaande factuur. */
-export function factuurMail(g: MailGegevens): { onderwerp: string; html: string } {
+export function factuurMail(g: MailGegevens): { onderwerp: string; html: string; tekst: string } {
   const perBank = (g.betaalwijze ?? "bank") === "bank";
   const voornaam = (g.klant_naam || "").trim().split(" ")[0] || "";
+  const bedrag = `€ ${Math.round(g.totaal).toLocaleString("nl-NL")}`;
 
   return {
     onderwerp: `Factuur ${g.factuur_nr} — ${BEDRIJF.naam}`,
+    tekst: platteTekst([
+      voornaam ? `Beste ${voornaam},` : "Beste klant,",
+      "",
+      `Hierbij ontvangt u de factuur voor uw ${g.voertuig}. De volledige factuur zit als PDF bij deze mail.`,
+      "",
+      `Factuurnummer: ${g.factuur_nr}`,
+      `Voertuig: ${g.voertuig}`,
+      !!g.kenteken && `Kenteken: ${g.kenteken}`,
+      !!g.vervaldatum && `Te voldoen voor: ${g.vervaldatum}`,
+      `Totaalbedrag: ${bedrag}`,
+      "",
+      perBank && `Betaalgegevens
+IBAN ${BEDRIJF.iban}
+Ten name van ${BEDRIJF.naam}
+Omschrijving ${g.factuur_nr}`,
+      "",
+      "Zolang het bedrag niet is bijgeschreven kunt u het voertuig helaas nog niet ophalen. Zodra de betaling binnen is nemen wij contact met u op om een moment af te spreken.",
+      "",
+      "Heeft u een vraag over deze factuur, dan mag u altijd bellen of mailen.",
+      "",
+      "Met vriendelijke groet,",
+      "Jimi Gaillard",
+      `${BEDRIJF.naam} · ${BEDRIJF.adres}, ${BEDRIJF.postcode}`,
+      `${BEDRIJF.email} · ${BEDRIJF.telefoon}`,
+    ]),
     html: romp({
       voorvertoning: `Uw factuur ${g.factuur_nr} van ${euro(g.totaal).replace("&euro;", "€")} zit als bijlage bij deze mail.`,
       titel: "Factuur",
@@ -197,11 +246,31 @@ export function factuurMail(g: MailGegevens): { onderwerp: string; html: string 
 }
 
 /** De mail nadat de betaling binnen is. */
-export function bedankMail(g: MailGegevens): { onderwerp: string; html: string } {
+export function bedankMail(g: MailGegevens): { onderwerp: string; html: string; tekst: string } {
   const voornaam = (g.klant_naam || "").trim().split(" ")[0] || "";
+  const bedrag = `€ ${Math.round(g.totaal).toLocaleString("nl-NL")}`;
 
   return {
     onderwerp: `Bedankt voor uw aankoop — factuur ${g.factuur_nr} voldaan`,
+    tekst: platteTekst([
+      voornaam ? `Beste ${voornaam},` : "Beste klant,",
+      "",
+      `Uw betaling is bij ons binnengekomen. Hartelijk dank voor het vertrouwen in ${BEDRIJF.naam} en veel rijplezier met uw ${g.voertuig}.`,
+      "",
+      "In de bijlage vindt u de factuur, nu voorzien van de vermelding betaald. Bewaar hem goed: u heeft hem nodig bij een eventuele doorverkoop en voor uw eigen administratie.",
+      "",
+      `Factuurnummer: ${g.factuur_nr}`,
+      `Voertuig: ${g.voertuig}`,
+      !!g.kenteken && `Kenteken: ${g.kenteken}`,
+      `Voldaan bedrag: ${bedrag}`,
+      "",
+      "Komt u er onverhoopt achter dat er iets niet klopt, laat het ons dan gerust weten — daar komen we samen uit.",
+      "",
+      "Met vriendelijke groet,",
+      "Jimi Gaillard",
+      `${BEDRIJF.naam} · ${BEDRIJF.adres}, ${BEDRIJF.postcode}`,
+      `${BEDRIJF.email} · ${BEDRIJF.telefoon}`,
+    ]),
     html: romp({
       voorvertoning: `Uw betaling is ontvangen. De factuur ${g.factuur_nr} is voldaan.`,
       titel: "Betaling ontvangen",

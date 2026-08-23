@@ -129,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   };
 
-  const { onderwerp, html } = isBedankt ? bedankMail(gegevens) : factuurMail(gegevens);
+  const { onderwerp, html, tekst } = isBedankt ? bedankMail(gegevens) : factuurMail(gegevens);
 
   try {
     const resend = new Resend(apiKey);
@@ -141,6 +141,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       replyTo: "info@jgmobility.nl",
       subject: onderwerp,
       html,
+      // De platte-tekstversie gaat mee. Een mail met alleen HTML is voor spamfilters een
+      // signaal op zich: echte post van bedrijven stuurt allebei mee, bulkmail vaak niet.
+      text: tekst,
       attachments: [
         {
           filename: isBedankt
