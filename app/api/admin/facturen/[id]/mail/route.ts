@@ -27,6 +27,56 @@ export const maxDuration = 60;
  * teruggezet zodat je opnieuw kunt proberen. Zo kan er nooit meer dan één mail uitgaan, en
  * blijft een mislukte poging niet als "verstuurd" staan.
  */
+/**
+ * Tekens die je niet ziet maar die wel meekomen bij het plakken uit een browser of
+ * een wachtwoordkluis: zero-width space, zero-width non-joiner, zero-width joiner, de
+ * byte-order mark en de harde spatie. Hier is al eens een dag aan verloren toen de
+ * mails van de website niet aankwamen door zo'n teken in de sleutel.
+ *
+ * Opgebouwd uit codepunten en niet als escape-reeks: zo staat er niets in dit bestand
+ * dat er onschuldig uitziet maar onzichtbaar is.
+ */
+const ONZICHTBAAR = new RegExp(
+  "[" + String.fromCharCode(0x200b, 0x200c, 0x200d, 0xfeff, 0x00a0) + "]",
+  "g"
+);
+
+/**
+ * Maakt van de instelling een afzender die de mailserver accepteert.
+ *
+ * Waarom dit nodig is: hier ging het twee keer mis. De code plakte er blind
+ * "JG Mobility <...>" omheen, dus stond er in de instelling al een naam ("JG Mobility
+ * <info@jgmobility.nl>"), dan werd het "JG Mobility <JG Mobility <info@...>>" en weigerde
+ * de mailserver het hele bericht. En bij het plakken van zo'n waarde sluipt er makkelijk
+ * een onzichtbaar teken of een spatie mee — daar is bij de website al eens een dag aan
+ * verloren.
+ *
+ * Nu wordt allebei opgevangen: onzichtbare tekens eruit, en een waarde die al een naam
+ * bevat blijft zoals hij is.
+ */
+function maakAfzender(waarde: string): { afzender: string } | { fout: string } {
+  // Zero-width tekens, harde spaties en aanhalingstekens die bij het plakken meekomen.
+  const schoon = waarde
+    .replace(ONZICHTBAAR, "")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+
+  if (!schoon) return { fout: "RESEND_FROM_EMAIL is leeg." };
+
+  // Staat er al een naam voor het adres, dan is hij al compleet.
+  const metNaam = schoon.match(/^(.+?)\s*<([^<>@\s]+@[^<>@\s]+\.[a-z]{2,})>$/i);
+  if (metNaam) return { afzender: `${metNaam[1].trim()} <${metNaam[2].trim()}>` };
+
+  // Anders hoort het een kaal adres te zijn.
+  if (/^[^<>@\s]+@[^<>@\s]+\.[a-z]{2,}$/i.test(schoon)) {
+    return { afzender: `JG Mobility <${schoon}>` };
+  }
+
+  return {
+    fout: `RESEND_FROM_EMAIL bevat geen geldig afzenderadres ("${schoon}"). Zet er alleen het adres in, bijvoorbeeld info@jgmobility.nl, of de vorm JG Mobility <info@jgmobility.nl>.`,
+  };
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { pdfBase64, type } = await req.json().catch(() => ({}));
@@ -47,6 +97,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { status: 500 }
     );
   }
+  const afzenderUitslag = maakAfzender(fromEmail);
+  if ("fout" in afzenderUitslag) {
+    return Response.json({ error: afzenderUitslag.fout }, { status: 500 });
+  }
+  const afzender = afzenderUitslag.afzender;
   if (!pdfBase64) {
     return Response.json({ error: "De PDF ontbreekt. Probeer het opnieuw." }, { status: 400 });
   }
@@ -136,7 +191,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // LET OP: de SDK gooit geen fout bij een afgekeurde verzending. Het antwoord MOET
     // gelezen worden, anders ziet een mislukte mail eruit als een geslaagde.
     const { data, error } = await resend.emails.send({
-      from: `JG Mobility <${fromEmail}>`,
+      from: afzender,
       to: f.klant_email as string,
       replyTo: "info@jgmobility.nl",
       subject: onderwerp,
