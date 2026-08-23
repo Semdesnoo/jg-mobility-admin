@@ -1391,16 +1391,31 @@ function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
         )}
       </button>
 
+      {/* Op een telefoon een laag over het scherm, zodat een tik ernaast sluit en het
+          duidelijk is dat je in de meldingen zit. Op een groot scherm niet nodig: daar is
+          het een uitklapper naast de bel. */}
       {open && (
         <div
-          className="absolute right-0 z-50 flex flex-col overflow-hidden"
+          className="fixed inset-0 z-40 md:hidden"
+          style={{ backgroundColor: "rgba(0,19,55,0.35)" }}
+          onMouseDown={() => setOpen(false)}
+        />
+      )}
+
+      {open && (
+        <div
+          className="fixed md:absolute left-3 right-3 md:left-auto md:right-0 top-[86px] md:top-[46px] z-50 flex flex-col overflow-hidden"
           style={{
-            top: 46,
-            width: 384,
-            // Overschrijft de globale `* { max-width: 100% }` uit globals.css, die
-            // de dropdown anders inperkt tot de breedte van het 38px belletje.
-            maxWidth: "calc(100vw - 24px)",
-            maxHeight: "min(70vh, 520px)",
+            // Op de telefoon VAST aan het scherm en niet aan de bel. De bel staat in een
+            // balk die zelf scrolt (overflow-y-auto), en zo'n container knipt ook aan de
+            // zijkant af — daardoor viel de helft van het paneel buiten beeld.
+            //
+            // De maximumbreedte overschrijft bovendien de globale `* { max-width: 100% }`
+            // uit globals.css, die het paneel anders inperkt tot de breedte van het
+            // belletje van 38 pixels.
+            maxWidth: "min(384px, calc(100vw - 24px))",
+            width: "auto",
+            maxHeight: "min(72vh, 560px)",
             backgroundColor: "#ffffff",
             border: "1px solid rgba(0,19,55,0.12)",
             borderRadius: 12,
@@ -1460,7 +1475,7 @@ function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
                   <button
                     key={m.id}
                     onClick={() => { onGaNaar(m.tab as Tab); setOpen(false); }}
-                    className="group relative w-full flex items-start gap-3 pl-4 pr-3 py-3 text-left transition-all hover:bg-slate-50"
+                    className="group relative w-full flex items-start gap-3 pl-4 pr-3 py-3.5 md:py-3 text-left transition-all hover:bg-slate-50 active:bg-slate-100"
                     style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}
                   >
                     {/* Rode accentbalk maakt urgente meldingen meteen herkenbaar */}
@@ -1480,21 +1495,21 @@ function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p
-                        className="text-[12.5px] font-bold"
+                        className="text-[14px] md:text-[12.5px] font-bold"
                         style={{ color: "#001337", fontFamily: "var(--font-inter)", lineHeight: 1.35 }}
                       >
                         {m.titel}
                       </p>
+                      {/* Geen afkapping meer op twee regels. Op een telefoon is de kolom
+                          zo smal dat een melding daar al na een half zinnetje ophield —
+                          precies de reden dat je niet kon zien wat er stond. Ze zijn kort
+                          genoeg om helemaal te tonen. */}
                       <p
-                        className="text-[11px] mt-0.5"
+                        className="text-[12.5px] md:text-[11px] mt-1 md:mt-0.5"
                         style={{
-                          color: "rgba(0,19,55,0.5)",
+                          color: "rgba(0,19,55,0.55)",
                           fontFamily: "var(--font-inter)",
-                          lineHeight: 1.45,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
+                          lineHeight: 1.5,
                         }}
                       >
                         {m.detail}
