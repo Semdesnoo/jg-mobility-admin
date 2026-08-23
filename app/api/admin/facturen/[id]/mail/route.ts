@@ -42,26 +42,42 @@ const ONZICHTBAAR = new RegExp(
 );
 
 /**
+ * Het adres waar de factuurmail vandaan komt als de instelling ontbreekt of niet klopt.
+ *
+ * Dit is geen noodgreep maar het normale zakelijke adres: het staat op de website, het is
+ * het adres waar de klant op terugmailt (zie `replyTo` verderop) en het domein is
+ * geverifieerd bij de mailserver — de andere mails van de zaak gaan al vanaf datzelfde
+ * domein de deur uit.
+ */
+const STANDAARD_AFZENDER = "JG Mobility <info@jgmobility.nl>";
+
+/**
  * Maakt van de instelling een afzender die de mailserver accepteert.
  *
- * Waarom dit nodig is: hier ging het twee keer mis. De code plakte er blind
+ * Waarom dit nodig is: hier ging het drie keer mis. De code plakte er eerst blind
  * "JG Mobility <...>" omheen, dus stond er in de instelling al een naam ("JG Mobility
  * <info@jgmobility.nl>"), dan werd het "JG Mobility <JG Mobility <info@...>>" en weigerde
- * de mailserver het hele bericht. En bij het plakken van zo'n waarde sluipt er makkelijk
- * een onzichtbaar teken of een spatie mee — daar is bij de website al eens een dag aan
- * verloren.
+ * de mailserver het hele bericht. Daarna sloop er bij het plakken een onzichtbaar teken
+ * mee — daar is bij de website al eens een dag aan verloren. En de derde keer stond er
+ * simpelweg een typefout in de instelling in het Vercel-scherm ("info@jgmobility.n", de l
+ * eraf), waardoor er geen enkele factuurmail meer uitging.
  *
- * Nu wordt allebei opgevangen: onzichtbare tekens eruit, en een waarde die al een naam
- * bevat blijft zoals hij is.
+ * Die derde is de reden dat deze functie geen fout meer teruggeeft. Eén verkeerd getikte
+ * letter in een instellingenscherm hoort de facturatie niet plat te leggen: klopt de
+ * waarde niet, dan gaat de mail gewoon vanaf het vaste adres van de zaak en blijft er een
+ * regel in het logboek achter. De instelling is nog steeds bruikbaar — als hij klopt,
+ * wint hij — maar hij is geen struikeldraad meer.
  */
-function maakAfzender(waarde: string): { afzender: string } | { fout: string } {
+function maakAfzender(waarde: string | undefined): { afzender: string; melding?: string } {
   // Zero-width tekens, harde spaties en aanhalingstekens die bij het plakken meekomen.
-  const schoon = waarde
+  const schoon = (waarde ?? "")
     .replace(ONZICHTBAAR, "")
     .replace(/^["']|["']$/g, "")
     .trim();
 
-  if (!schoon) return { fout: "RESEND_FROM_EMAIL is leeg." };
+  if (!schoon) {
+    return { afzender: STANDAARD_AFZENDER, melding: "RESEND_FROM_EMAIL is niet ingevuld" };
+  }
 
   // Staat er al een naam voor het adres, dan is hij al compleet.
   const metNaam = schoon.match(/^(.+?)\s*<([^<>@\s]+@[^<>@\s]+\.[a-z]{2,})>$/i);
@@ -73,7 +89,8 @@ function maakAfzender(waarde: string): { afzender: string } | { fout: string } {
   }
 
   return {
-    fout: `RESEND_FROM_EMAIL bevat geen geldig afzenderadres ("${schoon}"). Zet er alleen het adres in, bijvoorbeeld info@jgmobility.nl, of de vorm JG Mobility <info@jgmobility.nl>.`,
+    afzender: STANDAARD_AFZENDER,
+    melding: `RESEND_FROM_EMAIL is geen geldig afzenderadres ("${schoon}")`,
   };
 }
 
@@ -83,25 +100,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const isBedankt = type === "bedankt";
   const kolom = isBedankt ? "bedankmail_verstuurd_op" : "factuurmail_verstuurd_op";
 
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL;
+  // Dezelfde schoonmaak als bij de afzender: ook in de sleutel sluipt bij het plakken
+  // makkelijk een onzichtbaar teken of een spatie mee, en dan weigert de mailserver alles.
+  const apiKey = (process.env.RESEND_API_KEY ?? "").replace(ONZICHTBAAR, "").trim();
   if (!apiKey) {
     return Response.json(
       { error: "RESEND_API_KEY ontbreekt in de instellingen. Zonder die sleutel kan er geen mail uit." },
       { status: 500 }
     );
   }
-  if (!fromEmail) {
-    return Response.json(
-      { error: "RESEND_FROM_EMAIL ontbreekt in de instellingen. Zonder afzender kan er geen mail uit." },
-      { status: 500 }
-    );
+
+  const { afzender, melding } = maakAfzender(process.env.RESEND_FROM_EMAIL);
+  if (melding) {
+    // Geen blokkade, wel een spoor: zo is later terug te vinden waarom de mail vanaf het
+    // vaste adres ging in plaats van vanaf de instelling.
+    console.warn(`[factuurmail] ${melding}. Er wordt verstuurd vanaf ${STANDAARD_AFZENDER}.`);
   }
-  const afzenderUitslag = maakAfzender(fromEmail);
-  if ("fout" in afzenderUitslag) {
-    return Response.json({ error: afzenderUitslag.fout }, { status: 500 });
-  }
-  const afzender = afzenderUitslag.afzender;
   if (!pdfBase64) {
     return Response.json({ error: "De PDF ontbreekt. Probeer het opnieuw." }, { status: 400 });
   }
