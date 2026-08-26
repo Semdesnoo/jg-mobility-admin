@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
-  ArrowLeftRight, Car, Check, ClipboardCopy, RotateCcw, Search, Tag, FolderPlus, Wallet,
+  ArrowLeftRight, Archive, Car, Check, ClipboardCopy, RotateCcw, Search, Tag, FolderPlus, Wallet,
 } from "lucide-react";
 import {
   T, num, micro, klein, fmt, fmtGetal, fmtKm,
@@ -10,8 +10,10 @@ import {
 } from "./inkoop/ui";
 import { berekenKoerslijst } from "./inkoop/koerslijst";
 import { berekenInruil, maxBod, bodBijBijbetaling, winstEigenAuto } from "./inruil/som";
+import InruilArchiefTab from "./inruil/ArchiefTab";
 import { useAiTaak } from "./AiTaken";
 import type { RdwData, TaxatieResultaat } from "./inkoop/types";
+import type { InruilArchiefRij } from "./inruil/types";
 
 /**
  * Inruil: de auto van de klant tegen de auto van ons.
@@ -120,7 +122,11 @@ export default function InruilContent({
   /** Vanuit een aanvraag doorgestuurd: kenteken van de klant en/of onze auto. */
   focus?: { kenteken?: string; autoId?: number } | null;
 }) {
+  /** Rekenen of terugkijken. */
+  const [tab, setTab] = useState<"rekenen" | "archief">("rekenen");
+
   // ── De auto van de klant ──
+  const [klant, setKlant] = useState("");
   const [kenteken, setKenteken] = useState("");
   const [rdw, setRdw] = useState<RdwData | null>(null);
   const [rdwLaden, setRdwLaden] = useState(false);
@@ -173,6 +179,19 @@ export default function InruilContent({
   const [bewaard, setBewaard] = useState(false);
   const [bewaarBezig, setBewaarBezig] = useState(false);
 
+  // ── Het archief ──
+  const [archief, setArchief] = useState<InruilArchiefRij[] | null>(null);
+  /**
+   * De handtekening van de inruil die al bewaard is.
+   *
+   * Zonder dit levert twee keer op "Kopieer voorstel" drukken twee regels in het archief
+   * op, en dat is precies wat een archief onbruikbaar maakt: tien keer dezelfde auto en
+   * niet meer weten welke regel de afspraak was. Verandert er een bedrag, dan is het een
+   * andere berekening en mag hij er wél naast.
+   */
+  const [bewaardAls, setBewaardAls] = useState<string | null>(null);
+  const [archiefBezig, setArchiefBezig] = useState(false);
+
   // De marktscan draait in de takenlaag boven de tabbladen: klik je tussendoor weg, dan
   // loopt hij door en staat het antwoord er nog als je terugkomt.
   const { taak, start, wis } = useAiTaak<TaxatieResultaat>("inruil-taxatie");
@@ -199,6 +218,10 @@ export default function InruilContent({
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => Array.isArray(d) && setDossiers(d))
       .catch(() => {});
+    fetch("/api/admin/inruil/archief")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setArchief(Array.isArray(d) ? d : []))
+      .catch(() => setArchief([]));
   }, []);
 
   const rdwOpzoeken = useCallback(
@@ -436,11 +459,65 @@ export default function InruilContent({
     .filter((r) => r !== null)
     .join("\n");
 
+  /** Waar de verkoopwaarde vandaan kwam. Gaat mee het archief in, want over een maand is
+   *  dat het verschil tussen een gemeten bedrag en een onderbuikgevoel. */
+  const bronTekst = verkoopEigen
+    ? "eigen inschatting"
+    : (b?.bron ?? (voorlopig ? "koerslijst (RDW-nieuwprijs)" : ""));
+
+  /** Wat deze berekening uniek maakt. Verandert er één bedrag, dan is het een nieuwe. */
+  const handtekening = [kenteken, kmNum, verkoopwaarde, bod, autoId ?? "", vraagprijs, korting, maxBij].join("|");
+  const alBewaard = bewaardAls === handtekening;
+
+  const bewaarInArchief = async () => {
+    if (archiefBezig || alBewaard || !somRond) return;
+    setArchiefBezig(true);
+    try {
+      const res = await fetch("/api/admin/inruil/archief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          klant,
+          kenteken,
+          merk: rdw?.merk ?? "",
+          model: rdw?.model ?? "",
+          bouwjaar: rdw?.bouwjaar ?? 0,
+          km: kmNum,
+          auto_id: gekozen?.id ?? null,
+          auto_naam: gekozen ? onzeAuto : "",
+          vraagprijs,
+          korting,
+          verkoopwaarde,
+          bod,
+          verschil: som.verschil,
+          netto_marge: som.nettoMarge,
+          marge,
+          kosten,
+          btw_type: btwType,
+          max_bijbetaling: maxBij,
+          bron: bronTekst,
+          // Genoeg om het later precies zo terug te zetten als het nu op het scherm staat.
+          gegevens: { rdw, taxatie: resultaat, uitvoering, posten },
+        }),
+      });
+      if (!res.ok) return;
+      const rij: InruilArchiefRij = await res.json();
+      setArchief((p) => [rij, ...(p ?? [])]);
+      setBewaardAls(handtekening);
+    } catch {
+      /* Niet bewaard is vervelend, maar mag de berekening op het scherm niet stukmaken. */
+    } finally {
+      setArchiefBezig(false);
+    }
+  };
+
   const kopieer = async () => {
     try {
       await navigator.clipboard.writeText(voorstel);
       setGekopieerd(true);
       setTimeout(() => setGekopieerd(false), 2500);
+      // Het voorstel gaat de deur uit — dan is dit het moment dat je later wilt terugvinden.
+      void bewaarInArchief();
     } catch {
       /* Zonder klembordrechten valt er niets te kopiëren; de tekst staat op het scherm. */
     }
@@ -464,6 +541,7 @@ export default function InruilContent({
           brandstof: rdw.brandstof,
           aanbod_prijs: verkoopwaarde,
           bod_prijs: bod,
+          naam: klant,
           status: "nieuw",
           notitie:
             `Inruil tegen ${onzeAuto} (${fmt(vraagprijs)}${korting > 0 ? `, korting ${fmt(korting)}` : ""}). ` +
@@ -474,6 +552,8 @@ export default function InruilContent({
       });
       setBewaard(true);
       setTimeout(() => setBewaard(false), 4000);
+      // Een auto die je in de inkoop zet, wil je later ook in het inruilarchief terugvinden.
+      void bewaarInArchief();
     } catch {
       /* Mislukt het opslaan, dan blijft het scherm gewoon staan met alle bedragen erin. */
     } finally {
@@ -481,8 +561,48 @@ export default function InruilContent({
     }
   };
 
+  /**
+   * Een bewaarde inruil terugzetten alsof je hem net had ingetikt.
+   *
+   * Alle bedragen worden als "eigen" gezet — de verkoopwaarde, het bod en de vraagprijs.
+   * Dat is met opzet: terugkijken hoort te laten zien wat je toen hebt voorgerekend, niet
+   * wat diezelfde auto vandaag zou doen. Wil je opnieuw taxeren, dan is dat één druk op
+   * de knop, en pas dán verandert het.
+   */
+  const openUitArchief = (r: InruilArchiefRij) => {
+    wis();
+    const g = r.gegevens ?? {};
+    setKlant(r.klant ?? "");
+    setKenteken(r.kenteken ?? "");
+    setRdw(g.rdw ?? null);
+    setRdwFout(null);
+    setKm(r.km ? String(r.km) : "");
+    setUitvoering(g.uitvoering ?? "");
+    setMarge(r.marge || 10);
+    setKosten(r.kosten || 0);
+    setPosten(g.posten ?? []);
+    setBtwType(r.btw_type === "btw" ? "btw" : "marge");
+    setVerkoopEigen(true);
+    setVerkoopTekst(r.verkoopwaarde ? String(r.verkoopwaarde) : "");
+    setBodEigen(true);
+    setBodTekst(r.bod ? String(r.bod) : "");
+    setAutoId(r.auto_id);
+    setPrijsEigen(true);
+    setPrijsTekst(r.vraagprijs ? String(r.vraagprijs) : "");
+    setKortingTekst(r.korting ? String(r.korting) : "");
+    setMaxBijTekst(r.max_bijbetaling ? String(r.max_bijbetaling) : "");
+    // Hij staat al in het archief; zonder dit zou hij er bij het eerste kopieertje
+    // nog een keer naast komen.
+    setBewaardAls(
+      [r.kenteken, r.km, r.verkoopwaarde, r.bod, r.auto_id ?? "", r.vraagprijs, r.korting, r.max_bijbetaling].join("|")
+    );
+    setTab("rekenen");
+  };
+
   const opnieuw = () => {
     wis();
+    setKlant("");
+    setBewaardAls(null);
     setKenteken("");
     setRdw(null);
     setRdwFout(null);
@@ -535,7 +655,54 @@ export default function InruilContent({
         </div>
       </header>
 
+      {/* ── Rekenen of terugkijken ── */}
+      <nav
+        className="sticky z-30 flex items-center px-2 md:px-4 xl:px-6 overflow-x-auto"
+        style={{ top: 56, height: 46, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
+      >
+        {(
+          [
+            { id: "rekenen" as const, label: "Rekenmachine", Icon: ArrowLeftRight, teller: undefined },
+            { id: "archief" as const, label: "Archief", Icon: Archive, teller: archief?.length },
+          ]
+        ).map(({ id, label, Icon, teller }) => {
+          const actief = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className="flex items-center gap-2 px-3 md:px-4 transition-all flex-shrink-0"
+              style={{
+                height: 45,
+                fontFamily: T.inter,
+                fontSize: 12.5,
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                color: actief ? T.navy : T.ink(0.38),
+                borderBottom: `2px solid ${actief ? T.navy : "transparent"}`,
+              }}
+            >
+              <Icon size={13} />
+              {label}
+              {teller != null && teller > 0 && (
+                <span style={{ ...micro(actief ? T.ink(0.45) : T.ink(0.28)), fontSize: 9 }}>{teller}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1500, margin: "0 auto" }}>
+        {tab === "archief" ? (
+          <InruilArchiefTab
+            rijen={archief}
+            onOpen={openUitArchief}
+            onVerwijderd={(id) => setArchief((p) => (p ? p.filter((x) => x.id !== id) : p))}
+            onNieuw={() => setTab("rekenen")}
+          />
+        ) : (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* ══ 1 · De auto van de klant ══════════════════════════ */}
           <Panel
@@ -624,6 +791,21 @@ export default function InruilContent({
                   value={uitvoering}
                   onChange={(e) => setUitvoering(e.target.value)}
                   placeholder="Highline, R-Line…"
+                  style={inputStijl}
+                />
+              </Field>
+            </div>
+
+            <div className="mt-3">
+              <Field
+                label="Klant"
+                hint="Optioneel — maar hiermee vind je deze inruil later in het archief terug"
+              >
+                <input
+                  type="text"
+                  value={klant}
+                  onChange={(e) => setKlant(e.target.value)}
+                  placeholder="Naam of telefoonnummer"
                   style={inputStijl}
                 />
               </Field>
@@ -1020,18 +1202,34 @@ export default function InruilContent({
                 </div>
 
                 {somRond && (
-                  <div className="mt-4 flex items-center gap-2 flex-wrap">
-                    <Btn variant="wit" size="sm" onClick={kopieer}>
-                      {gekopieerd ? <Check size={11} /> : <ClipboardCopy size={11} />}
-                      {gekopieerd ? "Gekopieerd" : "Kopieer voorstel"}
-                    </Btn>
-                    {rdw && (
-                      <Btn variant="ghostDonker" size="sm" onClick={bewaarAlsDossier} disabled={bewaarBezig}>
-                        {bewaard ? <Check size={11} /> : <FolderPlus size={11} />}
-                        {bewaard ? "In de inkoop gezet" : bewaarBezig ? "Bezig…" : "Bewaar als inkoopdossier"}
+                  <>
+                    <div className="mt-4 flex items-center gap-2 flex-wrap">
+                      <Btn variant="wit" size="sm" onClick={kopieer}>
+                        {gekopieerd ? <Check size={11} /> : <ClipboardCopy size={11} />}
+                        {gekopieerd ? "Gekopieerd" : "Kopieer voorstel"}
                       </Btn>
-                    )}
-                  </div>
+                      <Btn
+                        variant="ghostDonker"
+                        size="sm"
+                        onClick={bewaarInArchief}
+                        disabled={archiefBezig || alBewaard}
+                      >
+                        {alBewaard ? <Check size={11} /> : <Archive size={11} />}
+                        {alBewaard ? "In het archief" : archiefBezig ? "Bezig…" : "Bewaar in archief"}
+                      </Btn>
+                      {rdw && (
+                        <Btn variant="ghostDonker" size="sm" onClick={bewaarAlsDossier} disabled={bewaarBezig}>
+                          {bewaard ? <Check size={11} /> : <FolderPlus size={11} />}
+                          {bewaard ? "In de inkoop gezet" : bewaarBezig ? "Bezig…" : "Bewaar als inkoopdossier"}
+                        </Btn>
+                      )}
+                    </div>
+                    <p className="mt-2" style={klein("rgba(255,255,255,0.4)")}>
+                      Kopieer je het voorstel, dan gaat deze berekening vanzelf het archief in — dat is het
+                      moment waarop hij de deur uit gaat. Verandert er daarna niets meer, dan komt hij er
+                      geen tweede keer bij.
+                    </p>
+                  </>
                 )}
               </div>
 
@@ -1314,6 +1512,8 @@ export default function InruilContent({
             </PanelVoet>
           </Panel>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
