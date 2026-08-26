@@ -1455,17 +1455,23 @@ function MeldingenBel({ onGaNaar }: { onGaNaar: (tab: Tab) => void }) {
 
       {open && (
         <div
-          className="fixed md:absolute left-3 right-3 md:left-auto md:right-0 top-[86px] md:top-[46px] z-50 flex flex-col overflow-hidden"
+          className="fixed md:absolute left-3 right-3 md:left-auto md:right-0 md:w-[420px] top-[86px] md:top-[46px] z-50 flex flex-col overflow-hidden"
           style={{
             // Op de telefoon VAST aan het scherm en niet aan de bel. De bel staat in een
             // balk die zelf scrolt (overflow-y-auto), en zo'n container knipt ook aan de
-            // zijkant af — daardoor viel de helft van het paneel buiten beeld.
+            // zijkant af — daardoor viel de helft van het paneel buiten beeld. Daar bepalen
+            // left-3 en right-3 de breedte, en dat gaat goed.
+            //
+            // Op een groot scherm hing het paneel aan de bel, en die bel is 38 pixels
+            // breed. Met een automatische breedte krimpt een zwevend paneel tot de smalst
+            // mogelijke tekst, en dan breekt "Factuur JGM-2026-009" over drie regels. Daarom
+            // staat de breedte daar vast (md:w-[420px] in de klassen hierboven, niet hier —
+            // een breedte in deze stijlregels zou de telefoonvariant kapotmaken, omdat een
+            // vaste breedte wint van left en right).
             //
             // De maximumbreedte overschrijft bovendien de globale `* { max-width: 100% }`
-            // uit globals.css, die het paneel anders inperkt tot de breedte van het
-            // belletje van 38 pixels.
-            maxWidth: "min(384px, calc(100vw - 24px))",
-            width: "auto",
+            // uit globals.css, die het paneel anders alsnog inperkt tot die 38 pixels.
+            maxWidth: "calc(100vw - 24px)",
             maxHeight: "min(72vh, 560px)",
             backgroundColor: "#ffffff",
             border: "1px solid rgba(0,19,55,0.12)",
