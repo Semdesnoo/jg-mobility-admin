@@ -104,7 +104,7 @@ export default function FotosOpruimen() {
         {openstaand > 0 ? (
           <>
             <p style={body(12, T.ink(0.7))}>
-              {openstaand} van de {totaal} foto&apos;s staan nog op volledige grootte in de opslag.
+              {openstaand} van de {totaal}{" "}foto&apos;s staan nog op volledige grootte in de opslag.
               Die zijn geüpload voordat het verkleinen was ingebouwd.
             </p>
             <p className="mt-1.5" style={klein()}>

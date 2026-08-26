@@ -55,6 +55,7 @@ import VerkopersContent from "./VerkopersContent";
 import AanvragenContent from "./AanvragenContent";
 import ContractenContent from "./ContractenContent";
 import FotosOpruimen from "./FotosOpruimen";
+import FotoStatus from "./FotoStatus";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
@@ -525,6 +526,8 @@ export default function DashboardHub() {
         )}
         {tab === "voorraad" && (
           <>
+            {/* Levert de opslag de foto's nog? Verdwijnt vanzelf zodra alles het weer doet. */}
+            <FotoStatus />
             {/* Eenmalig onderhoud; verdwijnt vanzelf zodra er niets meer te verkleinen is. */}
             <FotosOpruimen />
             <VoorraadContent autos={autos} refresh={refresh} />
@@ -772,6 +775,27 @@ function DashboardContent({
 // ── Compacte voorraadtabel ──────────────────────────────────────
 type SorteerVeld = "auto" | "bouwjaar" | "km" | "prijs" | "standtijd";
 
+/**
+ * Duimnagel van een auto, met terugval.
+ *
+ * Levert de opslag de foto niet, dan verschijnt hetzelfde vlakje als bij een auto zonder
+ * foto's in plaats van het kapotte-plaatje icoontje van de browser. Waaróm hij niet laadt
+ * staat in de melding bovenaan de pagina; hier hoort alleen dat het er netjes uitziet.
+ */
+function Duimnagel({ src }: { src?: string }) {
+  const [mislukt, setMislukt] = useState(false);
+  if (!src || mislukt) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <ImageOff size={12} style={{ color: "rgba(255,255,255,0.3)" }} />
+      </div>
+    );
+  }
+  return (
+    <Image src={src} alt="" fill sizes="48px" className="object-cover" onError={() => setMislukt(true)} />
+  );
+}
+
 function statusVan(a: Auto): "beschikbaar" | "gereserveerd" | "verkocht" {
   if (a.verkocht) return "verkocht";
   if (a.gereserveerd) return "gereserveerd";
@@ -1012,13 +1036,7 @@ function VoorraadTabel({
               {/* Foto */}
               <div className="flex items-center gap-3 md:contents">
                 <div className="relative flex-shrink-0 overflow-hidden" style={{ width: 48, height: 34, backgroundColor: "#001337", ...VAST }}>
-                  {auto.fotos?.length > 0 ? (
-                    <Image src={auto.fotos[0]} alt="" fill sizes="48px" className="object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ImageOff size={12} style={{ color: "rgba(255,255,255,0.3)" }} />
-                    </div>
-                  )}
+                  <Duimnagel src={auto.fotos?.[0]} />
                 </div>
 
                 {/* Naam — platte tekst; bewerken loopt via de knop rechts */}
@@ -3019,7 +3037,14 @@ function FacturenContent() {
                           <div style={{ width: "52px", height: "40px", flexShrink: 0, backgroundColor: "rgba(0,19,55,0.05)", overflow: "hidden", position: "relative" }}>
                             {foto ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              <img
+                                src={foto}
+                                alt=""
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                // Levert de opslag hem niet, dan blijft het lege vlakje staan;
+                                // dat oogt rustiger dan het kapotte-plaatje icoontje.
+                                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                              />
                             ) : (
                               <span className="flex items-center justify-center w-full h-full">
                                 <Car size={16} style={{ color: "rgba(0,19,55,0.25)" }} />
