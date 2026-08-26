@@ -37,11 +37,13 @@ import {
   Radar,
   Inbox,
   FileSignature,
+  ArrowLeftRight,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
 import AfsprakenContent from "./AfsprakenContent";
 import InkoopContent from "./InkoopContent";
+import InruilContent from "./InruilContent";
 import StatistiekenContent from "./StatistiekenContent";
 import MoliboxPage from "./MoliboxPage";
 import CosignatieContent from "./CosignatieContent";
@@ -56,7 +58,7 @@ import FotosOpruimen from "./FotosOpruimen";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "inruil" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
 
 type Auto = {
   id: number;
@@ -114,6 +116,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "aanvragen",  label: "Aanvragen",        icon: Inbox },
       { id: "email",      label: "E-mail",           icon: Mail },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
+      { id: "inruil",     label: "Inruil",           icon: ArrowLeftRight },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
       { id: "verkopers",  label: "Verkopersradar",   icon: Radar },
       { id: "afspraken",  label: "Afspraken",        icon: Calendar },
@@ -532,9 +535,15 @@ export default function DashboardHub() {
         {tab === "inkoop" && (
           <InkoopContent kenteken={navFocus?.kenteken} />
         )}
+        {tab === "inruil" && <InruilContent autos={autos} focus={navFocus} />}
         {tab === "contracten" && <ContractenContent />}
         {tab === "aanvragen" && (
-          <AanvragenContent onNaarTaxatie={(kenteken) => gaNaarTab("inkoop", { kenteken })} />
+          <AanvragenContent
+            onNaarTaxatie={(kenteken) => gaNaarTab("inkoop", { kenteken })}
+            onNaarInruil={(kenteken, autoId) =>
+              gaNaarTab("inruil", { kenteken, autoId: autoId ?? undefined })
+            }
+          />
         )}
         {tab === "cosignatie" && <CosignatieContent />}
         {tab === "verkopers" && <VerkopersContent />}

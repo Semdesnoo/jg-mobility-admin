@@ -1,0 +1,945 @@
+"use client";
+
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import {
+  ArrowLeftRight, Car, Check, ClipboardCopy, RotateCcw, Search, Tag, FolderPlus,
+} from "lucide-react";
+import {
+  T, num, micro, klein, fmt, fmtGetal, fmtKm,
+  Panel, Field, inputStijl, Btn, Chip, Spinner, Foutmelding, Waarschuwing, PanelVoet,
+} from "./inkoop/ui";
+import { berekenKoerslijst } from "./inkoop/koerslijst";
+import { berekenInruil, maxBod } from "./inruil/som";
+import { useAiTaak } from "./AiTaken";
+import type { RdwData, TaxatieResultaat } from "./inkoop/types";
+
+/**
+ * Inruil: de auto van de klant tegen de auto van ons.
+ *
+ * WAAROM DIT EEN EIGEN PAGINA IS
+ * Een inruil is geen korting maar een tweede auto die je koopt. Aan de balie is het één
+ * gesprek en één bedrag ("wat krijg ik ervoor?"), en daardoor is precies het ding dat
+ * geld kost onzichtbaar: elke euro die je extra biedt om de deal rond te krijgen gaat
+ * rechtstreeks van je marge af. De taxatietool rekent wel uit wat je maximaal kunt
+ * bieden, maar zegt niets over de auto die ernaast staat; de marge-calculator rekent aan
+ * één auto tegelijk. Hier staan ze naast elkaar en zie je allebei de kanten tegelijk:
+ * wat de klant bijbetaalt, én wat je aan zijn auto overhoudt.
+ *
+ * HOE DE WAARDE TOT STAND KOMT
+ * Precies zoals in de taxatietool, met dezelfde motor achter dezelfde knop — er is geen
+ * tweede waarheid over wat een auto waard is. Zodra het kenteken en de kilometerstand
+ * bekend zijn staat er meteen een voorlopig bedrag op basis van de RDW-nieuwprijs; de
+ * marktscan (een seconde of dertig) vervangt dat door wat vergelijkbare auto's vandaag
+ * doen. Wat er uit komt is een advies, geen bod: het veld eronder is van jou en blijft
+ * altijd met de hand te vullen, ook als het opzoeken niets oplevert.
+ */
+
+type VoorraadAuto = {
+  id: number;
+  merk: string;
+  model: string;
+  bouwjaar: number;
+  km: number;
+  prijs: number;
+  verkocht?: boolean;
+  gereserveerd?: boolean;
+  kenteken?: string;
+};
+
+/** Alleen de cijfers overhouden: "12.500" en "12 500" horen allebei 12500 te worden. */
+const getalUit = (s: string) => parseInt(s.replace(/\D/g, "")) || 0;
+
+/**
+ * Een bedrag dat ook negatief kan zijn. Kaal opgemaakt wordt dat "€ -14.587": het minteken
+ * komt dan achter het euroteken en is een streepje dat je makkelijk over het hoofd ziet —
+ * precies bij het ene getal waar het teken het hele verhaal is.
+ */
+const fmtTeken = (n: number) => (n < 0 ? `− ${fmt(Math.abs(n))}` : fmt(n));
+
+const MARGE_PRESETS = [8, 10, 12, 15, 20];
+const KOSTEN_PRESETS = [
+  { label: "Poetsen", bedrag: 250 },
+  { label: "Klein onderhoud", bedrag: 500 },
+  { label: "Banden / APK", bedrag: 1000 },
+  { label: "Schadeherstel", bedrag: 1500 },
+];
+
+/** Eén regel in de som: omschrijving links, bedrag rechts. */
+function SomRegel({
+  label,
+  bedrag,
+  teken,
+  sub,
+  sterk = false,
+}: {
+  label: string;
+  bedrag: number;
+  /** "−" voor wat eraf gaat. Leeg voor wat erbij hoort. */
+  teken?: string;
+  sub?: string;
+  sterk?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2">
+      <div className="min-w-0">
+        <p
+          className="truncate"
+          style={{
+            fontFamily: T.inter,
+            fontSize: 12.5,
+            fontWeight: sterk ? 700 : 400,
+            color: sterk ? "#ffffff" : "rgba(255,255,255,0.62)",
+          }}
+        >
+          {label}
+        </p>
+        {sub && <p className="truncate" style={klein("rgba(255,255,255,0.38)")}>{sub}</p>}
+      </div>
+      <p className="flex-shrink-0" style={num(sterk ? 17 : 15, "#ffffff", sterk ? 700 : 600)}>
+        {teken}
+        {fmt(bedrag)}
+      </p>
+    </div>
+  );
+}
+
+export default function InruilContent({
+  autos,
+  focus,
+}: {
+  /** De voorraad, al opgehaald door het dashboard — hier alleen om uit te kiezen. */
+  autos: VoorraadAuto[];
+  /** Vanuit een aanvraag doorgestuurd: kenteken van de klant en/of onze auto. */
+  focus?: { kenteken?: string; autoId?: number } | null;
+}) {
+  // ── De auto van de klant ──
+  const [kenteken, setKenteken] = useState("");
+  const [rdw, setRdw] = useState<RdwData | null>(null);
+  const [rdwLaden, setRdwLaden] = useState(false);
+  const [rdwFout, setRdwFout] = useState<string | null>(null);
+  const [km, setKm] = useState("");
+  const [uitvoering, setUitvoering] = useState("");
+  const [marge, setMarge] = useState(10);
+  const [kosten, setKosten] = useState(0);
+  const [posten, setPosten] = useState<{ id: number; label: string; bedrag: number }[]>([]);
+  const [btwType, setBtwType] = useState<"marge" | "btw">("marge");
+
+  // Wat we bieden. Volgt het advies tot je zelf een bedrag intikt — daarna is het veld
+  // van jou en verandert er niets meer onder je handen.
+  const [bodTekst, setBodTekst] = useState("");
+  const [bodEigen, setBodEigen] = useState(false);
+
+  // ── Onze auto ──
+  const [autoId, setAutoId] = useState<number | null>(null);
+  const [zoek, setZoek] = useState("");
+  const [prijsTekst, setPrijsTekst] = useState("");
+  const [prijsEigen, setPrijsEigen] = useState(false);
+  const [kortingTekst, setKortingTekst] = useState("");
+
+  // ── Afhandeling ──
+  const [seconden, setSeconden] = useState(0);
+  const [gekopieerd, setGekopieerd] = useState(false);
+  const [bewaard, setBewaard] = useState(false);
+  const [bewaarBezig, setBewaarBezig] = useState(false);
+
+  // De marktscan draait in de takenlaag boven de tabbladen: klik je tussendoor weg, dan
+  // loopt hij door en staat het antwoord er nog als je terugkomt.
+  const { taak, start, wis } = useAiTaak<TaxatieResultaat>("inruil-taxatie");
+  const laden = taak?.bezig ?? false;
+  const resultaat = taak?.bezig ? null : (taak?.resultaat ?? null);
+  const scanFout = taak?.bezig ? null : (taak?.fout ?? null);
+
+  const kmNum = getalUit(km);
+  const preview = useMemo(
+    () => berekenKoerslijst(rdw?.bouwjaar, rdw?.catalogusprijs, kmNum),
+    [rdw?.bouwjaar, rdw?.catalogusprijs, kmNum]
+  );
+
+  useEffect(() => {
+    if (!laden) return;
+    const t = setInterval(() => setSeconden((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [laden]);
+
+  const rdwOpzoeken = useCallback(
+    async (raw: string) => {
+      const k = raw.trim();
+      if (!k) return;
+      setRdwLaden(true);
+      setRdwFout(null);
+      setRdw(null);
+      // De vorige taxatie hoort bij het vorige kenteken en moet dus weg.
+      wis();
+      setBodEigen(false);
+      setBodTekst("");
+      try {
+        const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(k)}`);
+        const d = await res.json().catch(() => ({}));
+        if (res.ok && d.merk) setRdw(d);
+        else setRdwFout(d.error ?? "Kenteken niet gevonden in het RDW-register");
+      } catch {
+        setRdwFout("RDW-opzoeking mislukt");
+      }
+      setRdwLaden(false);
+    },
+    [wis]
+  );
+
+  // Kom je hier vanuit een aanvraag, dan staan het kenteken en onze auto al klaar.
+  // Wat al opgepakt is onthouden we hier, zodat het effect niet bij elke render opnieuw afgaat.
+  const gedaanVoor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const sleutel = `${focus?.kenteken ?? ""}|${focus?.autoId ?? ""}`;
+    if (!focus || sleutel === "|" || gedaanVoor.current === sleutel) return;
+    gedaanVoor.current = sleutel;
+    if (focus.autoId != null) setAutoId(focus.autoId);
+    if (focus.kenteken) {
+      setKenteken(focus.kenteken);
+      rdwOpzoeken(focus.kenteken);
+    }
+  }, [focus, rdwOpzoeken]);
+
+  const b = resultaat?.berekening;
+  const m = resultaat?.markt;
+
+  /**
+   * Wat de auto van de klant naar verwachting opbrengt. Na de scan is dat de
+   * geadviseerde verkoopprijs; daarvoor de koerslijst uit de RDW-nieuwprijs. Zonder een
+   * van die twee blijft het nul — dan is er niets om een marge over te rekenen.
+   */
+  const verkoopwaarde = b?.verwachte_verkoop ?? preview?.koerslijst ?? 0;
+  const voorlopig = !b && verkoopwaarde > 0;
+
+  // Het advies beweegt mee met de marge en de kosten, zonder opnieuw de markt op te gaan:
+  // dezelfde som als op de server, met de verkoopwaarde die er al ligt.
+  const advies = maxBod(verkoopwaarde, marge, kosten, btwType);
+  const bod = bodEigen ? getalUit(bodTekst) : advies;
+
+  const gekozen = autos.find((a) => a.id === autoId) ?? null;
+  const vraagprijs = prijsEigen ? getalUit(prijsTekst) : (gekozen?.prijs ?? 0);
+  const korting = getalUit(kortingTekst);
+
+  const som = berekenInruil({
+    vraagprijs,
+    korting,
+    inruilbod: bod,
+    verwachteVerkoop: verkoopwaarde,
+    kosten,
+    btwType,
+  });
+
+  // Dezelfde som, maar dan met het advies als bod. Alleen zo is te zeggen wat een euro
+  // extra bieden je écht kost: het verschil tussen deze twee. Naar het marge-percentage
+  // kijken zou hier misleiden, want bij een btw-auto rekent dat over een andere prijs.
+  const bijAdvies = berekenInruil({
+    vraagprijs,
+    korting,
+    inruilbod: advies,
+    verwachteVerkoop: verkoopwaarde,
+    kosten,
+    btwType,
+  });
+
+  const beschikbaar = useMemo(() => {
+    const z = zoek.trim().toLowerCase();
+    return autos
+      .filter((a) => !a.verkocht)
+      .filter((a) =>
+        !z ? true : `${a.merk} ${a.model} ${a.bouwjaar} ${a.kenteken ?? ""}`.toLowerCase().includes(z)
+      )
+      .sort((x, y) => y.prijs - x.prijs);
+  }, [autos, zoek]);
+
+  const klaarVoorScan = !!rdw && kmNum > 0;
+  // Er valt pas iets te rekenen als allebei de kanten een bedrag hebben.
+  const somRond = vraagprijs > 0 && bod > 0;
+
+  const scan = () => {
+    if (!rdw || laden) return;
+    setSeconden(0);
+    // Alles nu vastleggen: de opdracht draait straks buiten dit scherm door.
+    const auto = rdw;
+    const gegevens = { km: kmNum, marge, kosten, btwType, uitvoering };
+
+    start(`Inruilwaarde ${auto.merk} ${auto.model}`, async () => {
+      const res = await fetch("/api/admin/inkoop/taxeer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merk: auto.merk,
+          model: auto.model,
+          bouwjaar: auto.bouwjaar,
+          // Als cijfers doorgeven: de server doet parseInt, en die maakt van "125.000"
+          // anders 125 — wat de hele waardebepaling zou vertekenen.
+          km: String(gegevens.km),
+          brandstof: auto.brandstof,
+          vermogen: auto.vermogen,
+          bodytype: auto.bodytype,
+          catalogusprijs: auto.catalogusprijs,
+          gewenste_marge: gegevens.marge,
+          geschatte_kosten: gegevens.kosten,
+          btw_type: gegevens.btwType,
+          uitvoering: gegevens.uitvoering,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? "De marktscan is mislukt");
+      }
+      return (await res.json()) as TaxatieResultaat;
+    });
+  };
+
+  const kiesAuto = (a: VoorraadAuto) => {
+    setAutoId(a.id);
+    // Terug naar de vraagprijs van deze auto; een bedrag dat je bij de vórige auto had
+    // ingetikt hoort niet bij deze te blijven staan.
+    setPrijsEigen(false);
+    setPrijsTekst("");
+  };
+
+  const voegKostenToe = (label: string, bedrag: number) => {
+    setPosten((p) => [...p, { id: Date.now() + Math.random(), label, bedrag }]);
+    setKosten((k) => k + bedrag);
+  };
+
+  const verwijderPost = (id: number, bedrag: number) => {
+    setPosten((p) => p.filter((x) => x.id !== id));
+    setKosten((k) => Math.max(0, k - bedrag));
+  };
+
+  const klantAuto = rdw ? `${rdw.merk} ${rdw.model}${rdw.bouwjaar ? ` (${rdw.bouwjaar})` : ""}` : "";
+  const onzeAuto = gekozen ? `${gekozen.merk} ${gekozen.model} (${gekozen.bouwjaar})` : "Onze auto";
+
+  /**
+   * Het voorstel in gewone regels, klaar om in WhatsApp of een mail te plakken.
+   *
+   * De lege regel is een echte regel en geen weglaatbaar niets: alleen de kortingregel mag
+   * wegvallen, dus filteren we op null en niet op "leeg" — anders verdwijnt de witregel mee.
+   */
+  const voorstel = [
+    "Inruilvoorstel — JG Mobility",
+    "",
+    `${onzeAuto}: ${fmt(vraagprijs)}`,
+    korting > 0 ? `Korting: − ${fmt(korting)}` : null,
+    `Inruil ${klantAuto || "uw auto"}${kmNum > 0 ? `, ${fmtKm(kmNum)}` : ""}: − ${fmt(bod)}`,
+    "————————————————",
+    som.richting === "uit"
+      ? `Wij betalen u uit: ${fmt(som.bedrag)}`
+      : som.richting === "gelijk"
+        ? "Gelijke ruil — u betaalt niets bij"
+        : `Bij te betalen: ${fmt(som.bedrag)}`,
+  ]
+    .filter((r) => r !== null)
+    .join("\n");
+
+  const kopieer = async () => {
+    try {
+      await navigator.clipboard.writeText(voorstel);
+      setGekopieerd(true);
+      setTimeout(() => setGekopieerd(false), 2500);
+    } catch {
+      /* Zonder klembordrechten valt er niets te kopiëren; de tekst staat op het scherm. */
+    }
+  };
+
+  /** De ingeruilde auto is een auto die je koopt — dus hoort hij als dossier in de inkoop. */
+  const bewaarAlsDossier = async () => {
+    if (!rdw || bewaarBezig) return;
+    setBewaarBezig(true);
+    try {
+      await fetch("/api/admin/inkoop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kenteken,
+          merk: rdw.merk,
+          model: rdw.model,
+          bouwjaar: String(rdw.bouwjaar ?? ""),
+          km: String(kmNum),
+          kleur: rdw.kleur,
+          brandstof: rdw.brandstof,
+          aanbod_prijs: verkoopwaarde,
+          bod_prijs: bod,
+          status: "nieuw",
+          notitie:
+            `Inruil tegen ${onzeAuto} (${fmt(vraagprijs)}${korting > 0 ? `, korting ${fmt(korting)}` : ""}). ` +
+            `${som.richting === "uit" ? `Wij betalen uit ${fmt(som.bedrag)}` : som.richting === "gelijk" ? "Gelijke ruil" : `Klant betaalt bij ${fmt(som.bedrag)}`}. ` +
+            `Inruilwaarde ${fmt(bod)} bij een verwachte verkoop van ${fmt(verkoopwaarde)}` +
+            `${kosten > 0 ? ` en ${fmt(kosten)} klaarmaakkosten` : ""}.`,
+        }),
+      });
+      setBewaard(true);
+      setTimeout(() => setBewaard(false), 4000);
+    } catch {
+      /* Mislukt het opslaan, dan blijft het scherm gewoon staan met alle bedragen erin. */
+    } finally {
+      setBewaarBezig(false);
+    }
+  };
+
+  const opnieuw = () => {
+    wis();
+    setKenteken("");
+    setRdw(null);
+    setRdwFout(null);
+    setKm("");
+    setUitvoering("");
+    setKosten(0);
+    setPosten([]);
+    setBodTekst("");
+    setBodEigen(false);
+    setAutoId(null);
+    setPrijsTekst("");
+    setPrijsEigen(false);
+    setKortingTekst("");
+    setZoek("");
+  };
+
+  // De uitkomst in woorden. Staat zowel bovenin de balk als groot in de som, en hoort op
+  // allebei de plekken hetzelfde te heten.
+  const uitkomstLabel =
+    som.richting === "uit" ? "Wij betalen uit" : som.richting === "gelijk" ? "Gelijke ruil" : "Klant betaalt bij";
+  const uitkomstKleur = som.richting === "uit" ? T.amber : T.groen;
+
+  return (
+    <div style={{ backgroundColor: T.wash, minHeight: "100%" }}>
+      {/* ── Kop: de uitkomst blijft in beeld, ook als je naar beneden scrolt ── */}
+      <header
+        className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-6 xl:px-8"
+        style={{ height: 56, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
+      >
+        <ArrowLeftRight size={15} style={{ color: T.ink(0.35), flexShrink: 0 }} />
+        <h2
+          className="min-w-0 truncate text-[17px] sm:text-[19px]"
+          style={{ fontFamily: T.play, fontWeight: 700, color: T.navy }}
+        >
+          Inruil
+        </h2>
+        <span className="hidden md:block flex-shrink-0" style={{ width: 1, height: 16, backgroundColor: T.line2 }} />
+        <p className="hidden md:block min-w-0 truncate" style={micro(T.ink(0.35))}>
+          Zijn auto tegen onze auto
+        </p>
+
+        <div className="ml-auto flex flex-col items-end justify-center flex-shrink-0">
+          <span style={{ ...micro(T.ink(0.32)), fontSize: 8.5 }}>{somRond ? uitkomstLabel : "Uitkomst"}</span>
+          <span style={num(17, somRond ? uitkomstKleur : T.ink(0.25))}>
+            {somRond ? fmt(som.bedrag) : "—"}
+          </span>
+        </div>
+      </header>
+
+      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1500, margin: "0 auto" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ══ 1 · De auto van de klant ══════════════════════════ */}
+          <Panel
+            title="1 · De auto van de klant"
+            icon={<Car size={13} style={{ color: T.ink(0.35) }} />}
+            meta={rdw ? "Gevonden" : undefined}
+          >
+            <div className="relative">
+              <span
+                className="absolute left-0 top-0 bottom-0 flex items-center justify-center"
+                style={{ width: 22, backgroundColor: T.blauw }}
+              >
+                <span style={{ ...micro("#ffffff"), fontSize: 7, writingMode: "vertical-rl" }}>NL</span>
+              </span>
+              <input
+                type="text"
+                value={kenteken}
+                placeholder="AB-123-C"
+                onChange={(e) => setKenteken(e.target.value.toUpperCase())}
+                onBlur={(e) => rdwOpzoeken(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && rdwOpzoeken(kenteken)}
+                style={{
+                  ...inputStijl,
+                  height: 50,
+                  paddingLeft: 34,
+                  paddingRight: 34,
+                  textAlign: "center",
+                  fontFamily: T.play,
+                  fontSize: 24,
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  backgroundColor: "#fdfdfd",
+                }}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                {rdwLaden ? <Spinner size={15} /> : rdw ? <Check size={16} style={{ color: T.groen }} /> : null}
+              </span>
+            </div>
+            <p className="mt-2" style={klein(rdwFout ? T.rood : T.ink(0.4))}>
+              {rdwFout
+                ? rdwFout
+                : rdwLaden
+                  ? "RDW-register raadplegen…"
+                  : rdw
+                    ? [rdw.bouwjaar, rdw.brandstof, rdw.bodytype, rdw.kleur].filter(Boolean).join(" · ")
+                    : "Kenteken invullen — merk, bouwjaar en nieuwprijs komen uit het RDW"}
+            </p>
+
+            {rdw && (
+              <p className="mt-1" style={{ fontFamily: T.play, fontSize: 17, fontWeight: 700, color: T.navy }}>
+                {rdw.merk} {rdw.model}
+              </p>
+            )}
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field
+                label="Kilometerstand"
+                suffix="km"
+                hint={
+                  preview && kmNum > 0
+                    ? `≈ ${fmtGetal(preview.kmPerJaar)} km per jaar — ${
+                        preview.kmAfwijkingPct <= -15
+                          ? "onder gemiddeld"
+                          : preview.kmAfwijkingPct <= 5
+                            ? "rond gemiddeld"
+                            : preview.kmAfwijkingPct <= 25
+                              ? "bovengemiddeld"
+                              : "fors bovengemiddeld"
+                      }`
+                    : "Staat niet in het RDW — van de teller aflezen"
+                }
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={km}
+                  onChange={(e) => setKm(e.target.value)}
+                  placeholder="145.000"
+                  style={{ ...inputStijl, paddingRight: 34 }}
+                />
+              </Field>
+
+              <Field label="Uitvoering" hint="Optioneel — scheelt zomaar duizenden euro's">
+                <input
+                  type="text"
+                  value={uitvoering}
+                  onChange={(e) => setUitvoering(e.target.value)}
+                  placeholder="Highline, R-Line…"
+                  style={inputStijl}
+                />
+              </Field>
+            </div>
+
+            {/* Wie verkoopt er? Een particulier kan geen btw-factuur geven, dus dat is
+                altijd een marge-auto. Bij een bedrijf gaat de btw er eerst af, en dat
+                scheelt tot zeventien procent in wat je kunt bieden. */}
+            <div className="mt-4">
+              <p className="mb-1.5" style={micro()}>
+                Van wie ruil je in
+              </p>
+              <div className="flex items-center gap-1.5">
+                <Chip active={btwType === "marge"} onClick={() => setBtwType("marge")}>
+                  Particulier
+                </Chip>
+                <Chip active={btwType === "btw"} onClick={() => setBtwType("btw")}>
+                  Bedrijf (met btw)
+                </Chip>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="mb-1.5" style={micro()}>
+                Wat wil je eraan verdienen
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {MARGE_PRESETS.map((p) => (
+                  <Chip key={p} active={marge === p} onClick={() => setMarge(p)}>
+                    {p}%
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="mb-1.5" style={micro()}>
+                Klaarmaakkosten {kosten > 0 && <span style={{ color: T.navy }}>· {fmt(kosten)}</span>}
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {KOSTEN_PRESETS.map((k) => (
+                  <Chip key={k.label} onClick={() => voegKostenToe(k.label, k.bedrag)}>
+                    + {k.label}
+                  </Chip>
+                ))}
+              </div>
+              {posten.length > 0 && (
+                <div className="mt-2 flex flex-col">
+                  {posten.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => verwijderPost(p.id, p.bedrag)}
+                      className="flex items-baseline justify-between gap-3 py-1.5 transition-all hover:opacity-60"
+                      style={{ borderTop: `1px solid ${T.line}` }}
+                      title="Klik om te verwijderen"
+                    >
+                      <span style={{ fontFamily: T.inter, fontSize: 11.5, color: T.ink(0.55) }}>{p.label}</span>
+                      <span style={{ fontFamily: T.inter, fontSize: 11.5, fontWeight: 600, color: T.navy }}>
+                        {fmt(p.bedrag)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <Btn full onClick={scan} disabled={!klaarVoorScan || laden}>
+                {laden ? (
+                  <>
+                    <Spinner size={13} tone="donker" /> Markt scannen… {seconden}s
+                  </>
+                ) : (
+                  <>
+                    <Search size={13} /> {b ? "Opnieuw scannen" : "Zoek de marktwaarde op"}
+                  </>
+                )}
+              </Btn>
+              {!klaarVoorScan && (
+                <p className="mt-2" style={klein()}>
+                  Vul eerst het kenteken en de kilometerstand in. Je kunt de inruilwaarde hieronder ook
+                  gewoon zelf intikken.
+                </p>
+              )}
+            </div>
+
+            {scanFout && (
+              <div className="mt-3">
+                <Foutmelding>{scanFout} — vul de inruilwaarde hieronder met de hand in.</Foutmelding>
+              </div>
+            )}
+
+            {/* ── Het bod ── */}
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
+              <Field
+                label="Wat bieden we voor deze auto"
+                suffix="€"
+                hint={
+                  advies > 0
+                    ? `Advies: maximaal ${fmt(advies)} — dan houd je ${marge}% over${
+                        voorlopig ? ". Voorlopig, uit de RDW-nieuwprijs; de marktscan verfijnt dit" : ""
+                      }`
+                    : "Nog geen advies — vul een kenteken en kilometerstand in, of tik zelf een bedrag"
+                }
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={bodEigen ? bodTekst : advies > 0 ? String(advies) : ""}
+                  onChange={(e) => {
+                    setBodEigen(true);
+                    setBodTekst(e.target.value);
+                  }}
+                  placeholder="0"
+                  style={{
+                    ...inputStijl,
+                    height: 46,
+                    paddingRight: 34,
+                    fontFamily: T.play,
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: T.navy,
+                  }}
+                />
+              </Field>
+              {bodEigen && advies > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBodEigen(false);
+                    setBodTekst("");
+                  }}
+                  className="mt-1.5 inline-flex items-center gap-1.5 transition-all hover:opacity-60"
+                  style={klein(T.ink(0.5))}
+                >
+                  <RotateCcw size={10} /> Terug naar het advies van {fmt(advies)}
+                </button>
+              )}
+
+              {b && m && (
+                <p className="mt-2" style={klein()}>
+                  Verkoopt hij naar verwachting voor {fmt(b.verwachte_verkoop)} — {b.bron}
+                  {m.aantal_gevonden ? `, spreiding ${fmt(m.min_prijs)} – ${fmt(m.max_prijs)}` : ""}.
+                </p>
+              )}
+
+              {bod > advies && advies > 0 && (
+                <div className="mt-3">
+                  <Waarschuwing>
+                    Je biedt {fmt(bod - advies)} meer dan deze auto ruimte geeft. Dat komt niet uit de
+                    lucht: het gaat rechtstreeks van je marge af.{" "}
+                    {som.nettoMarge < 0
+                      ? `Je legt er ${fmt(-som.nettoMarge)} op toe, in plaats van er ${fmt(bijAdvies.nettoMarge)} aan over te houden.`
+                      : `Je houdt er ${fmt(som.nettoMarge)} aan over in plaats van ${fmt(bijAdvies.nettoMarge)}.`}
+                  </Waarschuwing>
+                </div>
+              )}
+            </div>
+          </Panel>
+
+          {/* ══ 2 · Onze auto ═════════════════════════════════════ */}
+          <Panel
+            title="2 · Onze auto"
+            icon={<Tag size={13} style={{ color: T.ink(0.35) }} />}
+            meta={gekozen ? undefined : `${beschikbaar.length} in voorraad`}
+          >
+            {autos.length > 6 && (
+              <div className="mb-3">
+                <input
+                  type="text"
+                  value={zoek}
+                  onChange={(e) => setZoek(e.target.value)}
+                  placeholder="Zoek in de voorraad…"
+                  style={inputStijl}
+                />
+              </div>
+            )}
+
+            <div
+              className="flex flex-col"
+              style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${T.line}` }}
+            >
+              {beschikbaar.length === 0 && (
+                <p className="px-3 py-4" style={klein()}>
+                  {autos.length === 0
+                    ? "De voorraad is nog niet geladen."
+                    : "Geen auto's gevonden — vul hieronder zelf een vraagprijs in."}
+                </p>
+              )}
+              {beschikbaar.map((a, i) => {
+                const actief = a.id === autoId;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => kiesAuto(a)}
+                    className="flex items-center gap-3 px-3 py-2.5 text-left transition-all hover:opacity-75"
+                    style={{
+                      borderTop: i > 0 ? `1px solid ${T.line}` : undefined,
+                      backgroundColor: actief ? "rgba(0,19,55,0.05)" : "#ffffff",
+                      borderLeft: `3px solid ${actief ? T.navy : "transparent"}`,
+                    }}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className="block truncate"
+                        style={{ fontFamily: T.inter, fontSize: 12.5, fontWeight: actief ? 700 : 600, color: T.navy }}
+                      >
+                        {a.merk} {a.model}
+                      </span>
+                      <span className="block truncate" style={klein()}>
+                        {[a.bouwjaar, a.km ? fmtKm(a.km) : "", a.gereserveerd ? "gereserveerd" : ""]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                    <span className="flex-shrink-0" style={num(14)}>
+                      {fmt(a.prijs)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field
+                label="Vraagprijs"
+                suffix="€"
+                hint={
+                  gekozen && !prijsEigen
+                    ? "Overgenomen uit de voorraad — aanpassen mag"
+                    : "Staat de auto er nog niet bij? Tik het bedrag hier in"
+                }
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={prijsEigen ? prijsTekst : vraagprijs > 0 ? String(vraagprijs) : ""}
+                  onChange={(e) => {
+                    setPrijsEigen(true);
+                    setPrijsTekst(e.target.value);
+                  }}
+                  placeholder="0"
+                  style={{
+                    ...inputStijl,
+                    height: 46,
+                    paddingRight: 34,
+                    fontFamily: T.play,
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: T.navy,
+                  }}
+                />
+              </Field>
+
+              <Field
+                label="Korting"
+                suffix="€"
+                hint={
+                  korting > 0
+                    ? `Onze prijs wordt ${fmt(som.onzePrijs)} — de korting komt uit je eigen marge`
+                    : "Optioneel"
+                }
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={kortingTekst}
+                  onChange={(e) => setKortingTekst(e.target.value)}
+                  placeholder="0"
+                  style={{ ...inputStijl, height: 46, paddingRight: 34, fontFamily: T.play, fontSize: 20, fontWeight: 700 }}
+                />
+              </Field>
+            </div>
+
+            {gekozen && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoId(null);
+                  setPrijsEigen(false);
+                  setPrijsTekst("");
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 transition-all hover:opacity-60"
+                style={klein(T.ink(0.5))}
+              >
+                <RotateCcw size={10} /> Andere auto kiezen
+              </button>
+            )}
+
+            <PanelVoet>
+              Alleen auto&apos;s die nog niet verkocht zijn staan in de lijst. Gereserveerde auto&apos;s
+              staan er wél bij — een reservering die afketst is nog steeds een auto die je kunt ruilen.
+            </PanelVoet>
+          </Panel>
+        </div>
+
+        {/* ══ 3 · De som ══════════════════════════════════════════ */}
+        <div className="mt-4">
+          <Panel
+            title="3 · De som"
+            tone="donker"
+            icon={<ArrowLeftRight size={13} style={{ color: "rgba(255,255,255,0.4)" }} />}
+            actions={
+              <div className="flex items-center gap-2">
+                <Btn variant="ghostDonker" size="sm" onClick={opnieuw}>
+                  <RotateCcw size={11} /> Leegmaken
+                </Btn>
+              </div>
+            }
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
+              {/* Links: waar het bedrag vandaan komt */}
+              <div className="flex flex-col">
+                <SomRegel label={onzeAuto} bedrag={vraagprijs} sub={gekozen?.kenteken ?? undefined} />
+                {korting > 0 && <SomRegel label="Korting" bedrag={korting} teken="− " />}
+                <SomRegel
+                  label={`Inruil ${klantAuto || "auto van de klant"}`}
+                  bedrag={bod}
+                  teken="− "
+                  sub={kmNum > 0 ? fmtKm(kmNum) : undefined}
+                />
+
+                <div className="mt-1 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+                  <p style={{ ...micro("rgba(255,255,255,0.45)"), fontSize: 9 }}>
+                    {somRond ? uitkomstLabel : "Nog niet compleet"}
+                  </p>
+                  <p className="mt-1" style={num(38, somRond ? "#ffffff" : "rgba(255,255,255,0.25)")}>
+                    {somRond ? fmt(som.bedrag) : "—"}
+                  </p>
+                  <p className="mt-1.5" style={klein("rgba(255,255,255,0.45)")}>
+                    {!somRond
+                      ? "Zodra allebei de bedragen erin staan, staat hier wat er over tafel gaat."
+                      : som.richting === "uit"
+                        ? "Zijn auto is meer waard dan die van ons. Dit bedrag betalen wij hem uit."
+                        : som.richting === "gelijk"
+                          ? "Precies gelijk — er gaat geen geld heen en weer."
+                          : "Dit betaalt de klant bij, boven op zijn ingeruilde auto."}
+                  </p>
+                </div>
+
+                {somRond && (
+                  <div className="mt-4 flex items-center gap-2 flex-wrap">
+                    <Btn variant="wit" size="sm" onClick={kopieer}>
+                      {gekopieerd ? <Check size={11} /> : <ClipboardCopy size={11} />}
+                      {gekopieerd ? "Gekopieerd" : "Kopieer voorstel"}
+                    </Btn>
+                    {rdw && (
+                      <Btn variant="ghostDonker" size="sm" onClick={bewaarAlsDossier} disabled={bewaarBezig}>
+                        {bewaard ? <Check size={11} /> : <FolderPlus size={11} />}
+                        {bewaard ? "In de inkoop gezet" : bewaarBezig ? "Bezig…" : "Bewaar als inkoopdossier"}
+                      </Btn>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Rechts: wat de inruilauto ons oplevert */}
+              <div className="flex flex-col">
+                <p style={{ ...micro("rgba(255,255,255,0.45)"), fontSize: 9 }}>Wat je aan zijn auto overhoudt</p>
+
+                {verkoopwaarde <= 0 ? (
+                  <p className="mt-2" style={klein("rgba(255,255,255,0.45)")}>
+                    Zonder taxatie is niet te zeggen wat deze auto oplevert. Zoek de marktwaarde op, of
+                    weet je hem uit je hoofd — dan blijft dit vak leeg en klopt de som links nog steeds.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-1" style={num(30, som.nettoMarge < 0 ? "#f87171" : "#4ade80")}>
+                      {fmtTeken(som.nettoMarge)}
+                    </p>
+                    <p className="mt-1" style={klein("rgba(255,255,255,0.45)")}>
+                      {som.nettoMarge < 0
+                        ? "Je legt op deze auto geld toe. Dat kan een bewuste keuze zijn om de deal rond te krijgen — maar dan weet je het."
+                        : `${som.margePct}% van de verkoopprijs, ná btw en kosten.`}
+                    </p>
+
+                    <div className="mt-4 flex flex-col">
+                      {(
+                        [
+                          [voorlopig ? "Verwachte verkoop (voorlopig)" : "Verwachte verkoop", verkoopwaarde, ""],
+                          ["Ons bod", bod, "− "],
+                          [btwType === "btw" ? "Btw (21% over de verkoop)" : "Btw (21/121 over de marge)", som.btwAfdracht, "− "],
+                          ["Klaarmaakkosten", kosten, "− "],
+                        ] as [string, number, string][]
+                      ).map(([label, bedrag, teken], i) => (
+                        <div
+                          key={label}
+                          className="flex items-baseline justify-between gap-3 py-1.5"
+                          style={{ borderTop: i > 0 ? "1px solid rgba(255,255,255,0.09)" : undefined }}
+                        >
+                          <span style={{ fontFamily: T.inter, fontSize: 11.5, color: "rgba(255,255,255,0.5)" }}>
+                            {label}
+                          </span>
+                          <span style={{ fontFamily: T.play, fontSize: 13, fontWeight: 700, color: "#ffffff", fontVariantNumeric: "tabular-nums" }}>
+                            {teken}
+                            {fmt(bedrag)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {b?.verkoopbaarheid_reden && (
+                      <p className="mt-3" style={klein("rgba(255,255,255,0.4)")}>
+                        {b.verkoopbaarheid_reden}
+                      </p>
+                    )}
+
+                    {korting > 0 && (
+                      <p className="mt-3" style={klein("rgba(255,255,255,0.4)")}>
+                        De {fmt(korting)} korting op onze eigen auto staat hier los van — die komt van de
+                        marge op díé auto af, niet van deze.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}

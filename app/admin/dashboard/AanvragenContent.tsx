@@ -7,6 +7,7 @@ import {
   Pencil,
   ChevronDown,
   Archive,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   T, micro, body, klein, Panel, Btn, Field, inputStijl,
@@ -251,9 +252,12 @@ const tijd = (iso: string) => {
 
 export default function AanvragenContent({
   onNaarTaxatie,
+  onNaarInruil,
 }: {
   /** Doorsturen naar de taxatietool met dit kenteken al ingevuld. */
   onNaarTaxatie?: (kenteken: string) => void;
+  /** Doorsturen naar de inruilpagina met zijn auto én onze auto al ingevuld. */
+  onNaarInruil?: (kenteken: string, autoId: number | null) => void;
 }) {
   const [aanvragen, setAanvragen] = useState<Aanvraag[] | null>(null);
   const [autos, setAutos] = useState<Auto[]>([]);
@@ -560,6 +564,7 @@ export default function AanvragenContent({
                 onFout={setFout}
                 onSluit={() => setOpen(null)}
                 onNaarTaxatie={onNaarTaxatie}
+                onNaarInruil={onNaarInruil}
                 bewerken={bewerken}
               />
             ) : null}
@@ -859,7 +864,7 @@ function Bewerk({
 
 /** Alles over één aanvraag, plus wie er nog meer achter dezelfde auto aan zit. */
 function Detail({
-  a, autos, anderen, herlaad, onFout, onSluit, onNaarTaxatie, bewerken,
+  a, autos, anderen, herlaad, onFout, onSluit, onNaarTaxatie, onNaarInruil, bewerken,
 }: {
   a: Aanvraag;
   autos: Auto[];
@@ -868,6 +873,7 @@ function Detail({
   onFout: (s: string) => void;
   onSluit: () => void;
   onNaarTaxatie?: (kenteken: string) => void;
+  onNaarInruil?: (kenteken: string, autoId: number | null) => void;
   /** Staat het potlood in de balk bovenaan aan? Dan gaan alle velden open. */
   bewerken: boolean;
 }) {
@@ -1195,6 +1201,15 @@ function Detail({
           {kenteken && onNaarTaxatie && (
             <Btn variant="ghost" size="sm" full onClick={() => onNaarTaxatie(kenteken)}>
               <Calculator size={12} /> Taxeer {kenteken}
+            </Btn>
+          )}
+          {/* Wil hij inruilen, dan is de vraag niet "wat is zijn auto waard" maar "wat
+              moet hij bijbetalen". Alleen a.kenteken meesturen en niet de terugval op
+              onze eigen auto: dat is het kenteken van de auto waar hij op reageert, en
+              dan zou de inruilpagina de verkeerde auto gaan taxeren. */}
+          {onNaarInruil && (a.kenteken || a.auto_id != null) && (
+            <Btn variant="ghost" size="sm" full onClick={() => onNaarInruil(a.kenteken, a.auto_id)}>
+              <ArrowLeftRight size={12} /> Inruil berekenen
             </Btn>
           )}
           <Btn size="sm" full onClick={schrijfAntwoord} disabled={!!taak?.bezig}>
