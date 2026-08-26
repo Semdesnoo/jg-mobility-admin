@@ -108,6 +108,44 @@ export function berekenInruil(inv: InruilInvoer): InruilSom {
 }
 
 /**
+ * Zegt de klant "ik wil er hooguit dit bij leggen", dan ligt daarmee vast wat je zijn auto
+ * voor moet overnemen. Niet andersom: het is zijn portemonnee die de inruilwaarde bepaalt,
+ * en de vraag is alleen nog of dat bedrag uit kan.
+ */
+export function bodBijBijbetaling(onzePrijs: number, maxBijbetaling: number): number {
+  return Math.max(0, rond(onzePrijs) - Math.max(0, rond(maxBijbetaling)));
+}
+
+/**
+ * Wat er overblijft aan een auto uit de eigen voorraad.
+ *
+ * Dezelfde regels als de marge-calculator op het dashboard (zie `winstVan` in
+ * DashboardHub.tsx), zodat dezelfde auto op twee schermen niet twee bedragen oplevert.
+ * De kostprijs is de inkoopprijs plus alles wat er daarna in is gegaan.
+ */
+export function winstEigenAuto(inv: {
+  verkoopprijs: number;
+  kostprijs: number;
+  btwType: "marge" | "btw";
+}): { brutoMarge: number; btwAfdracht: number; nettoMarge: number } {
+  const verkoop = Math.max(0, rond(inv.verkoopprijs));
+  const kostprijs = Math.max(0, rond(inv.kostprijs));
+  if (verkoop <= 0) return { brutoMarge: 0, btwAfdracht: 0, nettoMarge: 0 };
+
+  if (inv.btwType === "btw") {
+    const nettoVerkoop = rond(verkoop / 1.21);
+    return {
+      brutoMarge: verkoop - kostprijs,
+      btwAfdracht: verkoop - nettoVerkoop,
+      nettoMarge: nettoVerkoop - kostprijs,
+    };
+  }
+  const brutoMarge = verkoop - kostprijs;
+  const btwAfdracht = brutoMarge > 0 ? rond((brutoMarge * 21) / 121) : 0;
+  return { brutoMarge, btwAfdracht, nettoMarge: brutoMarge - btwAfdracht };
+}
+
+/**
  * Het hoogste bod dat nog de gewenste marge overlaat — dezelfde som als in de taxatietool,
  * maar dan hier zodat het scherm meebeweegt zodra je aan de marge of de kosten draait
  * zonder opnieuw de markt op te moeten.

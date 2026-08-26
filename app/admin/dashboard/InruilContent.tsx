@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
-  ArrowLeftRight, Car, Check, ClipboardCopy, RotateCcw, Search, Tag, FolderPlus,
+  ArrowLeftRight, Car, Check, ClipboardCopy, RotateCcw, Search, Tag, FolderPlus, Wallet,
 } from "lucide-react";
 import {
   T, num, micro, klein, fmt, fmtGetal, fmtKm,
   Panel, Field, inputStijl, Btn, Chip, Spinner, Foutmelding, Waarschuwing, PanelVoet,
 } from "./inkoop/ui";
 import { berekenKoerslijst } from "./inkoop/koerslijst";
-import { berekenInruil, maxBod } from "./inruil/som";
+import { berekenInruil, maxBod, bodBijBijbetaling, winstEigenAuto } from "./inruil/som";
 import { useAiTaak } from "./AiTaken";
 import type { RdwData, TaxatieResultaat } from "./inkoop/types";
 
@@ -44,6 +44,14 @@ type VoorraadAuto = {
   verkocht?: boolean;
   gereserveerd?: boolean;
   kenteken?: string;
+};
+
+/** Wat de marge-calculator van onze eigen auto's weet: wat hij kostte en wat erin ging. */
+type MargeDossier = {
+  auto_id: number | null;
+  inkoop: number;
+  btw_type: "marge" | "21";
+  kosten: { label: string; bedrag: string }[];
 };
 
 /** Alleen de cijfers overhouden: "12.500" en "12 500" horen allebei 12500 te worden. */
@@ -124,6 +132,18 @@ export default function InruilContent({
   const [posten, setPosten] = useState<{ id: number; label: string; bedrag: number }[]>([]);
   const [btwType, setBtwType] = useState<"marge" | "btw">("marge");
 
+  /**
+   * Wat wij zijn auto voor wegzetten. Dit is het getal waar al het andere aan hangt: het
+   * bod dat je kunt doen, wat je eraan overhoudt, of de bijbetaling van de klant uit kan.
+   *
+   * Daarom is het een veld en geen uitkomst. De marktscan telt advertenties, maar jij
+   * staat naast de auto: je ziet de schade, de uitvoering, de bandenmaat en de kleur die
+   * niemand wil. Weet jij het beter, dan overschrijf je het en rekent de rest van de
+   * pagina verder met jouw bedrag.
+   */
+  const [verkoopTekst, setVerkoopTekst] = useState("");
+  const [verkoopEigen, setVerkoopEigen] = useState(false);
+
   // Wat we bieden. Volgt het advies tot je zelf een bedrag intikt — daarna is het veld
   // van jou en verandert er niets meer onder je handen.
   const [bodTekst, setBodTekst] = useState("");
@@ -135,6 +155,17 @@ export default function InruilContent({
   const [prijsTekst, setPrijsTekst] = useState("");
   const [prijsEigen, setPrijsEigen] = useState(false);
   const [kortingTekst, setKortingTekst] = useState("");
+
+  // ── De onderhandeling ──
+  /** Wat de klant zelf zegt maximaal te willen bijleggen. */
+  const [maxBijTekst, setMaxBijTekst] = useState("");
+  /**
+   * De marge-dossiers, voor wat wíj voor onze eigen auto betaald hebben. Zonder dat getal
+   * is alleen de helft van de deal te zien; mét dat getal staat er wat de hele ruil je
+   * oplevert. Wordt het niet opgehaald of staat er geen inkoopprijs in, dan blijft dat
+   * deel gewoon weg — een winst die op een aanname rust is erger dan geen winst tonen.
+   */
+  const [dossiers, setDossiers] = useState<MargeDossier[]>([]);
 
   // ── Afhandeling ──
   const [seconden, setSeconden] = useState(0);
@@ -161,6 +192,15 @@ export default function InruilContent({
     return () => clearInterval(t);
   }, [laden]);
 
+  // Eén keer ophalen bij het openen. Mislukt het, dan blijft de lijst leeg en verdwijnt
+  // alleen het stukje over onze eigen auto — de inruilsom zelf heeft het niet nodig.
+  useEffect(() => {
+    fetch("/api/admin/dossiers")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => Array.isArray(d) && setDossiers(d))
+      .catch(() => {});
+  }, []);
+
   const rdwOpzoeken = useCallback(
     async (raw: string) => {
       const k = raw.trim();
@@ -172,6 +212,9 @@ export default function InruilContent({
       wis();
       setBodEigen(false);
       setBodTekst("");
+      // Een verkoopprijs die je met de hand hebt gezet hoorde bij de vorige auto.
+      setVerkoopEigen(false);
+      setVerkoopTekst("");
       try {
         const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(k)}`);
         const d = await res.json().catch(() => ({}));
@@ -203,12 +246,13 @@ export default function InruilContent({
   const m = resultaat?.markt;
 
   /**
-   * Wat de auto van de klant naar verwachting opbrengt. Na de scan is dat de
-   * geadviseerde verkoopprijs; daarvoor de koerslijst uit de RDW-nieuwprijs. Zonder een
-   * van die twee blijft het nul — dan is er niets om een marge over te rekenen.
+   * Wat de auto van de klant naar verwachting opbrengt. Na de scan is dat de geadviseerde
+   * verkoopprijs; daarvoor de koerslijst uit de RDW-nieuwprijs. Heb jij hem overschreven,
+   * dan wint jouw bedrag — jij hebt de auto gezien en de scan niet.
    */
-  const verkoopwaarde = b?.verwachte_verkoop ?? preview?.koerslijst ?? 0;
-  const voorlopig = !b && verkoopwaarde > 0;
+  const getaxeerdeVerkoop = b?.verwachte_verkoop ?? preview?.koerslijst ?? 0;
+  const verkoopwaarde = verkoopEigen ? getalUit(verkoopTekst) : getaxeerdeVerkoop;
+  const voorlopig = !b && !verkoopEigen && verkoopwaarde > 0;
 
   // Het advies beweegt mee met de marge en de kosten, zonder opnieuw de markt op te gaan:
   // dezelfde som als op de server, met de verkoopwaarde die er al ligt.
@@ -239,6 +283,65 @@ export default function InruilContent({
     kosten,
     btwType,
   });
+
+  // ── Onze eigen auto: wat hij ons gekost heeft ──────────────────
+  const onsDossier = autoId != null ? dossiers.find((d) => d.auto_id === autoId) : undefined;
+  const onzeKostprijs = onsDossier
+    ? Number(onsDossier.inkoop || 0) +
+      (onsDossier.kosten ?? []).reduce((s, k) => s + (parseFloat(k.bedrag) || 0), 0)
+    : 0;
+  /** Alleen als er echt een inkoopprijs bekend is. Anders blijft dit deel van het scherm leeg. */
+  const onzeWinst =
+    onzeKostprijs > 0 && som.onzePrijs > 0
+      ? winstEigenAuto({
+          verkoopprijs: som.onzePrijs,
+          kostprijs: onzeKostprijs,
+          btwType: onsDossier?.btw_type === "21" ? "btw" : "marge",
+        })
+      : null;
+
+  // ── Wat de klant maximaal wil bijbetalen ───────────────────────
+  //
+  // Zegt hij "ik leg er hooguit twaalfduizend bij", dan ligt daarmee vast wat je zijn auto
+  // voor moet overnemen: onze prijs min dat bedrag. De vraag is niet meer wat zijn auto
+  // waard is, maar of dat bedrag nog uit kan.
+  const maxBij = getalUit(maxBijTekst);
+  const benodigdBod = bodBijBijbetaling(som.onzePrijs, maxBij);
+  const bijMax = berekenInruil({
+    vraagprijs,
+    korting,
+    inruilbod: benodigdBod,
+    verwachteVerkoop: verkoopwaarde,
+    kosten,
+    btwType,
+  });
+  /**
+   * Wat de hele ruil je oplevert: onze auto én zijn auto bij elkaar.
+   *
+   * Onze eigen marge verandert niet mee met wat de klant bijbetaalt — die zit in ónze
+   * prijs, en die staat vast zolang je de korting niet aanpast. Dat is precies waarom het
+   * totaal hier klopt: alles wat de klant minder bijbetaalt komt uit de inruilwaarde, en
+   * die zit in de andere helft van deze som.
+   */
+  const totaalNu = som.nettoMarge + (onzeWinst?.nettoMarge ?? 0);
+  const totaalBijMax = bijMax.nettoMarge + (onzeWinst?.nettoMarge ?? 0);
+
+  /**
+   * Kan de bijbetaling die hij noemt uit?
+   *
+   * "Past" is niet hetzelfde als "levert geld op": het betekent dat je binnen de marge
+   * blijft die je zelf wilde houden. Daaronder ligt nog een heel gebied waarin de deal
+   * best kan, maar je marge inlevert — en dat is iets anders dan verlies. Die drie horen
+   * uit elkaar gehouden te worden, anders staat er rood bij een deal die prima is.
+   */
+  const bijbetalingOordeel =
+    som.onzePrijs > 0 && maxBij > 0 && verkoopwaarde > 0
+      ? advies > 0 && benodigdBod <= advies
+        ? { stand: "past" as const, kleur: T.groen }
+        : bijMax.nettoMarge > 0 || (onzeWinst !== null && totaalBijMax > 0)
+          ? { stand: "krap" as const, kleur: T.amber }
+          : { stand: "kanNiet" as const, kleur: T.rood }
+      : null;
 
   const beschikbaar = useMemo(() => {
     const z = zoek.trim().toLowerCase();
@@ -387,8 +490,11 @@ export default function InruilContent({
     setUitvoering("");
     setKosten(0);
     setPosten([]);
+    setVerkoopTekst("");
+    setVerkoopEigen(false);
     setBodTekst("");
     setBodEigen(false);
+    setMaxBijTekst("");
     setAutoId(null);
     setPrijsTekst("");
     setPrijsEigen(false);
@@ -611,6 +717,66 @@ export default function InruilContent({
               </div>
             )}
 
+            {/* ── Wat wij ervoor terugkrijgen ── */}
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
+              <Field
+                label="Wat verkopen wij hem voor"
+                suffix="€"
+                hint={
+                  verkoopEigen
+                    ? "Jouw bedrag — hier rekent de hele pagina mee"
+                    : b
+                      ? `${b.bron}${
+                          b.spreiding
+                            ? `. Vergelijkbare auto's wijken onderling ${fmt(b.spreiding)} af, dus zo scherp is dit getal ook`
+                            : ""
+                        }`
+                      : voorlopig
+                        ? "Voorlopig, uit de RDW-nieuwprijs met afschrijving. De marktscan maakt het scherper — of tik zelf in wat jij ervoor krijgt"
+                        : "Nog niets bekend — scan de markt of vul zelf in wat jij ervoor krijgt"
+                }
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={verkoopEigen ? verkoopTekst : verkoopwaarde > 0 ? String(verkoopwaarde) : ""}
+                  onChange={(e) => {
+                    setVerkoopEigen(true);
+                    setVerkoopTekst(e.target.value);
+                  }}
+                  placeholder="0"
+                  style={{
+                    ...inputStijl,
+                    height: 46,
+                    paddingRight: 34,
+                    fontFamily: T.play,
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: T.navy,
+                  }}
+                />
+              </Field>
+              {verkoopEigen && getaxeerdeVerkoop > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerkoopEigen(false);
+                    setVerkoopTekst("");
+                  }}
+                  className="mt-1.5 inline-flex items-center gap-1.5 transition-all hover:opacity-60"
+                  style={klein(T.ink(0.5))}
+                >
+                  <RotateCcw size={10} /> Terug naar de taxatie van {fmt(getaxeerdeVerkoop)}
+                </button>
+              )}
+              {m && m.aantal_gevonden ? (
+                <p className="mt-2" style={klein()}>
+                  Gevonden aanbod liep van {fmt(m.min_prijs)} tot {fmt(m.max_prijs)}
+                  {b?.per_duizend_km ? ` — elke 1.000 km scheelt daarin ongeveer € ${Math.abs(b.per_duizend_km)}` : ""}.
+                </p>
+              ) : null}
+            </div>
+
             {/* ── Het bod ── */}
             <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
               <Field
@@ -618,10 +784,10 @@ export default function InruilContent({
                 suffix="€"
                 hint={
                   advies > 0
-                    ? `Advies: maximaal ${fmt(advies)} — dan houd je ${marge}% over${
-                        voorlopig ? ". Voorlopig, uit de RDW-nieuwprijs; de marktscan verfijnt dit" : ""
+                    ? `Advies: maximaal ${fmt(advies)} — dan houd je ${marge}% over op de verkoopprijs hierboven${
+                        kosten > 0 ? `, met ${fmt(kosten)} klaarmaakkosten er al af` : ""
                       }`
-                    : "Nog geen advies — vul een kenteken en kilometerstand in, of tik zelf een bedrag"
+                    : "Nog geen advies — vul hierboven een verkoopprijs in, of tik hier zelf een bedrag"
                 }
               >
                 <input
@@ -656,13 +822,6 @@ export default function InruilContent({
                 >
                   <RotateCcw size={10} /> Terug naar het advies van {fmt(advies)}
                 </button>
-              )}
-
-              {b && m && (
-                <p className="mt-2" style={klein()}>
-                  Verkoopt hij naar verwachting voor {fmt(b.verwachte_verkoop)} — {b.bron}
-                  {m.aantal_gevonden ? `, spreiding ${fmt(m.min_prijs)} – ${fmt(m.max_prijs)}` : ""}.
-                </p>
               )}
 
               {bod > advies && advies > 0 && (
@@ -921,6 +1080,27 @@ export default function InruilContent({
                       ))}
                     </div>
 
+                    {/* Onze eigen auto erbij. Alleen als we weten wat hij ons gekost heeft —
+                        anders zou dit een aanname zijn die eruitziet als een bedrag. */}
+                    {onzeWinst && (
+                      <div className="mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span style={{ ...micro("rgba(255,255,255,0.5)"), fontSize: 9 }}>
+                            Op de hele ruil
+                          </span>
+                          <span style={num(21, totaalNu < 0 ? "#f87171" : "#ffffff")}>
+                            {fmtTeken(totaalNu)}
+                          </span>
+                        </div>
+                        <p className="mt-1.5" style={klein("rgba(255,255,255,0.45)")}>
+                          Onze {gekozen?.merk ?? "auto"} levert daarvan {fmtTeken(onzeWinst.nettoMarge)} op:
+                          verkocht voor {fmt(som.onzePrijs)}
+                          {korting > 0 ? ` (na ${fmt(korting)} korting)` : ""}, en hij kostte ons{" "}
+                          {fmt(onzeKostprijs)} inclusief wat erin ging.
+                        </p>
+                      </div>
+                    )}
+
                     {b?.verkoopbaarheid_reden && (
                       <p className="mt-3" style={klein("rgba(255,255,255,0.4)")}>
                         {b.verkoopbaarheid_reden}
@@ -937,6 +1117,201 @@ export default function InruilContent({
                 )}
               </div>
             </div>
+          </Panel>
+        </div>
+
+        {/* ══ 4 · Wat de klant maximaal wil bijbetalen ═════════════ */}
+        <div className="mt-4">
+          <Panel
+            title="4 · Wat de klant maximaal bijbetaalt"
+            icon={<Wallet size={13} style={{ color: T.ink(0.35) }} />}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8">
+              {/* Zijn grens */}
+              <div className="lg:col-span-4">
+                <Field
+                  label="Hij legt er maximaal bij"
+                  suffix="€"
+                  hint="Wat de klant zelf noemt. Daarmee ligt vast wat je zijn auto voor moet overnemen — en dan is de vraag alleen nog of dat uit kan."
+                >
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={maxBijTekst}
+                    onChange={(e) => setMaxBijTekst(e.target.value)}
+                    placeholder="0"
+                    style={{
+                      ...inputStijl,
+                      height: 46,
+                      paddingRight: 34,
+                      fontFamily: T.play,
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: T.navy,
+                    }}
+                  />
+                </Field>
+              </div>
+
+              {/* Wat dat betekent */}
+              <div className="lg:col-span-8">
+                {som.onzePrijs <= 0 || maxBij <= 0 ? (
+                  <p style={klein()}>
+                    {som.onzePrijs <= 0
+                      ? "Kies eerst onze auto hierboven, dan is er iets om van af te trekken."
+                      : "Vul in wat hij maximaal wil bijleggen. Je ziet dan wat je zijn auto voor moet overnemen om daaraan te komen, wat je daaraan overhoudt, en of het uit kan."}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {/* Wat je zijn auto voor moet overnemen */}
+                    <div className="flex flex-wrap items-end justify-between gap-4">
+                      <div className="min-w-0">
+                        <p style={{ ...micro(), fontSize: 9 }}>Dan neem je zijn auto over voor</p>
+                        <p className="mt-1" style={num(30)}>
+                          {fmt(benodigdBod)}
+                        </p>
+                        <p className="mt-1" style={klein()}>
+                          {benodigdBod === 0
+                            ? "Hij legt meer bij dan onze auto kost — voor zijn auto hoef je dan niets te geven."
+                            : advies > 0
+                              ? benodigdBod > advies
+                                ? `${fmt(benodigdBod - advies)} boven het advies van ${fmt(advies)}.`
+                                : `${fmt(advies - benodigdBod)} onder het advies van ${fmt(advies)}.`
+                              : `Onze prijs ${fmt(som.onzePrijs)} min zijn ${fmt(maxBij)}.`}
+                        </p>
+                      </div>
+
+                      {benodigdBod !== bod && benodigdBod > 0 && (
+                        <Btn
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setBodEigen(true);
+                            setBodTekst(String(benodigdBod));
+                          }}
+                        >
+                          <ArrowLeftRight size={11} /> Neem dit bod over in de som
+                        </Btn>
+                      )}
+                    </div>
+
+                    {/* Wat je eraan overhoudt */}
+                    {verkoopwaarde > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div
+                          className="p-3.5"
+                          style={{
+                            backgroundColor: "rgba(0,19,55,0.02)",
+                            border: `1px solid ${T.line}`,
+                            borderLeft: `3px solid ${bijMax.nettoMarge < 0 ? T.rood : T.groen}`,
+                          }}
+                        >
+                          <p style={{ ...micro(), fontSize: 9 }}>Houd je over aan zijn auto</p>
+                          <p className="mt-1" style={num(22, bijMax.nettoMarge < 0 ? T.rood : T.groen)}>
+                            {fmtTeken(bijMax.nettoMarge)}
+                          </p>
+                          <p className="mt-1" style={klein()}>
+                            {fmt(verkoopwaarde)} verkoop − {fmt(benodigdBod)} inkoop − {fmt(bijMax.btwAfdracht)} btw
+                            {kosten > 0 ? ` − ${fmt(kosten)} kosten` : ""}
+                          </p>
+                        </div>
+
+                        <div
+                          className="p-3.5"
+                          style={{
+                            backgroundColor: "rgba(0,19,55,0.02)",
+                            border: `1px solid ${T.line}`,
+                            borderLeft: `3px solid ${
+                              onzeWinst ? (totaalBijMax < 0 ? T.rood : T.navy) : T.line2
+                            }`,
+                          }}
+                        >
+                          <p style={{ ...micro(), fontSize: 9 }}>Op de hele ruil</p>
+                          {onzeWinst ? (
+                            <>
+                              <p className="mt-1" style={num(22, totaalBijMax < 0 ? T.rood : T.navy)}>
+                                {fmtTeken(totaalBijMax)}
+                              </p>
+                              <p className="mt-1" style={klein()}>
+                                Met {fmtTeken(onzeWinst.nettoMarge)} op onze eigen auto erbij.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="mt-1" style={num(22, T.ink(0.25))}>
+                                —
+                              </p>
+                              <p className="mt-1" style={klein()}>
+                                {gekozen
+                                  ? "Vul de inkoopprijs van deze auto in bij de Marge Calculator, dan staat hier wat de hele ruil oplevert."
+                                  : "Kies een auto uit de voorraad, dan kan de winst op onze eigen auto erbij."}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={klein()}>
+                        Wat je eraan overhoudt kan er pas bij als bekend is wat zijn auto opbrengt. Vul
+                        hierboven een verkoopprijs in of scan de markt.
+                      </p>
+                    )}
+
+                    {/* Het oordeel */}
+                    {bijbetalingOordeel && (
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className="flex-shrink-0 rounded-full"
+                          style={{ width: 8, height: 8, backgroundColor: bijbetalingOordeel.kleur, marginTop: 5 }}
+                        />
+                        <p style={{ fontFamily: T.inter, fontSize: 12.5, color: T.ink(0.7), lineHeight: 1.55 }}>
+                          {bijbetalingOordeel.stand === "past" ? (
+                            <>
+                              <strong style={{ color: T.navy }}>Dit kan.</strong> Wat hij wil bijleggen past
+                              binnen de {marge}% die je wilde houden — je levert er niets voor in.
+                            </>
+                          ) : bijbetalingOordeel.stand === "krap" ? (
+                            <>
+                              <strong style={{ color: T.navy }}>Dit kan, maar het kost je marge.</strong>{" "}
+                              {advies > 0
+                                ? `Je gaat ${fmt(benodigdBod - advies)} boven je eigen advies zitten.`
+                                : `Bij deze verkoopprijs en kosten was er eigenlijk geen ruimte om te bieden.`}
+                              {bijMax.nettoMarge <= 0 && onzeWinst
+                                ? ` Op zijn auto lever je ${fmt(-bijMax.nettoMarge)} in; dat haal je terug uit de winst op onze eigen auto.`
+                                : ""}
+                            </>
+                          ) : (
+                            <>
+                              <strong style={{ color: T.navy }}>Dit kan niet uit.</strong> Je zou zijn auto
+                              voor {fmt(benodigdBod)} overnemen terwijl hij {fmt(verkoopwaarde)} opbrengt
+                              {kosten > 0 ? ` en nog ${fmt(kosten)} klaarmaken kost` : ""}: daar leg je{" "}
+                              {fmt(-bijMax.nettoMarge)} op toe. Hij zal meer moeten bijleggen, of onze prijs
+                              moet omlaag.
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <PanelVoet>
+              {btwType === "marge" ? (
+                <>
+                  Of je het weggeeft als korting of als inruilwaarde maakt voor jou niets uit: allebei
+                  kosten ze je € 0,83 per euro, want over dat stuk marge draag je geen btw meer af. Wat
+                  telt is wat hij in totaal bijbetaalt en wat zijn auto opbrengt — niet hoe je het noemt.
+                </>
+              ) : (
+                <>
+                  Let op: ruil je in van een bedrijf, dan is het níét hetzelfde. Een euro extra
+                  inruilwaarde kost je de volle euro, terwijl een euro korting op onze auto je € 0,83
+                  kost. Bij deze inruil is korting geven dus goedkoper dan meer bieden.
+                </>
+              )}
+            </PanelVoet>
           </Panel>
         </div>
       </div>
