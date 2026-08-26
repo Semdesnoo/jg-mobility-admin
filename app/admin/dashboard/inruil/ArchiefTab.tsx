@@ -1,18 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Archive, ChevronDown, ChevronRight, RotateCcw, Trash2, ArrowLeftRight } from "lucide-react";
-import { T, num, micro, klein, body, fmt, fmtKm, Btn, Empty, inputStijl } from "../inkoop/ui";
+import { Archive, ChevronRight, Trash2, ArrowLeftRight } from "lucide-react";
+import { T, num, klein, body, fmt, fmtKm, Btn, Empty, inputStijl } from "../inkoop/ui";
 import { useDialoog } from "../Dialoog";
+import ArchiefDetail from "./ArchiefDetail";
 import type { InruilArchiefRij } from "./types";
 
 /**
  * Terugkijken: wat is er wanneer voorgerekend, en aan wie.
  *
  * Geordend per kwartaal, net als het analyse-archief van de taxatietool, zodat het
- * dashboard op dat punt één gewoonte heeft en niet twee. Een regel klapt open naar alle
- * bedragen die er destijds onder lagen, en kan met één knop terug in de rekenmachine —
- * want de vaakst voorkomende reden om terug te kijken is dat dezelfde klant terugkomt.
+ * dashboard op dat punt één gewoonte heeft en niet twee.
+ *
+ * Klik je op een regel, dan gaat hij helemaal open op een eigen pagina — met alle
+ * bedragen, de voertuiggegevens en het aanbod waar de waarde destijds op rustte. Hier
+ * stond eerst een uitklapper onder de regel, maar dat werd een propvol vakje waarin je
+ * juist niet kon lezen wat er die dag was afgesproken, laat staan iets aanpassen.
  */
 
 function datumTijd(iso: string): string {
@@ -28,6 +32,7 @@ function datumTijd(iso: string): string {
 export default function InruilArchiefTab({
   rijen,
   onOpen,
+  onBijgewerkt,
   onVerwijderd,
   onNieuw,
 }: {
@@ -35,20 +40,14 @@ export default function InruilArchiefTab({
   rijen: InruilArchiefRij[] | null;
   /** Deze inruil terugzetten in de rekenmachine. */
   onOpen: (r: InruilArchiefRij) => void;
+  /** Op de detailpagina is er iets aangepast. */
+  onBijgewerkt: (r: InruilArchiefRij) => void;
   onVerwijderd: (id: string) => void;
   onNieuw: () => void;
 }) {
   const { vraag } = useDialoog();
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [openId, setOpenId] = useState<string | null>(null);
   const [zoek, setZoek] = useState("");
-
-  const toggle = (id: string) =>
-    setOpen((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
 
   const gevonden = useMemo(() => {
     const z = zoek.trim().toLowerCase();
@@ -89,6 +88,26 @@ export default function InruilArchiefTab({
     onVerwijderd(r.id);
   };
 
+  // ── De pagina van één inruil ──
+  // De regel komt uit de lijst en niet uit een kopie, zodat een wijziging op de
+  // detailpagina meteen ook in de lijst erachter klopt.
+  const geopend = openId ? (rijen ?? []).find((r) => r.id === openId) ?? null : null;
+  if (geopend) {
+    return (
+      <ArchiefDetail
+        key={geopend.id}
+        rij={geopend}
+        onTerug={() => setOpenId(null)}
+        onBijgewerkt={onBijgewerkt}
+        onVerwijderd={(id) => {
+          setOpenId(null);
+          onVerwijderd(id);
+        }}
+        onTerugzetten={onOpen}
+      />
+    );
+  }
+
   if (rijen === null) {
     return (
       <div className="flex flex-col gap-2 py-6">
@@ -105,7 +124,7 @@ export default function InruilArchiefTab({
         <Empty
           icon={<Archive size={30} style={{ color: T.ink(0.15) }} />}
           title="Nog niets bewaard"
-          body="Elke inruil die je kopieert of bewaart komt hier te staan, geordend per kwartaal. Zo kun je later terugzien wat je die dag hebt voorgerekend — en wat de auto van die klant toen waard was."
+          body="Elke inruil die je doorrekent komt hier vanzelf te staan, geordend per kwartaal. Zo kun je later terugzien wat je die dag hebt voorgerekend — en wat de auto van die klant toen waard was."
         >
           <Btn onClick={onNieuw}>
             <ArrowLeftRight size={12} /> Naar de rekenmachine
@@ -122,7 +141,7 @@ export default function InruilArchiefTab({
           <h3 style={{ fontFamily: T.play, fontWeight: 700, fontSize: 17, color: T.navy }}>Inruilarchief</h3>
           <p style={body(11.5, T.ink(0.45))}>
             {rijen.length} bewaarde inruil{rijen.length === 1 ? "" : "en"}
-            {zoek.trim() && ` — ${gevonden.length} gevonden`}
+            {zoek.trim() && ` — ${gevonden.length} gevonden`} · klik een regel open om alles te zien
           </p>
         </div>
         <div className="ml-auto" style={{ minWidth: 200 }}>
@@ -155,44 +174,39 @@ export default function InruilArchiefTab({
           </div>
 
           {g.items.map((r) => {
-            const isOpen = open.has(r.id);
             const uit = r.verschil < 0;
             const zijnAuto = [r.merk, r.model].filter(Boolean).join(" ") || "Onbekende auto";
             return (
-              <div key={r.id} style={{ borderTop: `1px solid ${T.line}` }}>
-                {/* ── Regel ── */}
-                <div className="px-4 md:px-5 py-3 flex items-center gap-3 sm:gap-4 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => toggle(r.id)}
-                    className="flex items-center gap-3 min-w-0 flex-1 text-left transition-all hover:opacity-70"
-                  >
-                    {isOpen ? (
-                      <ChevronDown size={15} style={{ color: T.ink(0.4), flexShrink: 0 }} />
-                    ) : (
-                      <ChevronRight size={15} style={{ color: T.ink(0.4), flexShrink: 0 }} />
-                    )}
-                    <span className="min-w-0">
-                      <span
-                        className="block truncate"
-                        style={{ fontFamily: T.inter, fontWeight: 700, fontSize: 13.5, color: T.navy }}
-                      >
-                        {r.klant ? `${r.klant} — ` : ""}
-                        {zijnAuto}
-                        {r.auto_naam ? ` tegen ${r.auto_naam}` : ""}
-                      </span>
-                      <span className="block truncate" style={{ fontFamily: T.inter, fontSize: 11, color: T.ink(0.42) }}>
-                        {[
-                          r.kenteken ? r.kenteken.toUpperCase() : null,
-                          r.bouwjaar || null,
-                          r.km ? fmtKm(r.km) : null,
-                          datumTijd(r.aangemaakt),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
+              <div
+                key={r.id}
+                className="flex items-center gap-3 sm:gap-4 flex-wrap px-4 md:px-5"
+                style={{ borderTop: `1px solid ${T.line}` }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenId(r.id)}
+                  className="flex items-center gap-3 min-w-0 flex-1 text-left py-3 transition-all hover:opacity-70"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className="block truncate"
+                      style={{ fontFamily: T.inter, fontWeight: 700, fontSize: 13.5, color: T.navy }}
+                    >
+                      {r.klant ? `${r.klant} — ` : ""}
+                      {zijnAuto}
+                      {r.auto_naam ? ` tegen ${r.auto_naam}` : ""}
                     </span>
-                  </button>
+                    <span className="block truncate" style={{ fontFamily: T.inter, fontSize: 11, color: T.ink(0.42) }}>
+                      {[
+                        r.kenteken ? r.kenteken.toUpperCase() : null,
+                        r.bouwjaar || null,
+                        r.km ? fmtKm(r.km) : null,
+                        datumTijd(r.aangemaakt),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
 
                   <span className="text-right flex-shrink-0" style={{ minWidth: 116 }}>
                     <span className="block" style={num(18, uit ? T.amber : T.navy)}>
@@ -203,78 +217,18 @@ export default function InruilArchiefTab({
                     </span>
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={() => verwijder(r)}
-                    aria-label="Verwijderen"
-                    className="px-2 py-1 transition-all hover:opacity-70 flex-shrink-0"
-                    style={{ border: "1px solid rgba(185,28,28,0.25)", color: T.rood }}
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
+                  <ChevronRight size={16} style={{ color: T.ink(0.3), flexShrink: 0 }} />
+                </button>
 
-                {/* ── Detail ── */}
-                {isOpen && (
-                  <div className="px-4 md:px-5 pb-4" style={{ backgroundColor: "rgba(0,19,55,0.015)" }}>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 pt-3">
-                      {(
-                        [
-                          [r.auto_naam || "Onze auto", fmt(r.vraagprijs), ""],
-                          ...(r.korting > 0 ? ([["Korting", fmt(r.korting), ""]] as [string, string, string][]) : []),
-                          ["Inruilwaarde", fmt(r.bod), ""],
-                          [
-                            uit ? "Wij betaalden uit" : "Klant betaalde bij",
-                            fmt(Math.abs(r.verschil)),
-                            "sterk",
-                          ],
-                          ["Zijn auto opbrengst", fmt(r.verkoopwaarde), ""],
-                          ["Klaarmaakkosten", fmt(r.kosten), ""],
-                          [
-                            "Wat je overhield",
-                            `${r.netto_marge < 0 ? "− " : ""}${fmt(Math.abs(r.netto_marge))}`,
-                            r.netto_marge < 0 ? "rood" : "groen",
-                          ],
-                          ...(r.max_bijbetaling > 0
-                            ? ([["Zijn maximum", fmt(r.max_bijbetaling), ""]] as [string, string, string][])
-                            : []),
-                        ] as [string, string, string][]
-                      ).map(([l, v, toon]) => (
-                        <div
-                          key={l}
-                          className="p-2.5"
-                          style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
-                        >
-                          <p className="truncate" style={{ ...micro(), fontSize: 8.5 }}>
-                            {l}
-                          </p>
-                          <p
-                            className="mt-1"
-                            style={num(
-                              15,
-                              toon === "rood" ? T.rood : toon === "groen" ? T.groen : T.navy,
-                              toon === "sterk" ? 700 : 700
-                            )}
-                          >
-                            {v}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <p className="mt-3" style={klein()}>
-                      Gerekend met {r.marge}% gewenste marge
-                      {r.btw_type === "btw" ? ", inruil van een bedrijf (btw-auto)" : ", inruil van een particulier"}
-                      {r.bron ? ` · verkoopwaarde uit ${r.bron}` : ""}.
-                    </p>
-
-                    <div className="mt-3">
-                      <Btn variant="ghost" size="sm" onClick={() => onOpen(r)}>
-                        <RotateCcw size={11} /> Terugzetten in de rekenmachine
-                      </Btn>
-                    </div>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => verwijder(r)}
+                  aria-label="Verwijderen"
+                  className="px-2 py-1 transition-all hover:opacity-70 flex-shrink-0"
+                  style={{ border: "1px solid rgba(185,28,28,0.25)", color: T.rood }}
+                >
+                  <Trash2 size={11} />
+                </button>
               </div>
             );
           })}

@@ -11,6 +11,7 @@ import {
 import { berekenKoerslijst } from "./inkoop/koerslijst";
 import { berekenInruil, maxBod, bodBijBijbetaling, winstEigenAuto } from "./inruil/som";
 import InruilArchiefTab from "./inruil/ArchiefTab";
+import { maakVoorstel } from "./inruil/voorstel";
 import { useAiTaak } from "./AiTaken";
 import type { RdwData, TaxatieResultaat } from "./inkoop/types";
 import type { InruilArchiefRij } from "./inruil/types";
@@ -182,15 +183,20 @@ export default function InruilContent({
   // ── Het archief ──
   const [archief, setArchief] = useState<InruilArchiefRij[] | null>(null);
   /**
-   * De handtekening van de inruil die al bewaard is.
+   * De regel in het archief waar deze berekening in staat.
    *
-   * Zonder dit levert twee keer op "Kopieer voorstel" drukken twee regels in het archief
-   * op, en dat is precies wat een archief onbruikbaar maakt: tien keer dezelfde auto en
-   * niet meer weten welke regel de afspraak was. Verandert er een bedrag, dan is het een
-   * andere berekening en mag hij er wél naast.
+   * Eén inruil is één regel, ook als je er een half uur aan zit te schuiven. Zolang je aan
+   * dezelfde auto rekent wordt die regel bijgewerkt; hij komt er niet telkens naast. Een
+   * archief met dertien keer dezelfde Polo eronder is geen archief, dan is het een
+   * logboek van je toetsaanslagen.
+   *
+   * Er begint een nieuwe regel zodra je een ander kenteken opzoekt of het scherm leegmaakt.
    */
+  const [actieveId, setActieveId] = useState<string | null>(null);
+  /** De handtekening van wat er al bewaard is — wijkt hij af, dan moet er iets weg. */
   const [bewaardAls, setBewaardAls] = useState<string | null>(null);
-  const [archiefBezig, setArchiefBezig] = useState(false);
+  const [archiefStatus, setArchiefStatus] = useState<"leeg" | "bezig" | "bewaard" | "fout">("leeg");
+  const [bewaardOm, setBewaardOm] = useState<string | null>(null);
 
   // De marktscan draait in de takenlaag boven de tabbladen: klik je tussendoor weg, dan
   // loopt hij door en staat het antwoord er nog als je terugkomt.
@@ -224,10 +230,22 @@ export default function InruilContent({
       .catch(() => setArchief([]));
   }, []);
 
+  /**
+   * Welk kenteken er als laatste is opgezocht, kaal geschreven.
+   *
+   * Nodig om "dezelfde auto nog eens opzoeken" te onderscheiden van "de volgende klant".
+   * Bij het tweede hoort de naam uit het vorige gesprek weg: die zou anders stilzwijgend
+   * bij de auto van iemand anders in het archief belanden, en dat is erger dan een leeg veld.
+   */
+  const laatstOpgezocht = useRef("");
+
   const rdwOpzoeken = useCallback(
     async (raw: string) => {
       const k = raw.trim();
       if (!k) return;
+      const kaal = k.replace(/-/g, "").toUpperCase();
+      if (laatstOpgezocht.current && laatstOpgezocht.current !== kaal) setKlant("");
+      laatstOpgezocht.current = kaal;
       setRdwLaden(true);
       setRdwFout(null);
       setRdw(null);
@@ -238,6 +256,12 @@ export default function InruilContent({
       // Een verkoopprijs die je met de hand hebt gezet hoorde bij de vorige auto.
       setVerkoopEigen(false);
       setVerkoopTekst("");
+      // Een ander kenteken is een andere klant: vanaf hier een nieuwe regel in het archief,
+      // in plaats van die van de vorige auto overschrijven.
+      setActieveId(null);
+      setBewaardAls(null);
+      setArchiefStatus("leeg");
+      setBewaardOm(null);
       try {
         const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(k)}`);
         const d = await res.json().catch(() => ({}));
@@ -437,27 +461,17 @@ export default function InruilContent({
   const klantAuto = rdw ? `${rdw.merk} ${rdw.model}${rdw.bouwjaar ? ` (${rdw.bouwjaar})` : ""}` : "";
   const onzeAuto = gekozen ? `${gekozen.merk} ${gekozen.model} (${gekozen.bouwjaar})` : "Onze auto";
 
-  /**
-   * Het voorstel in gewone regels, klaar om in WhatsApp of een mail te plakken.
-   *
-   * De lege regel is een echte regel en geen weglaatbaar niets: alleen de kortingregel mag
-   * wegvallen, dus filteren we op null en niet op "leeg" — anders verdwijnt de witregel mee.
-   */
-  const voorstel = [
-    "Inruilvoorstel — JG Mobility",
-    "",
-    `${onzeAuto}: ${fmt(vraagprijs)}`,
-    korting > 0 ? `Korting: − ${fmt(korting)}` : null,
-    `Inruil ${klantAuto || "uw auto"}${kmNum > 0 ? `, ${fmtKm(kmNum)}` : ""}: − ${fmt(bod)}`,
-    "————————————————",
-    som.richting === "uit"
-      ? `Wij betalen u uit: ${fmt(som.bedrag)}`
-      : som.richting === "gelijk"
-        ? "Gelijke ruil — u betaalt niets bij"
-        : `Bij te betalen: ${fmt(som.bedrag)}`,
-  ]
-    .filter((r) => r !== null)
-    .join("\n");
+  /** Het voorstel voor de klant. Dezelfde tekst als op de detailpagina in het archief. */
+  const voorstel = maakVoorstel({
+    onzeAuto,
+    vraagprijs,
+    korting,
+    klantAuto,
+    km: kmNum,
+    bod,
+    richting: som.richting,
+    bedrag: som.bedrag,
+  });
 
   /** Waar de verkoopwaarde vandaan kwam. Gaat mee het archief in, want over een maand is
    *  dat het verschil tussen een gemeten bedrag en een onderbuikgevoel. */
@@ -465,51 +479,99 @@ export default function InruilContent({
     ? "eigen inschatting"
     : (b?.bron ?? (voorlopig ? "koerslijst (RDW-nieuwprijs)" : ""));
 
-  /** Wat deze berekening uniek maakt. Verandert er één bedrag, dan is het een nieuwe. */
-  const handtekening = [kenteken, kmNum, verkoopwaarde, bod, autoId ?? "", vraagprijs, korting, maxBij].join("|");
+  /** Wat deze berekening uniek maakt. Verandert er één bedrag, dan moet het archief bij. */
+  const handtekening = [kenteken, kmNum, verkoopwaarde, bod, autoId ?? "", vraagprijs, korting, maxBij, klant].join("|");
   const alBewaard = bewaardAls === handtekening;
 
   const bewaarInArchief = async () => {
-    if (archiefBezig || alBewaard || !somRond) return;
-    setArchiefBezig(true);
+    if (alBewaard || !somRond) return;
+    const nu = handtekening;
+    setArchiefStatus("bezig");
+    const gegevensVoorArchief = {
+      klant,
+      kenteken,
+      merk: rdw?.merk ?? "",
+      model: rdw?.model ?? "",
+      bouwjaar: rdw?.bouwjaar ?? 0,
+      km: kmNum,
+      auto_id: gekozen?.id ?? null,
+      auto_naam: gekozen ? onzeAuto : "",
+      vraagprijs,
+      korting,
+      verkoopwaarde,
+      bod,
+      verschil: som.verschil,
+      netto_marge: som.nettoMarge,
+      marge,
+      kosten,
+      btw_type: btwType,
+      max_bijbetaling: maxBij,
+      bron: bronTekst,
+      // Genoeg om het later precies zo terug te zetten als het nu op het scherm staat.
+      gegevens: { rdw, taxatie: resultaat, uitvoering, posten },
+    };
+
     try {
-      const res = await fetch("/api/admin/inruil/archief", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          klant,
-          kenteken,
-          merk: rdw?.merk ?? "",
-          model: rdw?.model ?? "",
-          bouwjaar: rdw?.bouwjaar ?? 0,
-          km: kmNum,
-          auto_id: gekozen?.id ?? null,
-          auto_naam: gekozen ? onzeAuto : "",
-          vraagprijs,
-          korting,
-          verkoopwaarde,
-          bod,
-          verschil: som.verschil,
-          netto_marge: som.nettoMarge,
-          marge,
-          kosten,
-          btw_type: btwType,
-          max_bijbetaling: maxBij,
-          bron: bronTekst,
-          // Genoeg om het later precies zo terug te zetten als het nu op het scherm staat.
-          gegevens: { rdw, taxatie: resultaat, uitvoering, posten },
-        }),
-      });
-      if (!res.ok) return;
-      const rij: InruilArchiefRij = await res.json();
-      setArchief((p) => [rij, ...(p ?? [])]);
-      setBewaardAls(handtekening);
+      let rij: InruilArchiefRij | null = null;
+
+      // Bestaat de regel al, dan wordt hij bijgewerkt. Is hij intussen weggegooid (404),
+      // dan maken we er alsnog een nieuwe van in plaats van de wijziging te laten verdampen.
+      if (actieveId) {
+        const res = await fetch(`/api/admin/inruil/archief/${actieveId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(gegevensVoorArchief),
+        });
+        if (res.ok) rij = await res.json();
+        else if (res.status !== 404) {
+          setArchiefStatus("fout");
+          return;
+        }
+      }
+
+      if (!rij) {
+        const res = await fetch("/api/admin/inruil/archief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(gegevensVoorArchief),
+        });
+        if (!res.ok) {
+          setArchiefStatus("fout");
+          return;
+        }
+        rij = await res.json();
+      }
+
+      const bewaarde = rij as InruilArchiefRij;
+      setActieveId(bewaarde.id);
+      setArchief((p) => [bewaarde, ...(p ?? []).filter((x) => x.id !== bewaarde.id)]);
+      setBewaardAls(nu);
+      setBewaardOm(new Date().toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }));
+      setArchiefStatus("bewaard");
     } catch {
       /* Niet bewaard is vervelend, maar mag de berekening op het scherm niet stukmaken. */
-    } finally {
-      setArchiefBezig(false);
+      setArchiefStatus("fout");
     }
   };
+
+  /**
+   * Vanzelf bewaren.
+   *
+   * Na een korte pauze, niet bij elke toetsaanslag: anders staat "1" onderweg naar
+   * "12.500" even als bod in het archief, en gaat er een verzoek uit voor elk cijfer dat
+   * je intikt. Pas als de som rond is (allebei de bedragen ingevuld) valt er iets te
+   * bewaren dat ergens op slaat.
+   */
+  const moetBewaren = somRond && !alBewaard;
+  const bewaarRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    bewaarRef.current = bewaarInArchief;
+  });
+  useEffect(() => {
+    if (!moetBewaren) return;
+    const t = setTimeout(() => void bewaarRef.current(), 1800);
+    return () => clearTimeout(t);
+  }, [moetBewaren, handtekening]);
 
   const kopieer = async () => {
     try {
@@ -591,18 +653,26 @@ export default function InruilContent({
     setPrijsTekst(r.vraagprijs ? String(r.vraagprijs) : "");
     setKortingTekst(r.korting ? String(r.korting) : "");
     setMaxBijTekst(r.max_bijbetaling ? String(r.max_bijbetaling) : "");
-    // Hij staat al in het archief; zonder dit zou hij er bij het eerste kopieertje
-    // nog een keer naast komen.
+    // Vanaf nu schrijft het scherm in déze regel. Zonder dat zou wat je hier verandert er
+    // als tweede regel naast komen, en had je dezelfde inruil twee keer in je archief.
+    setActieveId(r.id);
     setBewaardAls(
-      [r.kenteken, r.km, r.verkoopwaarde, r.bod, r.auto_id ?? "", r.vraagprijs, r.korting, r.max_bijbetaling].join("|")
+      [r.kenteken, r.km, r.verkoopwaarde, r.bod, r.auto_id ?? "", r.vraagprijs, r.korting, r.max_bijbetaling, r.klant].join("|")
     );
+    setArchiefStatus("bewaard");
+    setBewaardOm(null);
     setTab("rekenen");
   };
 
   const opnieuw = () => {
     wis();
     setKlant("");
+    laatstOpgezocht.current = "";
+    // Het volgende gesprek is een nieuwe regel; wat er stond blijft in het archief staan.
+    setActieveId(null);
     setBewaardAls(null);
+    setArchiefStatus("leeg");
+    setBewaardOm(null);
     setKenteken("");
     setRdw(null);
     setRdwFout(null);
@@ -698,7 +768,19 @@ export default function InruilContent({
           <InruilArchiefTab
             rijen={archief}
             onOpen={openUitArchief}
-            onVerwijderd={(id) => setArchief((p) => (p ? p.filter((x) => x.id !== id) : p))}
+            onBijgewerkt={(rij) =>
+              setArchief((p) => (p ?? []).map((x) => (x.id === rij.id ? rij : x)))
+            }
+            onVerwijderd={(id) => {
+              setArchief((p) => (p ? p.filter((x) => x.id !== id) : p));
+              // Stond de rekenmachine in deze regel te schrijven, dan is die weg: vanaf nu
+              // een nieuwe, anders zou het volgende bedrag naar een verwijderde regel gaan.
+              if (actieveId === id) {
+                setActieveId(null);
+                setBewaardAls(null);
+                setArchiefStatus("leeg");
+              }
+            }}
             onNieuw={() => setTab("rekenen")}
           />
         ) : (
@@ -1208,15 +1290,6 @@ export default function InruilContent({
                         {gekopieerd ? <Check size={11} /> : <ClipboardCopy size={11} />}
                         {gekopieerd ? "Gekopieerd" : "Kopieer voorstel"}
                       </Btn>
-                      <Btn
-                        variant="ghostDonker"
-                        size="sm"
-                        onClick={bewaarInArchief}
-                        disabled={archiefBezig || alBewaard}
-                      >
-                        {alBewaard ? <Check size={11} /> : <Archive size={11} />}
-                        {alBewaard ? "In het archief" : archiefBezig ? "Bezig…" : "Bewaar in archief"}
-                      </Btn>
                       {rdw && (
                         <Btn variant="ghostDonker" size="sm" onClick={bewaarAlsDossier} disabled={bewaarBezig}>
                           {bewaard ? <Check size={11} /> : <FolderPlus size={11} />}
@@ -1224,11 +1297,34 @@ export default function InruilContent({
                         </Btn>
                       )}
                     </div>
-                    <p className="mt-2" style={klein("rgba(255,255,255,0.4)")}>
-                      Kopieer je het voorstel, dan gaat deze berekening vanzelf het archief in — dat is het
-                      moment waarop hij de deur uit gaat. Verandert er daarna niets meer, dan komt hij er
-                      geen tweede keer bij.
-                    </p>
+
+                    {/* Geen bewaarknop: het gaat vanzelf. Wél zichtbaar dát het gebeurt — een
+                        stille automaat waar je niets van ziet vertrouw je niet. */}
+                    <button
+                      type="button"
+                      onClick={() => setTab("archief")}
+                      className="mt-2.5 flex items-center gap-1.5 transition-all hover:opacity-70"
+                      style={klein(
+                        archiefStatus === "fout" ? "#fca5a5" : "rgba(255,255,255,0.45)"
+                      )}
+                    >
+                      {archiefStatus === "bezig" ? (
+                        <>
+                          <Spinner size={10} tone="donker" /> In het archief zetten…
+                        </>
+                      ) : archiefStatus === "fout" ? (
+                        "Kon niet in het archief bewaren — controleer je verbinding"
+                      ) : archiefStatus === "bewaard" ? (
+                        <>
+                          <Archive size={10} /> In het archief bewaard{bewaardOm ? ` om ${bewaardOm}` : ""} — klik
+                          om terug te kijken
+                        </>
+                      ) : (
+                        <>
+                          <Archive size={10} /> Deze inruil gaat zo vanzelf het archief in
+                        </>
+                      )}
+                    </button>
                   </>
                 )}
               </div>

@@ -42,4 +42,25 @@ export type InruilArchiefRij = {
   jaar: number;
   kwartaal: number;
   aangemaakt: string;
+  /** Laatste wijziging. Null als er na het bewaren niets meer aan veranderd is. */
+  bijgewerkt: string | null;
 };
+
+/** De velden die vanaf de detailpagina aangepast kunnen worden. */
+export type InruilPatch = Partial<
+  Pick<
+    InruilArchiefRij,
+    | "klant"
+    | "km"
+    | "vraagprijs"
+    | "korting"
+    | "verkoopwaarde"
+    | "bod"
+    | "verschil"
+    | "netto_marge"
+    | "marge"
+    | "kosten"
+    | "btw_type"
+    | "max_bijbetaling"
+  >
+>;
