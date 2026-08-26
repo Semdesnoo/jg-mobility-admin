@@ -379,6 +379,13 @@ export default function TaxatieTab({
       uitleg: b
         ? `Gewogen: ${Math.round(w.koerslijst * 100)}% koerslijst · ${Math.round(w.markt * 100)}% live markt`
         : "Gewogen combinatie van koerslijst en live markt",
+      // Advertenties tonen vraagprijzen; wat er betaald wordt ligt daaronder. Met hoeveel
+      // is geen aanname meer zodra het prijsgeheugen genoeg eigen verkopen heeft.
+      extra: b?.ijking
+        ? b.ijking.eigen
+          ? `Vraagprijzen omgerekend met jouw eigen cijfer: ${(b.ijking.factor * 100).toFixed(1).replace(".", ",")}% uit ${b.ijking.aantal} verkopen`
+          : `Vraagprijzen omgerekend met de standaardaanname van ${(b.ijking.factor * 100).toFixed(0)}% — nog te weinig eigen verkopen vastgelegd`
+        : undefined,
       bedrag: verkoop || null, van: 0, tot: verkoop, kleur: T.navy, subtotaal: true,
     },
     {

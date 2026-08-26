@@ -857,7 +857,7 @@ function VoorraadTabel({
   // Alles bewerken loopt via de Bewerken-knop naar de bewerkpagina. Alleen de
   // status kan hier direct om — dat is de handeling die je het vaakst doet.
   const [statusBezig, setStatusBezig] = useState<number | null>(null);
-  const { vraag } = useDialoog();
+  const { vraag, vraagTekst } = useDialoog();
 
   const zetStatus = async (id: number, status: "beschikbaar" | "gereserveerd" | "verkocht") => {
     // Zet de auto in de vraag bij naam, zodat je in een lange lijst ziet welke rij je omzet.
@@ -878,12 +878,33 @@ function VoorraadTabel({
       bevestig: "Verkocht melden",
     }))) return;
 
+    // Waarvoor hij werkelijk wegging. Dit is het enige moment waarop je het zeker weet, en
+    // het is het getal waarop de taxatietool zichzelf ijkt: zonder verkoopprijzen blijft
+    // die rekenen met een aanname in plaats van met wat er bij JG in het echt gebeurt.
+    //
+    // Overslaan mag. Weet je het bedrag nu niet, dan gaat de auto gewoon op verkocht en
+    // staat hij op het Prijsgeheugen in het rijtje "waarvoor zijn deze weggegaan?".
+    // Liever een gat dan de vraagprijs die stilzwijgend als verkoopprijs wordt geboekt —
+    // dan meet je je eigen aanname en denk je dat je nooit zakt.
+    let verkoopprijs = 0;
+    if (status === "verkocht") {
+      const ingevuld = await vraagTekst({
+        titel: "Voor welk bedrag is hij weggegaan?",
+        tekst:
+          "Alleen de auto zelf — zonder garantie, extra's of afleverkosten. Hiermee leert de taxatietool wat jouw auto's in het echt opbrengen.\n\nWeet je het nu niet? Klik Annuleren; je kunt het later invullen bij Inkoop & Taxatie → Prijsgeheugen.",
+        plaats: auto?.prijs ? String(auto.prijs) : "0",
+        beginwaarde: auto?.prijs ? String(auto.prijs) : "",
+        bevestig: "Vastleggen",
+      });
+      verkoopprijs = ingevuld ? parseInt(ingevuld.replace(/\D/g, "")) || 0 : 0;
+    }
+
     setStatusBezig(id);
     try {
       await fetch(`/api/admin/autos/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(verkoopprijs > 0 ? { status, verkoopprijs } : { status }),
       });
       refresh();
     } finally {

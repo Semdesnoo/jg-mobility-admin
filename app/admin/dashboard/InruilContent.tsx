@@ -994,6 +994,10 @@ export default function InruilContent({
                           b.spreiding
                             ? `. Vergelijkbare auto's wijken onderling ${fmt(b.spreiding)} af, dus zo scherp is dit getal ook`
                             : ""
+                        }${
+                          b.ijking?.eigen
+                            ? `. Omgerekend met jouw eigen verkopen (${(b.ijking.factor * 100).toFixed(1).replace(".", ",")}% van de vraagprijs)`
+                            : ""
                         }`
                       : voorlopig
                         ? "Voorlopig, uit de RDW-nieuwprijs met afschrijving. De marktscan maakt het scherper — of tik zelf in wat jij ervoor krijgt"

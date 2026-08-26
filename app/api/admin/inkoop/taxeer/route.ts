@@ -7,6 +7,7 @@ import {
   uitvoeringWoorden,
   type Vergelijkbare,
 } from "@/lib/taxatie-vergelijk";
+import { haalVerkoopfactor } from "@/lib/kalibratie";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -167,10 +168,15 @@ export async function POST(req: Request) {
   const echtGevonden = schoon.length;
   const marktGemiddeld = fit?.gemPrijs ?? 0;
 
-  // Vraagprijzen liggen boven de verkoopprijs. De 4% hieronder is een aanname en geen
-  // meting; die hoort geijkt te worden op JG's eigen verkoopcijfers zodra daar genoeg
-  // van zijn — hij heeft vraagprijs én verkoopprijs per kenteken in de database staan.
-  let marktVerkoop = fit ? Math.round(fit.waarde * 0.96) : 0;
+  // Vraagprijzen liggen boven de verkoopprijs. Hier stond 4% als aanname, met de notitie
+  // dat het geijkt hoorde te worden op JG's eigen verkopen. Dat gebeurt nu: het
+  // prijsgeheugen meet wat er werkelijk binnenkomt ten opzichte van de eerste vraagprijs,
+  // en dat cijfer komt hier terug. Zolang er te weinig verkopen zijn blijft het 0,96.
+  //
+  // Per merk als daar genoeg van verkocht is — een Fiat 500 en een BMW zakken niet
+  // hetzelfde. Zie lib/kalibratie.ts voor de grenzen waarbinnen dit vertrouwd wordt.
+  const ijking = await haalVerkoopfactor(String(merk ?? ""));
+  let marktVerkoop = fit ? Math.round(fit.waarde * ijking.factor) : 0;
 
   // Een marktwaarde die mijlenver van de koerslijst ligt is vrijwel altijd een verkeerde
   // auto (ander model, ander bouwjaar) in plaats van een bijzondere prijs.
@@ -347,6 +353,11 @@ export async function POST(req: Request) {
       /** Kwamen de cijfers uit echt gezochte advertenties, of uit modelkennis? Dit is het
        *  verschil tussen onderzoek en een herinnering, en dat hoort op het scherm. */
       live,
+      /**
+       * Waarmee vraagprijzen zijn omgerekend naar wat je er werkelijk voor krijgt.
+       * `eigen` betekent: gemeten aan de eigen verkopen, niet de aanname van 0,96.
+       */
+      ijking: { factor: ijking.factor, eigen: ijking.eigen, aantal: ijking.aantal },
       // Voor de uitleg aan de klant: dit zijn de cijfers waar het verhaal op rust.
       zoekbereik,
       // Uit hoeveel bronnen en van wat voor verkopers de vergelijking komt.

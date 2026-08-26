@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getAutoById, saveAuto } from "@/lib/autos-db";
+import { noteerVerkoopprijs, wisVerkoopprijs } from "@/lib/prijs-geheugen-db";
 import { revalidateWebsite } from "@/lib/revalidate";
 import { syncDossierMetAuto } from "@/lib/dossiers-db";
 
@@ -19,6 +20,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     auto.verkocht = true;
     auto.gereserveerd = false;
     if (!auto.verkocht_op) auto.verkocht_op = new Date().toISOString();
+
+    // Waarvoor hij écht wegging. Dit is het getal waarop de taxatietool zichzelf ijkt:
+    // zonder dit blijft "verkocht" een vinkje en weet het dashboard nooit of de
+    // geadviseerde prijs klopte. Wordt het niet meegestuurd, dan blijft het leeg en kan
+    // het later in het prijsgeheugen worden aangevuld — nooit de vraagprijs stilzwijgend
+    // als verkoopprijs boeken, want dan meet je je eigen aanname.
+    const bedrag = Number(body.verkoopprijs);
+    if (Number.isFinite(bedrag) && bedrag > 0) {
+      await noteerVerkoopprijs(auto.id, bedrag, "verkocht gemeld", auto.kenteken ?? "").catch(() => null);
+    }
   } else if (body.status === "gereserveerd") {
     auto.verkocht = false;
     auto.gereserveerd = true;
@@ -27,6 +38,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     auto.verkocht = false;
     auto.gereserveerd = false;
     auto.verkocht_op = undefined;
+    // Terug in de verkoop: een eerder genoteerde verkoopprijs slaat nergens meer op en
+    // zou de ijking vervuilen met een verkoop die niet is doorgegaan.
+    await wisVerkoopprijs(auto.id).catch(() => null);
   }
 
   await saveAuto(auto);

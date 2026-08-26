@@ -1,5 +1,6 @@
 import sql from "./db";
 import type { Auto } from "./autos";
+import { noteerVraagprijs } from "./prijs-geheugen-db";
 
 export async function getAutos(): Promise<Auto[]> {
   const rows = await sql`SELECT data FROM autos ORDER BY id DESC`;
@@ -22,6 +23,17 @@ export async function saveAuto(auto: Auto): Promise<void> {
     VALUES (${auto.id}, ${auto.slug}, ${JSON.stringify(auto)})
     ON CONFLICT (id) DO UPDATE SET slug = ${auto.slug}, data = ${JSON.stringify(auto)}
   `;
+  // ── Prijsgeheugen ──
+  //
+  // Hier en niet in de API-routes: een auto wordt op twee plekken opgeslagen (het
+  // bewerkformulier en het snel omzetten van prijs of status in de voorraad), en over een
+  // half jaar misschien op een derde. Staat het onthouden in één van die routes, dan
+  // ontbreekt de helft van je prijsverloop zonder dat iemand doorheeft waarom.
+  //
+  // Er wordt alleen iets weggeschreven als de vraagprijs echt anders is dan de vorige, en
+  // een mislukking mag het opslaan van de auto nooit tegenhouden — het geheugen is een
+  // extraatje, de voorraad is het werk.
+  await noteerVraagprijs(auto).catch(() => null);
 }
 
 export async function deleteAuto(id: number): Promise<boolean> {

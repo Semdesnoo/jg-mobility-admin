@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Globe, Award, FolderOpen, Archive } from "lucide-react";
+import { Search, Globe, Award, FolderOpen, Archive, Brain } from "lucide-react";
 import { T, micro, num } from "./inkoop/ui";
 import type { InkoopDossier, PrestatiesData } from "./inkoop/types";
 import TaxatieTab from "./inkoop/TaxatieTab";
@@ -9,8 +9,9 @@ import MarktTab from "./inkoop/MarktTab";
 import PrestatiesTab from "./inkoop/PrestatiesTab";
 import DossiersTab from "./inkoop/DossiersTab";
 import ArchiefTab from "./inkoop/ArchiefTab";
+import PrijsgeheugenTab from "./inkoop/PrijsgeheugenTab";
 
-type TabId = "taxatie" | "markt" | "prestaties" | "dossiers" | "archief";
+type TabId = "taxatie" | "markt" | "prestaties" | "dossiers" | "archief" | "prijsgeheugen";
 
 const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[] = [
   { id: "taxatie", label: "Taxatietool", Icon: Search, context: "Waardebepaling aan de stoeprand" },
@@ -18,6 +19,7 @@ const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[]
   { id: "prestaties", label: "Prestaties", Icon: Award, context: "Wat verkoopt er bij JG Mobility" },
   { id: "dossiers", label: "Dossiers", Icon: FolderOpen, context: "Lopende inkooptrajecten" },
   { id: "archief", label: "Archief", Icon: Archive, context: "Bewaarde analyses per kwartaal" },
+  { id: "prijsgeheugen", label: "Prijsgeheugen", Icon: Brain, context: "Wat auto's in het echt deden" },
 ];
 
 export default function InkoopContent({
@@ -158,6 +160,7 @@ export default function InkoopContent({
           <DossiersTab dossiers={dossiers} herlaad={laadDossiers} onNieuweTaxatie={() => setTab("taxatie")} />
         )}
         {tab === "archief" && <ArchiefTab />}
+        {tab === "prijsgeheugen" && <PrijsgeheugenTab />}
       </div>
     </div>
   );

@@ -76,6 +76,12 @@ export type Berekening = {
   bron?: string;
   /** Kwamen de cijfers uit echt gezochte advertenties, of uit modelkennis? */
   live?: boolean;
+  /**
+   * Waarmee vraagprijzen zijn omgerekend naar wat je er werkelijk voor krijgt. Komt uit
+   * het prijsgeheugen: `eigen` betekent gemeten aan de eigen verkopen in plaats van de
+   * aanname van 0,96. Zie lib/kalibratie.ts.
+   */
+  ijking?: { factor: number; eigen: boolean; aantal: number };
   /** Gezet als de gevonden marktprijs zo ver van de koerslijst lag dat hij is genegeerd. */
   markt_afgekeurd?: string;
   /** Hoe ruim er gezocht moest worden om genoeg vergelijkbare auto's te vinden. */
