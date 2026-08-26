@@ -56,6 +56,7 @@ import AanvragenContent from "./AanvragenContent";
 import ContractenContent from "./ContractenContent";
 import FotosOpruimen from "./FotosOpruimen";
 import FotoStatus from "./FotoStatus";
+import OpslagBeheer from "./OpslagBeheer";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
@@ -530,6 +531,8 @@ export default function DashboardHub() {
             <FotoStatus />
             {/* Eenmalig onderhoud; verdwijnt vanzelf zodra er niets meer te verkleinen is. */}
             <FotosOpruimen />
+            {/* Hoeveel ruimte de foto's innemen en wat eruit kan. */}
+            <OpslagBeheer />
             <VoorraadContent autos={autos} refresh={refresh} />
           </>
         )}
