@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { Resend } from "resend";
 import sql from "@/lib/db";
+import { toonBedrag, AUTO_ONDERGRENS } from "@/lib/bedrag";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -34,7 +35,12 @@ export async function POST(
     </tr>`;
   }).join("");
 
-  const vraagprijs = c.vraagprijs ? `€ ${parseInt(c.vraagprijs as string).toLocaleString("nl-NL")}` : "Nader te bepalen";
+  // Stond hier met parseInt: van "16.000" maakte die 16, en dat ging zo de mail in naar de
+  // klant. Zijn eigen tekst is beter dan ons verkeerde getal.
+  const vraagprijs = toonBedrag(c.vraagprijs as string, {
+    minimaal: AUTO_ONDERGRENS,
+    leeg: "Nader te bepalen",
+  });
   const naam = (c.naam as string)?.split(" ")[0] || "u";
   const auto = `${c.merk} ${c.model} (${c.bouwjaar})`;
   const kmStand = c.km ? `${parseInt(c.km as string).toLocaleString("nl-NL")} km` : "";

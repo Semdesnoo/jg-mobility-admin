@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Handshake, ChevronDown, ChevronUp, Trash2, RefreshCw, Send, ExternalLink } from "lucide-react";
 import { useDialoog } from "./Dialoog";
+import { toonBedrag, bedragUit, AUTO_ONDERGRENS } from "@/lib/bedrag";
 
 type Cosignatie = {
   id: string;
@@ -399,7 +400,7 @@ export default function CosignatieContent() {
                     <div className="text-right flex-shrink-0">
                       {a.vraagprijs && (
                         <p className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                          €{parseInt(a.vraagprijs).toLocaleString("nl-NL")}
+                          {toonBedrag(a.vraagprijs, { minimaal: AUTO_ONDERGRENS })}
                         </p>
                       )}
                       <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
@@ -514,14 +515,17 @@ export default function CosignatieContent() {
                                     </span>
                                   </div>
                                   <span className="text-xs font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                                    € {parseInt(prijs).toLocaleString("nl-NL")}
+                                    {toonBedrag(prijs, { minimaal: AUTO_ONDERGRENS })}
                                   </span>
                                 </div>
                               ))}
                               <div className="flex items-center justify-between pt-2 mt-1" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
                                 <span className="text-[10px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Gemiddeld</span>
                                 <span className="text-xs font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                                  € {Math.round(Object.values(prijzen).reduce((s, p) => s + parseInt(p), 0) / Object.values(prijzen).length).toLocaleString("nl-NL")}
+                                  {toonBedrag(
+                                    Object.values(prijzen).reduce((s, p) => s + (bedragUit(p) ?? 0), 0) /
+                                      Object.values(prijzen).length
+                                  )}
                                 </span>
                               </div>
                             </div>
