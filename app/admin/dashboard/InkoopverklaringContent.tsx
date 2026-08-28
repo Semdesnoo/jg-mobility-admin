@@ -374,9 +374,29 @@ export default function InkoopverklaringContent() {
 
   const afdrukken = async () => drukAf(await maakHtml());
 
+  /**
+   * De naam van het bestand.
+   *
+   * Nummer, verkoper en auto, in die volgorde. In een map met downloads zoek je op de
+   * naam van de persoon — niet op INK-2026-007 — en dan wil je hem in de bestandsnaam
+   * zien staan zonder het document te hoeven openen. Dezelfde vorm als het
+   * consignatiecontract: spaties, geen streepjes.
+   *
+   * Tekens die een bestandsnaam niet mag bevatten gaan eruit; een naam als "J. de
+   * Vries/Jansen" zou anders een map aanmaken of de download laten mislukken.
+   */
+  const bestandsnaam = () => {
+    const delen = [
+      "Inkoopverklaring",
+      gekozen?.nummer ?? "concept",
+      f.verkoper_naam.trim(),
+      [f.merk, f.model].filter(Boolean).join(" ").trim(),
+    ].filter(Boolean);
+    return `${delen.join(" ").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim()}.pdf`;
+  };
+
   const pdf = async () => {
-    const naam = `Inkoopverklaring-${gekozen?.nummer ?? "concept"}-${[f.merk, f.model].filter(Boolean).join("-") || "auto"}.pdf`;
-    await downloadPdf(await maakHtml(), naam.replace(/\s+/g, "-"));
+    await downloadPdf(await maakHtml(), bestandsnaam());
   };
 
   const bedrag = getalUit(f.bedrag);
