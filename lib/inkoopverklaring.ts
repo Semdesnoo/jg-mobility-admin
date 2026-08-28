@@ -150,9 +150,14 @@ export function inWoorden(bedrag: number): string {
  * niet de eigenaar blijkt te zijn.
  */
 function verklaringen(v: InkoopverklaringGegevens): string[] {
-  const auto = [v.merk, v.model].filter(Boolean).join(" ").trim() || "het voertuig";
+  // "van de Volkswagen Polo" of "van het voertuig" — het lidwoord hoort bij wat erachter
+  // staat. Met een vaste "van de" ervoor stond er bij een leeg formulier "van de het
+  // voertuig", en dat is precies het soort slordigheid dat opvalt op een stuk waar een
+  // handtekening onder komt.
+  const auto = [v.merk, v.model].filter(Boolean).join(" ").trim();
+  const hetVoertuig = auto ? `de ${auto}` : "het voertuig";
   const lijst = [
-    `Ik ben eigenaar van de ${auto} en bevoegd deze te verkopen. De auto is vrij van pandrecht, beslag, lease, financiering of andere rechten van derden, en is niet van diefstal afkomstig.`,
+    `Ik ben eigenaar van ${hetVoertuig} en bevoegd deze te verkopen. De auto is vrij van pandrecht, beslag, lease, financiering of andere rechten van derden, en is niet van diefstal afkomstig.`,
     "De kilometerstand op de teller is naar mijn beste weten juist en is tijdens mijn bezit niet gewijzigd of teruggedraaid.",
     "Voor zover mij bekend heeft de auto geen schade- of calamiteitenverleden anders dan wat hierboven bij de bijzonderheden is vermeld.",
     "Ik lever het kentekenbewijs en de tenaamstellingscode, alle bij mij aanwezige sleutels en de overige hierboven vermelde documenten mee.",
@@ -238,9 +243,24 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 
   const woorden = inWoorden(v.bedrag);
 
+  /**
+   * Een sectiekop.
+   *
+   * Met de stijl op het element zelf en niet via een klasse in het stijlblok. Dat blok
+   * overleeft de omzetting naar PDF niet: alles wat via een klasse werd opgemaakt kwam
+   * er groot en in gewone letters uit, terwijl de rest van het document klein en in
+   * hoofdletters stond. In een document dat als HTML wordt gebouwd en als plaatje wordt
+   * afgedrukt hoort elke regel opmaak op het element te staan waar hij bij hoort.
+   */
+  const kop = (tekst: string) =>
+    `<div style="font-size:7pt;letter-spacing:1.3px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1px solid #001337;padding-bottom:3px;margin-bottom:6px">${veilig(tekst)}</div>`;
+
+  // Alleen tonen als er iets staat dat ergens op slaat. Het soort legitimatie staat in
+  // het scherm standaard op "Rijbewijs"; zonder documentnummer is dat geen gegeven maar
+  // een standaardwaarde, en die hoort niet op een ondertekend stuk.
   const legitimatie = [
     v.verkoper_geboortedatum ? `geb. ${veilig(v.verkoper_geboortedatum)}` : "",
-    [v.legitimatie_soort, v.legitimatie_nummer].filter(Boolean).map(veilig).join(" "),
+    v.legitimatie_nummer ? [v.legitimatie_soort, v.legitimatie_nummer].filter(Boolean).map(veilig).join(" ") : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -282,7 +302,6 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
   body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1e293b; background:#fff; width:794px; margin:0 auto; }
   @media print { @page { size:A4; margin:0; } body { width:100%; } }
   table { border-collapse:collapse; }
-  .kop { font-size:7pt; letter-spacing:1.2px; text-transform:uppercase; color:#001337; font-weight:700; border-bottom:1px solid #001337; padding-bottom:3px; margin-bottom:5px; }
 </style>
 </head>
 <body>
@@ -316,7 +335,7 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
   <table style="width:100%;margin-bottom:12px">
     <tr>
       <td style="vertical-align:top;width:52%;padding-right:20px">
-        <div class="kop">De verkoper</div>
+        ${kop("De verkoper")}
         <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:1px">${veilig(v.verkoper_naam)}</div>
         <div style="font-size:8.5pt;color:#64748b;line-height:1.5">${adresregels}</div>
         ${legitimatie ? `<div style="font-size:8pt;color:#64748b;margin-top:2px">${legitimatie}</div>` : ""}
@@ -331,13 +350,17 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
     </tr>
   </table>
 
-  <div class="kop">Het voertuig</div>
-  <table style="width:100%;margin-bottom:12px">
-    <tr>
-      <td style="vertical-align:top;width:50%;padding-right:20px"><table style="width:100%">${voertuigLinks}</table></td>
-      <td style="vertical-align:top"><table style="width:100%">${voertuigRechts}</table></td>
-    </tr>
-  </table>
+  ${voertuigLinks || voertuigRechts ? kop("Het voertuig") : ""}
+  ${
+    voertuigLinks || voertuigRechts
+      ? `<table style="width:100%;margin-bottom:12px">
+           <tr>
+             <td style="vertical-align:top;width:52%;padding-right:22px"><table style="width:100%">${voertuigLinks}</table></td>
+             <td style="vertical-align:top"><table style="width:100%">${voertuigRechts}</table></td>
+           </tr>
+         </table>`
+      : ""
+  }
 
   <table style="width:100%;margin-bottom:12px;background:#f8fafc;border-left:3px solid #001337">
     <tr>
@@ -347,14 +370,14 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
         ${woorden ? `<div style="margin-top:2px;font-size:8.5pt;color:#334155;font-style:italic">zegge: ${veilig(woorden)}</div>` : ""}
         <div style="margin-top:5px;font-size:7.5pt;color:#64748b;line-height:1.45">${margeRegel}</div>
       </td>
-      <td style="vertical-align:top;padding:10px 14px 10px 0">${koopDetails}</td>
+      <td style="vertical-align:top;padding:10px 14px 10px 18px;border-left:1px solid #e2e8f0">${koopDetails}</td>
     </tr>
   </table>
 
   ${meegeleverd}
   ${bijzonderheden}
 
-  <div class="kop">Verklaring van de verkoper</div>
+  ${kop("Verklaring van de verkoper")}
   ${verklaringLijst}
 
   <table style="width:100%;margin-top:20px">
