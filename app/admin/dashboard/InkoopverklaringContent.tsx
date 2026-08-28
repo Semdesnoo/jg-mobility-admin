@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Spline } from "lucide-react";
 import {
   T, micro, body, klein, fmt, Panel, Btn, Field, inputStijl, Chip, Spinner, Empty, Foutmelding,
@@ -183,7 +183,10 @@ export default function InkoopverklaringContent() {
   const [fout, setFout] = useState("");
   const [bezig, setBezig] = useState(false);
   const [rdwBezig, setRdwBezig] = useState(false);
+  const [adresStatus, setAdresStatus] = useState<"stil" | "bezig" | "gevonden" | "onbekend" | "mislukt">("stil");
   const [bewaardOp, setBewaardOp] = useState<string | null>(null);
+  /** Welk kenteken al is opgezocht, zodat uit het veld klikken niet elke keer opnieuw vraagt. */
+  const laatstOpgezocht = useRef("");
 
   const zet = <K extends keyof Formulier>(veld: K, waarde: Formulier[K]) => {
     setF((huidig) => ({ ...huidig, [veld]: waarde }));
@@ -219,6 +222,8 @@ export default function InkoopverklaringContent() {
 
   const nieuw = () => {
     setGekozenId(null);
+    laatstOpgezocht.current = "";
+    setAdresStatus("stil");
     setF(leegFormulier());
     setBewaardOp(null);
     setFout("");
@@ -230,13 +235,55 @@ export default function InkoopverklaringContent() {
     setFout("");
     const { id: _id, nummer: _nummer, aangemaakt: _aangemaakt, bedrag, ...rest } = v;
     void _id; void _nummer; void _aangemaakt;
+    laatstOpgezocht.current = (v.kenteken ?? "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+    setAdresStatus("stil");
     setF({ ...rest, bedrag: bedrag ? String(bedrag) : "", meegeleverd: v.meegeleverd ?? [] });
+  };
+
+  /**
+   * Postcode plus huisnummer omzetten naar straat en plaats.
+   *
+   * Een adres van een rijbewijs overtypen gaat net iets te vaak mis: een straatnaam met
+   * een spatie erin, een plaatsnaam met een letter te weinig. Op een bewijsstuk voor de
+   * boekhouding is dat geen schoonheidsfoutje, want daar hoort het adres van de verkoper
+   * op te kloppen. Zelfde dienst als bij de facturen: PDOK, de open adressendienst van
+   * de overheid.
+   *
+   * Het huisnummer komt uit wat er al in het adresveld staat, want daar typ je het toch
+   * in. Levert het niets op, dan gebeurt er niets en typ je het zelf.
+   */
+  const zoekAdres = async () => {
+    const pc = f.verkoper_postcode.replace(/\s+/g, "").toUpperCase();
+    if (!/^[1-9][0-9]{3}[A-Z]{2}$/.test(pc)) return;
+    const nummer = f.verkoper_adres.match(/\d+\s*[a-zA-Z]?/)?.[0]?.trim() ?? "";
+    setAdresStatus("bezig");
+    try {
+      const res = await fetch(
+        `/api/admin/adres?postcode=${encodeURIComponent(pc)}&nummer=${encodeURIComponent(nummer)}`
+      );
+      if (!res.ok) { setAdresStatus("mislukt"); return; }
+      const d = await res.json();
+      if (!d.gevonden) { setAdresStatus("onbekend"); return; }
+      setF((huidig) => ({
+        ...huidig,
+        // Alleen aanvullen wat de dienst zeker weet. Stond er al een huisnummer, dan
+        // blijft dat staan: dat weet jij beter dan een register dat op postcode zoekt.
+        verkoper_adres: `${d.straat} ${nummer || d.huisnummer}`.trim(),
+        verkoper_postcode: d.postcode || huidig.verkoper_postcode,
+        verkoper_stad: d.stad || huidig.verkoper_stad,
+      }));
+      setAdresStatus("gevonden");
+      setBewaardOp(null);
+    } catch {
+      setAdresStatus("mislukt");
+    }
   };
 
   /** Het kenteken doet het werk: merk, bouwjaar, kleur en APK komen uit het RDW-register. */
   const rdwOpzoeken = async () => {
     const kenteken = f.kenteken.trim();
     if (!kenteken || rdwBezig) return;
+    laatstOpgezocht.current = kenteken.replace(/[^A-Z0-9]/gi, "").toUpperCase();
     setRdwBezig(true);
     setFout("");
     try {
@@ -489,8 +536,53 @@ export default function InkoopverklaringContent() {
               <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De verkoper</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {invoer("Naam", "verkoper_naam", { plaats: "Voor- en achternaam", breed: true })}
-                {invoer("Adres", "verkoper_adres", { plaats: "Straat en huisnummer" })}
-                {invoer("Postcode", "verkoper_postcode", { plaats: "1234 AB" })}
+                <div>
+                  <Field label="Adres" hint="Huisnummer plus de postcode hiernaast is genoeg">
+                    <input
+                      type="text"
+                      value={f.verkoper_adres}
+                      onChange={(e) => zet("verkoper_adres", e.target.value)}
+                      // Staat er alleen een huisnummer, dan haalt hij de straat erbij.
+                      // Staat er al een straatnaam, dan blijft die staan: dan weet jij het beter.
+                      onBlur={() => { if (!/[a-zA-Z]{3}/.test(f.verkoper_adres)) zoekAdres(); }}
+                      placeholder="Straat en huisnummer"
+                      style={inputStijl}
+                    />
+                  </Field>
+                </div>
+                <div>
+                  <Field
+                    label="Postcode"
+                    hint={
+                      adresStatus === "bezig"
+                        ? "Adres opzoeken…"
+                        : adresStatus === "gevonden"
+                          ? "Straat en plaats zijn opgehaald"
+                          : adresStatus === "onbekend"
+                            ? "Dit adres staat niet in het register — vul het zelf in"
+                            : adresStatus === "mislukt"
+                              ? "De adressendienst was niet bereikbaar — vul het zelf in"
+                              : "Straat en plaats worden hieruit opgehaald"
+                    }
+                    hintColor={
+                      adresStatus === "gevonden"
+                        ? T.groen
+                        : adresStatus === "mislukt" || adresStatus === "onbekend"
+                          ? T.amber
+                          : undefined
+                    }
+                  >
+                    <input
+                      type="text"
+                      value={f.verkoper_postcode}
+                      onChange={(e) => { zet("verkoper_postcode", e.target.value.toUpperCase()); setAdresStatus("stil"); }}
+                      onBlur={zoekAdres}
+                      onKeyDown={(e) => e.key === "Enter" && zoekAdres()}
+                      placeholder="1234 AB"
+                      style={inputStijl}
+                    />
+                  </Field>
+                </div>
                 {invoer("Plaats", "verkoper_stad")}
                 {invoer("Telefoon", "verkoper_telefoon", { plaats: "+31 6 …" })}
                 {invoer("E-mail", "verkoper_email")}
@@ -525,6 +617,14 @@ export default function InkoopverklaringContent() {
                           value={f.kenteken}
                           onChange={(e) => zet("kenteken", e.target.value.toUpperCase())}
                           onKeyDown={(e) => e.key === "Enter" && rdwOpzoeken()}
+                          // Uit het veld klikken is genoeg: een kenteken tik je in een
+                          // keer in, en dan hoort de rest er te staan zonder dat je nog
+                          // ergens op moet drukken. Alleen bij een ander kenteken dan wat
+                          // er al opgezocht is, anders vraagt elke muisklik het opnieuw.
+                          onBlur={(e) => {
+                            const kaal = e.target.value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+                            if (kaal.length >= 6 && kaal !== laatstOpgezocht.current) rdwOpzoeken();
+                          }}
                           placeholder="AB-123-C"
                           style={{
                             ...inputStijl,
