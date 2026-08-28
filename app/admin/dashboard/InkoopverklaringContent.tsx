@@ -444,7 +444,10 @@ export default function InkoopverklaringContent() {
         </div>
       </header>
 
-      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1500, margin: "0 auto" }}>
+      {/* Begrensde breedte: op een breed scherm werden korte velden als postcode
+          balken van een halve meter, en dan zie je niet meer welk vak bij welk label
+          hoort. */}
+      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1240, margin: "0 auto" }}>
         <div className="flex flex-col xl:flex-row gap-4 items-start">
           {/* ── Bewaarde verklaringen ── */}
           <div className="w-full xl:w-[300px] xl:flex-none xl:sticky" style={{ top: 72 }}>
@@ -553,11 +556,15 @@ export default function InkoopverklaringContent() {
               }
             >
               {/* De verkoper */}
+              {/* ── De verkoper ── */}
               <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De verkoper</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {invoer("Naam", "verkoper_naam", { plaats: "Voor- en achternaam", breed: true })}
+                {invoer("Telefoon", "verkoper_telefoon", { plaats: "+31 6 …" })}
+
+                {/* Adres, postcode en plaats op één regel: zo typ je een adres ook. */}
                 <div>
-                  <Field label="Adres" hint="Huisnummer plus de postcode hiernaast is genoeg">
+                  <Field label="Adres" hint="Huisnummer is genoeg">
                     <input
                       type="text"
                       value={f.verkoper_adres}
@@ -577,12 +584,12 @@ export default function InkoopverklaringContent() {
                       adresStatus === "bezig"
                         ? "Adres opzoeken…"
                         : adresStatus === "gevonden"
-                          ? "Straat en plaats zijn opgehaald"
+                          ? "Straat en plaats opgehaald"
                           : adresStatus === "onbekend"
-                            ? "Dit adres staat niet in het register — vul het zelf in"
+                            ? "Staat niet in het register — vul zelf in"
                             : adresStatus === "mislukt"
-                              ? "De adressendienst was niet bereikbaar — vul het zelf in"
-                              : "Straat en plaats worden hieruit opgehaald"
+                              ? "Adressendienst onbereikbaar — vul zelf in"
+                              : "Vult straat en plaats in"
                     }
                     hintColor={
                       adresStatus === "gevonden"
@@ -604,43 +611,45 @@ export default function InkoopverklaringContent() {
                   </Field>
                 </div>
                 {invoer("Plaats", "verkoper_stad")}
-                {invoer("Telefoon", "verkoper_telefoon", { plaats: "+31 6 …" })}
-                {invoer("E-mail", "verkoper_email")}
-                {invoer("Geboortedatum", "verkoper_geboortedatum", { plaats: "01-01-1980" })}
-              </div>
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {invoer("E-mail", "verkoper_email", { breed: true })}
+                {invoer("Geboortedatum", "verkoper_geboortedatum", { plaats: "01-01-1980" })}
+
                 <div>
                   <p className="mb-1.5" style={micro()}>Legitimatie</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {["Rijbewijs", "Paspoort", "ID-kaart"].map((s) => (
-                      <Chip key={s} active={f.legitimatie_soort === s} onClick={() => zet("legitimatie_soort", s)}>
-                        {s}
+                    {["Rijbewijs", "Paspoort", "ID-kaart"].map((soort) => (
+                      <Chip key={soort} active={f.legitimatie_soort === soort} onClick={() => zet("legitimatie_soort", soort)}>
+                        {soort}
                       </Chip>
                     ))}
                   </div>
                 </div>
                 {invoer("Documentnummer", "legitimatie_nummer", {
-                  hint: "Hoort bij een inkoop van iemand die je niet kent",
+                  breed: true,
+                  hint: "Alleen dit nummer komt op het document — de soort zonder nummer zegt niets",
                 })}
               </div>
 
-              {/* Het voertuig */}
+              {/* ── Het voertuig ── */}
               <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
-                <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>Het voertuig</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+                  <p style={{ ...micro(), fontSize: 9 }}>Het voertuig</p>
+                  <span style={klein()}>vult zichzelf zodra je het kenteken invult</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   <div>
-                    <Field label="Kenteken" hint="Vul in en haal de rest op uit het RDW-register">
+                    <Field label="Kenteken">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           value={f.kenteken}
                           onChange={(e) => zet("kenteken", e.target.value.toUpperCase())}
                           onKeyDown={(e) => e.key === "Enter" && rdwOpzoeken()}
-                          // Uit het veld klikken is genoeg: een kenteken tik je in een
-                          // keer in, en dan hoort de rest er te staan zonder dat je nog
-                          // ergens op moet drukken. Alleen bij een ander kenteken dan wat
-                          // er al opgezocht is, anders vraagt elke muisklik het opnieuw.
+                          // Uit het veld klikken is genoeg: een kenteken tik je in een keer
+                          // in, en dan hoort de rest er te staan zonder dat je nog ergens op
+                          // moet drukken. Alleen bij een ander kenteken dan wat er al
+                          // opgezocht is, anders vraagt elke muisklik het opnieuw.
                           onBlur={(e) => {
                             const kaal = e.target.value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
                             if (kaal.length >= 6 && kaal !== laatstOpgezocht.current) rdwOpzoeken();
@@ -661,29 +670,28 @@ export default function InkoopverklaringContent() {
                       </div>
                     </Field>
                   </div>
-                  {invoer("Chassisnummer (VIN)", "vin", { plaats: "17 tekens" })}
+                  {invoer("Chassisnummer (VIN)", "vin", { plaats: "17 tekens", breed: true })}
+
                   {invoer("Merk", "merk")}
                   {invoer("Model", "model")}
                   {invoer("Type / uitvoering", "type", { plaats: "150 pk · 2.0L" })}
+
                   {invoer("Bouwjaar", "bouwjaar")}
                   {invoer("1e toelating", "eerste_toelating")}
                   {invoer("Kilometerstand", "km", { plaats: "145000" })}
+
                   {invoer("Brandstof", "brandstof")}
                   {invoer("Kleur", "kleur")}
                   {invoer("APK tot", "apk")}
                 </div>
               </div>
 
-              {/* De koop */}
+              {/* ── De koop ── */}
               <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
                 <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De koop</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   <div>
-                    <Field
-                      label="Inkoopbedrag"
-                      suffix="€"
-                      hint={woorden ? `zegge: ${woorden}` : "Wat je werkelijk betaalt voor de auto"}
-                    >
+                    <Field label="Inkoopbedrag" suffix="€" hint={woorden ? `zegge: ${woorden}` : "Wat je werkelijk betaalt"}>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -702,16 +710,16 @@ export default function InkoopverklaringContent() {
                       />
                     </Field>
                   </div>
-                  <div>
+                  <div className="sm:col-span-2">
                     <p className="mb-1.5" style={micro()}>Betaalwijze</p>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {[
                         { id: "bank", label: "Bankoverschrijving" },
                         { id: "contant", label: "Contant" },
                         { id: "inruil", label: "Verrekend met inruil" },
-                      ].map((b) => (
-                        <Chip key={b.id} active={f.betaalwijze === b.id} onClick={() => zet("betaalwijze", b.id)}>
-                          {b.label}
+                      ].map((keuze) => (
+                        <Chip key={keuze.id} active={f.betaalwijze === keuze.id} onClick={() => zet("betaalwijze", keuze.id)}>
+                          {keuze.label}
                         </Chip>
                       ))}
                     </div>
@@ -720,31 +728,32 @@ export default function InkoopverklaringContent() {
                       makkelijkst te verantwoorden.
                     </p>
                   </div>
+
                   {invoer("Datum overeenkomst", "datum")}
                   {invoer("Datum overdracht", "datum_overdracht")}
                   {invoer("Vrijwaringsbewijs", "vrijwaringsnummer", { plaats: "Nummer op het bewijs" })}
-                  {invoer("Aantal sleutels", "aantal_sleutels")}
-                </div>
 
-                <div className="mt-4">
-                  <p className="mb-1.5" style={micro()}>Van wie koop je</p>
-                  <div className="flex items-center gap-1.5">
-                    <Chip active={f.particulier} onClick={() => zet("particulier", true)}>
-                      Particulier (margeregeling)
-                    </Chip>
-                    <Chip active={!f.particulier} onClick={() => zet("particulier", false)}>
-                      Bedrijf (met btw-factuur)
-                    </Chip>
+                  {invoer("Aantal sleutels", "aantal_sleutels")}
+                  <div className="sm:col-span-2">
+                    <p className="mb-1.5" style={micro()}>Van wie koop je</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Chip active={f.particulier} onClick={() => zet("particulier", true)}>
+                        Particulier (margeregeling)
+                      </Chip>
+                      <Chip active={!f.particulier} onClick={() => zet("particulier", false)}>
+                        Bedrijf (met btw-factuur)
+                      </Chip>
+                    </div>
+                    <p className="mt-2" style={klein()}>
+                      {f.particulier
+                        ? "De verkoper verklaart mee dat hij geen btw in aftrek heeft gebracht — precies de zin die je nodig hebt voor de margeregeling."
+                        : "Bij een ondernemer is diens factuur je bewijsstuk voor de btw; deze verklaring legt dan alleen de koop en de overdracht vast."}
+                    </p>
                   </div>
-                  <p className="mt-2" style={klein()}>
-                    {f.particulier
-                      ? "De verkoper verklaart mee dat hij geen btw in aftrek heeft gebracht. Dat is precies de zin die je nodig hebt om de margeregeling te mogen toepassen."
-                      : "Koop je van een ondernemer, dan is diens factuur je bewijsstuk voor de btw. Deze verklaring legt dan alleen de koop en de overdracht vast."}
-                  </p>
                 </div>
               </div>
 
-              {/* Meegeleverd + bijzonderheden */}
+              {/* ── Meegeleverd en bijzonderheden ── */}
               <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
                 <p className="mb-1.5" style={micro()}>Meegeleverd</p>
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -755,10 +764,7 @@ export default function InkoopverklaringContent() {
                         key={m}
                         active={aan}
                         onClick={() =>
-                          zet(
-                            "meegeleverd",
-                            aan ? f.meegeleverd.filter((x) => x !== m) : [...f.meegeleverd, m]
-                          )
+                          zet("meegeleverd", aan ? f.meegeleverd.filter((x) => x !== m) : [...f.meegeleverd, m])
                         }
                       >
                         {m}
@@ -776,7 +782,7 @@ export default function InkoopverklaringContent() {
                       value={f.bijzonderheden}
                       onChange={(e) => zet("bijzonderheden", e.target.value)}
                       placeholder="Bijvoorbeeld: kras op achterbumper, distributieriem vervangen op 120.000 km"
-                      style={{ ...inputStijl, minHeight: 90, resize: "vertical", lineHeight: 1.6 }}
+                      style={{ ...inputStijl, minHeight: 80, resize: "vertical", lineHeight: 1.6 }}
                     />
                   </Field>
                 </div>
