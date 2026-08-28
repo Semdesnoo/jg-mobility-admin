@@ -357,14 +357,14 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
   <div class="kop">Verklaring van de verkoper</div>
   ${verklaringLijst}
 
-  <table style="width:100%;margin-top:14px">
+  <table style="width:100%;margin-top:20px">
     <tr>
       <td style="vertical-align:top;width:50%;padding-right:26px">
-        <div style="font-size:8pt;color:#64748b;margin-bottom:30px">De verkoper · <span style="color:#1e293b;font-weight:600">${veilig(v.verkoper_naam)}</span></div>
+        <div style="font-size:8pt;color:#64748b;margin-bottom:74px">De verkoper · <span style="color:#1e293b;font-weight:600">${veilig(v.verkoper_naam)}</span></div>
         <div style="border-top:1px solid #94a3b8;padding-top:3px;font-size:7.5pt;color:#94a3b8">Handtekening · datum</div>
       </td>
       <td style="vertical-align:top;width:50%">
-        <div style="font-size:8pt;color:#64748b;margin-bottom:30px">Namens ${BEDRIJF.naam} · <span style="color:#1e293b;font-weight:600">Jimi Gaillard</span></div>
+        <div style="font-size:8pt;color:#64748b;margin-bottom:74px">Namens ${BEDRIJF.naam} · <span style="color:#1e293b;font-weight:600">Jimi Gaillard</span></div>
         <div style="border-top:1px solid #94a3b8;padding-top:3px;font-size:7.5pt;color:#94a3b8">Handtekening · datum</div>
       </td>
     </tr>
