@@ -38,6 +38,7 @@ import {
   Inbox,
   FileSignature,
   ArrowLeftRight,
+  Receipt,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -54,13 +55,14 @@ import SocialContent from "./SocialContent";
 import VerkopersContent from "./VerkopersContent";
 import AanvragenContent from "./AanvragenContent";
 import ContractenContent from "./ContractenContent";
+import InkoopverklaringContent from "./InkoopverklaringContent";
 import FotosOpruimen from "./FotosOpruimen";
 import FotoStatus from "./FotoStatus";
 import OpslagBeheer from "./OpslagBeheer";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "inruil" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "inruil" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "inkoopverklaring" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
 
 type Auto = {
   id: number;
@@ -140,6 +142,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "facturen", label: "Verkoopfacturen", icon: FileText },
       { id: "inkoopfacturen", label: "Inkoopfacturen", icon: Wallet },
       { id: "contracten", label: "Consignatiecontract", icon: FileSignature },
+      { id: "inkoopverklaring", label: "Inkoopverklaring", icon: Receipt },
       { id: "klanten",    label: "Klanten",          icon: Users },
       { id: "calculator", label: "Marge Calculator", icon: Calculator },
     ],
@@ -559,6 +562,7 @@ export default function DashboardHub() {
         {tab === "merkanalyse" && <MerkAnalyseContent />}
         {tab === "boekhouding" && <BoekhoudingContent onNavigeer={gaNaarTab} />}
         {tab === "inkoopfacturen" && <InkoopFacturenContent />}
+        {tab === "inkoopverklaring" && <InkoopverklaringContent />}
         {tab === "molibox" && <MoliboxPage />}
         {tab === "social" && <SocialContent />}
         {tab === "email" && (
