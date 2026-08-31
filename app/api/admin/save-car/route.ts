@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Vul een geldige kilometerstand in." }, { status: 400 });
     }
 
+    // VIN: hoofdletters, zonder streepjes of spaties, zodat zoeken en vergelijken werkt.
+    const vin = String(body.vin ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
+
     const bouwjaarNum = Number(body.bouwjaar);
     let bouwjaar = Number.isFinite(bouwjaarNum) && bouwjaarNum > 0 ? bouwjaarNum : 0;
 
@@ -88,6 +91,9 @@ export async function POST(request: NextRequest) {
       toegevoegd_op,
       ...(body.verkocht_op ? { verkocht_op: String(body.verkocht_op) } : {}),
       ...(body.kenteken ? { kenteken: String(body.kenteken) } : {}),
+      // Intern veld: gaat mee de gedeelde database in, maar de website filtert het er
+      // bij het uitlezen weer uit. Leeg meegestuurd = bewust gewist, dus dan valt het weg.
+      ...(vin ? { vin } : {}),
       ...(body.cilinderinhoud ? { cilinderinhoud: String(body.cilinderinhoud) } : {}),
       ...(body.aantalDeuren ? { aantalDeuren: String(body.aantalDeuren) } : {}),
       ...(body.aantalCilinders ? { aantalCilinders: String(body.aantalCilinders) } : {}),

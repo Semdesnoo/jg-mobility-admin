@@ -33,6 +33,7 @@ type FotoItem =
 
 type FormState = {
   kenteken: string;
+  vin: string;
   merk: string;
   model: string;
   versie: string;
@@ -60,6 +61,7 @@ const STANDAARD_CATEGORIEEN = ["Exterieur", "Interieur", "Technologie", "Aandrij
 
 const leegFormulier = (): FormState => ({
   kenteken: "",
+  vin: "",
   merk: "",
   model: "",
   versie: "",
@@ -86,6 +88,7 @@ const leegFormulier = (): FormState => ({
 // Zet een bestaande auto (uit de database) om naar de formulier-velden (alles als string).
 const formulierVanAuto = (a: Auto): FormState => ({
   kenteken: a.kenteken ?? "",
+  vin: a.vin ?? "",
   merk: a.merk ?? "",
   model: a.model ?? "",
   versie: a.versie ?? "",
@@ -536,6 +539,39 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
           <p className="text-xs mt-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
             Vul het kenteken in — RDW vult de specs automatisch in. Zodra de API key actief is vult AI ook de uitvoering, omschrijving en opties in.
           </p>
+
+          {/* ── VIN ──
+              Het chassisnummer zit niet in de open RDW-data, dus dit blijft handwerk:
+              overtypen van het kentekenbewijs of de ruitsticker. Staat hier omdat het
+              samen met het kenteken de identiteit van de auto is. Alleen voor intern
+              gebruik — de website laat dit veld nooit los, zie website/lib/autos-db.ts. */}
+          <div className="mt-5 pt-5" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
+            <Veld label="Chassisnummer (VIN) — intern">
+              <input
+                type="text"
+                value={form.vin}
+                onChange={(e) => set("vin", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17))}
+                placeholder="bijv. WVWZZZAUZFW123456"
+                maxLength={17}
+                className="w-full px-4 py-3 text-sm outline-none tracking-widest uppercase"
+                style={{
+                  backgroundColor: "#ffffff",
+                  border: "1px solid rgba(0,19,55,0.15)",
+                  color: "#001337",
+                  fontFamily: "var(--font-inter)",
+                }}
+              />
+            </Veld>
+            {form.vin && form.vin.length !== 17 ? (
+              <p className="text-xs mt-2" style={{ color: "#b45309", fontFamily: "var(--font-inter)" }}>
+                Een VIN heeft 17 tekens — er staan er nu {form.vin.length}. Je kunt gewoon opslaan, maar controleer het even.
+              </p>
+            ) : (
+              <p className="text-xs mt-2" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                Overtypen van het kentekenbewijs of de ruitsticker. Alleen zichtbaar in het dashboard — dit komt nooit op de website te staan.
+              </p>
+            )}
+          </div>
         </Sectie>
 
         {/* ── BASISGEGEVENS ── */}

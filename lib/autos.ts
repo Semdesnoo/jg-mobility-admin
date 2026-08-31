@@ -26,6 +26,9 @@ export type Auto = {
   toegevoegd_op?: string; // wanneer de auto in de voorraad kwam (voor standtijd-statistiek)
   // Optionele RDW-extra's (meegestuurd door het formulier)
   kenteken?: string;
+  // Chassisnummer. Puur intern (inkoop, garantie, onderdelen) — de website strijkt dit
+  // veld eruit voordat er iets naar de browser gaat, zie website/lib/autos-db.ts.
+  vin?: string;
   cilinderinhoud?: string;
   aantalDeuren?: string;
   aantalCilinders?: string;

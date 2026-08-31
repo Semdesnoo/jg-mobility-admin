@@ -78,6 +78,7 @@ type Auto = {
   fotos: string[];
   apk?: string;              // "MM-JJJJ" of "Onbekend"
   kenteken?: string;
+  vin?: string;              // chassisnummer — intern, komt niet op de website
   toegevoegd_op?: string;    // ISO — basis voor de standtijd
   verkocht_op?: string;
 };
@@ -947,7 +948,7 @@ function VoorraadTabel({
   const gefilterd = autos
     .filter((a) =>
       !term ||
-      `${a.merk} ${a.model} ${a.bouwjaar} ${a.brandstof} ${a.kenteken ?? ""}`.toLowerCase().includes(term)
+      `${a.merk} ${a.model} ${a.bouwjaar} ${a.brandstof} ${a.kenteken ?? ""} ${a.vin ?? ""}`.toLowerCase().includes(term)
     );
 
   const gesorteerd = [...gefilterd].sort((a, b) => {
@@ -989,7 +990,7 @@ function VoorraadTabel({
           <input
             value={zoek}
             onChange={(e) => setZoek(e.target.value)}
-            placeholder="Zoek op merk, model, jaar of kenteken..."
+            placeholder="Zoek op merk, model, jaar, kenteken of VIN..."
             className="flex-1 min-w-0 text-sm outline-none bg-transparent"
             style={{ color: "#001337", fontFamily: "var(--font-inter)" }}
           />
@@ -1054,6 +1055,17 @@ function VoorraadTabel({
                   <p className="md:hidden text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
                     {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
                   </p>
+                  {/* Kenteken + VIN: intern kenmerk, staat hier zodat je hem kunt overnemen
+                      zonder de auto te openen. Verschijnt alleen als hij is ingevuld. */}
+                  {(auto.kenteken || auto.vin) && (
+                    <p
+                      className="text-[10px] truncate select-text"
+                      style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)", letterSpacing: "0.03em" }}
+                      title={[auto.kenteken, auto.vin].filter(Boolean).join(" · ")}
+                    >
+                      {[auto.kenteken, auto.vin].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                 </div>
               </div>
 
