@@ -58,7 +58,6 @@ import ContractenContent from "./ContractenContent";
 import InkoopverklaringContent from "./InkoopverklaringContent";
 import FotosOpruimen from "./FotosOpruimen";
 import FotoStatus from "./FotoStatus";
-import OpslagBeheer from "./OpslagBeheer";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 
@@ -535,8 +534,6 @@ export default function DashboardHub() {
             <FotoStatus />
             {/* Eenmalig onderhoud; verdwijnt vanzelf zodra er niets meer te verkleinen is. */}
             <FotosOpruimen />
-            {/* Hoeveel ruimte de foto's innemen en wat eruit kan. */}
-            <OpslagBeheer />
             <VoorraadContent autos={autos} refresh={refresh} />
           </>
         )}
@@ -2189,6 +2186,7 @@ type VerkoopAuto = {
   prijs?: number;
   kleur?: string;
   kenteken?: string;
+  vin?: string;
   verkocht?: boolean;
   verkocht_op?: string; // ISO-datum; bepaalt de volgorde (laatst verkocht bovenaan)
   fotos?: string[];
@@ -2300,6 +2298,19 @@ function FacturenContent() {
     return () => clearTimeout(t);
   }, [form.auto_kenteken, zoekRdw]);
 
+  // Chassisnummer erbij zoeken op kenteken. De RDW geeft geen VIN — wij wel, want het
+  // staat bij de auto in de voorraad. Dit is de vangnetroute: tik je het kenteken met de
+  // hand in in plaats van de auto uit de lijst te kiezen, dan komt het VIN alsnog mee.
+  // Een al ingevuld veld blijft staan; wat jij typt wint altijd van wat wij weten.
+  useEffect(() => {
+    const sleutel = (k: string) => k.replace(/[^a-z0-9]/gi, "").toUpperCase();
+    const schoon = sleutel(form.auto_kenteken);
+    if (schoon.length < 4) return;
+    const gevonden = autos.find((a) => a.vin && sleutel(a.kenteken ?? "") === schoon);
+    if (!gevonden?.vin) return;
+    setForm((prev) => (prev.auto_vin.trim() ? prev : { ...prev, auto_vin: gevonden.vin! }));
+  }, [form.auto_kenteken, autos]);
+
   const startBewerken = (f: Factuur) => {
     let parsedRegels: FactuurRegel[] = [];
     try { parsedRegels = JSON.parse(f.regels || "[]"); } catch { /* */ }
@@ -2320,8 +2331,9 @@ function FacturenContent() {
   };
 
   // Vult de voertuiggegevens en de verkoopprijs met één klik uit een auto in de
-  // voorraad — scheelt overtypen (of het aan de AI vragen). Het VIN zit niet in de
-  // voorraad, dus dat vul je zelf in; daar staat een rode "vergeet dit niet"-hint bij.
+  // voorraad — scheelt overtypen (of het aan de AI vragen). Het chassisnummer komt
+  // mee zodra het bij de auto is ingevuld; staat het daar niet, dan blijft het veld leeg
+  // met de rode "vergeet dit niet"-hint erbij.
   const kiesAuto = (a: VerkoopAuto) => {
     setAutoKeuze(a.id);
     setForm((prev) => ({
@@ -2332,6 +2344,7 @@ function FacturenContent() {
       auto_kenteken: a.kenteken ?? prev.auto_kenteken,
       auto_km: a.km ? String(a.km) : prev.auto_km,
       auto_kleur: a.kleur ?? prev.auto_kleur,
+      auto_vin: a.vin || prev.auto_vin,
       verkoopprijs: a.prijs ? String(a.prijs) : prev.verkoopprijs,
     }));
     setFout(null);
@@ -3007,7 +3020,7 @@ function FacturenContent() {
             });
             const zichtbaar = zoek
               ? gesorteerd.filter((a) =>
-                  `${a.merk ?? ""} ${a.model ?? ""} ${a.kenteken ?? ""}`.toLowerCase().includes(zoek)
+                  `${a.merk ?? ""} ${a.model ?? ""} ${a.kenteken ?? ""} ${a.vin ?? ""}`.toLowerCase().includes(zoek)
                 )
               : gesorteerd;
             return (
@@ -3024,7 +3037,7 @@ function FacturenContent() {
                       type="text"
                       value={autoZoek}
                       onChange={(e) => setAutoZoek(e.target.value)}
-                      placeholder="Zoek op merk, model of kenteken…"
+                      placeholder="Zoek op merk, model, kenteken of VIN…"
                       className="px-3 py-1.5 text-xs outline-none"
                       style={{ ...veldStijl, minWidth: "220px", flex: "1 1 220px" }}
                     />
@@ -3032,7 +3045,7 @@ function FacturenContent() {
                 </div>
                 <div className="px-5 pt-3">
                   <p className="text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)", lineHeight: 1.5 }}>
-                    Klik op de auto die je hebt verkocht — merk, model, bouwjaar, kenteken, km, kleur en prijs worden automatisch ingevuld. Het VIN vul je zelf in (vergeet dit niet).
+                    Klik op de auto die je hebt verkocht — merk, model, bouwjaar, kenteken, km, kleur, prijs én het chassisnummer worden automatisch ingevuld. Staat het VIN niet bij de auto, dan blijft dat ene veld rood: vul het dan bij de auto in, dan heb je het voortaan meteen.
                   </p>
                 </div>
                 <div className="p-3 md:p-4 flex flex-col gap-2" style={{ maxHeight: "280px", overflowY: "auto" }}>
@@ -3097,7 +3110,10 @@ function FacturenContent() {
                 </div>
                 {autoKeuze !== null && (
                   <div className="px-5 py-2.5 text-[11px] font-medium flex items-center gap-1.5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)", color: "#15803d", fontFamily: "var(--font-inter)" }}>
-                    <CheckCircle2 size={13} /> Gegevens overgenomen — controleer ze hieronder en vul het VIN in.
+                    <CheckCircle2 size={13} />{" "}
+                    {form.auto_vin.trim()
+                      ? "Gegevens overgenomen, chassisnummer erbij — controleer ze hieronder."
+                      : "Gegevens overgenomen — controleer ze hieronder en vul het VIN nog in."}
                   </div>
                 )}
               </div>
@@ -3149,7 +3165,7 @@ function FacturenContent() {
                     <div key={field} style={{ gridColumn: col ? `span ${col}` : undefined }}>
                       <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>
                         {label}
-                        {vinVeld && (
+                        {vinLeeg && (
                           <span style={{ color: "#b91c1c", textTransform: "none", fontWeight: 600 }} className="ml-1">
                             — Let op: vergeet dit niet in te voeren
                           </span>

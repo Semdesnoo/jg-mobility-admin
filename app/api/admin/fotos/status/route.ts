@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
  *
  * Deze controle haalt één echte foto op en geeft terug wat de opslag antwoordde. "Your
  * store is blocked" van Vercel betekent bijvoorbeeld dat de opslag zelf op slot zit —
- * meestal omdat de gratis limiet bereikt is — en dat is iets wat je in je Vercel-account
- * oplost en niet hier.
+ * een kwestie van het abonnement of de betaling — en dat is iets wat je in je
+ * Vercel-account oplost en niet hier.
  */
 export async function GET() {
   try {
@@ -48,7 +48,7 @@ export async function GET() {
     const reden = ok
       ? ""
       : /blocked/i.test(tekst)
-        ? "De opslag zelf is geblokkeerd door Vercel. Dat gebeurt als de limiet van het gratis pakket bereikt is of als er iets met de betaling niet klopt — niet door een fout in het dashboard."
+        ? "De opslag zelf is geblokkeerd door Vercel. Dat gaat om het abonnement of de betaling en los je op in je Vercel-account — het is geen fout in het dashboard."
         : status === 404
           ? "De bestanden zijn niet gevonden bij de opslag. Ze lijken verwijderd te zijn."
           : status > 0
