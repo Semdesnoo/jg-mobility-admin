@@ -22,6 +22,9 @@ export type Auto = {
   // Status
   verkocht?: boolean;
   gereserveerd?: boolean;
+  // Uit de etalage gehaald zonder hem weg te gooien: staat gewoon in het dashboard,
+  // maar de website laat hem nergens zien (zie website/lib/autos-db.ts).
+  verborgen?: boolean;
   verkocht_op?: string;
   toegevoegd_op?: string; // wanneer de auto in de voorraad kwam (voor standtijd-statistiek)
   // Optionele RDW-extra's (meegestuurd door het formulier)

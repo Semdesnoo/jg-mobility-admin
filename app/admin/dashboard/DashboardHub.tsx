@@ -29,6 +29,8 @@ import {
   AlertTriangle,
   Clock,
   ImageOff,
+  Eye,
+  EyeOff,
   TrendingUp,
   Cpu,
   Bell,
@@ -78,6 +80,7 @@ type Auto = {
   apk?: string;              // "MM-JJJJ" of "Onbekend"
   kenteken?: string;
   vin?: string;              // chassisnummer — intern, komt niet op de website
+  verborgen?: boolean;       // uit de etalage: blijft hier staan, verdwijnt van de website
   toegevoegd_op?: string;    // ISO — basis voor de standtijd
   verkocht_op?: string;
 };
@@ -832,7 +835,7 @@ const STATUS_BREEDTE = 230;
  * LET OP: de rij zelf gebruikt hiervoor de klasse `md:w-[250px]`, omdat die breedte
  * daar alleen op desktop mag gelden. Verander je dit getal, verander die klasse dan mee.
  */
-const ACTIE_BREEDTE = 250;
+const ACTIE_BREEDTE = 288;
 
 /** Kolommen mogen niet krimpen: doen ze dat wel, dan krimpen kop en rij verschillend
  *  (een kop als "STANDTIJD" is nu eenmaal breder dan "4 dgn") en loopt het scheef. */
@@ -941,6 +944,22 @@ function VoorraadTabel({
     }
   };
 
+  // Uit de etalage halen of terugzetten. Geen "weet je het zeker?": één klik erheen,
+  // dezelfde klik terug, en de rij laat meteen zien hoe hij er nu bij staat.
+  const zetVerborgen = async (id: number, verborgen: boolean) => {
+    setStatusBezig(id);
+    try {
+      await fetch(`/api/admin/autos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verborgen }),
+      });
+      refresh();
+    } finally {
+      setStatusBezig(null);
+    }
+  };
+
   const term = zoek.trim().toLowerCase();
   const gefilterd = autos
     .filter((a) =>
@@ -1040,14 +1059,29 @@ function VoorraadTabel({
             >
               {/* Foto */}
               <div className="flex items-center gap-3 md:contents">
-                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: 48, height: 34, backgroundColor: "#001337", ...VAST }}>
+                <div
+                  className="relative flex-shrink-0 overflow-hidden"
+                  style={{ width: 48, height: 34, backgroundColor: "#001337", opacity: auto.verborgen ? 0.4 : 1, ...VAST }}
+                >
                   <Duimnagel src={auto.fotos?.[0]} />
                 </div>
 
                 {/* Naam — platte tekst; bewerken loopt via de knop rechts */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold block truncate" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                    {auto.merk} {auto.model}
+                  <p className="text-sm font-bold flex items-center gap-2 min-w-0" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                    <span className="truncate" style={{ opacity: auto.verborgen ? 0.45 : 1 }}>
+                      {auto.merk} {auto.model}
+                    </span>
+                    {/* Zonder dit label ziet een verborgen auto er precies zo uit als de rest,
+                        en vraag je je over een week af waarom hij niet op de site staat. */}
+                    {auto.verborgen && (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider flex-shrink-0"
+                        style={{ backgroundColor: "rgba(0,19,55,0.07)", color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}
+                      >
+                        <EyeOff size={9} /> Verborgen
+                      </span>
+                    )}
                   </p>
                   <p className="md:hidden text-[11px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
                     {auto.bouwjaar} · {auto.km.toLocaleString("nl-NL")} km · {auto.brandstof}
@@ -1156,10 +1190,31 @@ function VoorraadTabel({
 
               {/* Acties — één bewerkknop, die naar de bewerkpagina gaat.
                   Alleen op desktop een vaste breedte: op mobiel staat de rij onder
-                  elkaar en zou die uitsteken. De 250 hieronder moet gelijk blijven aan
+                  elkaar en zou die uitsteken. De 288 hieronder moet gelijk blijven aan
                   ACTIE_BREEDTE in de kolomkop. */}
               {!alleenLezen && (
-                <div className="flex items-center gap-1.5 flex-wrap w-full md:w-[250px] md:flex-none md:flex-nowrap md:justify-end">
+                <div className="flex items-center gap-1.5 flex-wrap w-full md:w-[288px] md:flex-none md:flex-nowrap md:justify-end">
+                  {/* Uit de etalage halen. De auto blijft hier gewoon staan met al zijn
+                      gegevens; alleen de website slaat hem over. */}
+                  <button
+                    type="button"
+                    onClick={() => zetVerborgen(auto.id, !auto.verborgen)}
+                    disabled={statusBezig === auto.id}
+                    title={
+                      auto.verborgen
+                        ? "Verborgen — klik om hem weer op de website te zetten"
+                        : "Staat op de website — klik om hem te verbergen"
+                    }
+                    aria-label={auto.verborgen ? "Weer op de website zetten" : "Verbergen van de website"}
+                    className="px-2 py-1.5 transition-all hover:opacity-70 disabled:opacity-40"
+                    style={{
+                      border: `1px solid ${auto.verborgen ? "rgba(0,19,55,0.3)" : "rgba(0,19,55,0.15)"}`,
+                      backgroundColor: auto.verborgen ? "rgba(0,19,55,0.06)" : "transparent",
+                      color: auto.verborgen ? "#001337" : "rgba(0,19,55,0.45)",
+                    }}
+                  >
+                    {auto.verborgen ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
                   <Link
                     href={`/admin/auto-bewerken/${auto.id}`}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-90"
@@ -1167,15 +1222,27 @@ function VoorraadTabel({
                   >
                     <Pencil size={11} /> Bewerken
                   </Link>
-                  <a
-                    href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:opacity-70"
-                    style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-                  >
-                    Bekijk
-                  </a>
+                  {/* Verborgen? Dan bestaat de pagina op de website niet meer, dus een
+                      link erheen zou je op een 404 zetten. */}
+                  {auto.verborgen ? (
+                    <span
+                      title="Deze auto staat niet op de website"
+                      className="px-2.5 py-1.5 text-[11px] font-semibold cursor-not-allowed"
+                      style={{ border: "1px solid rgba(0,19,55,0.08)", color: "rgba(0,19,55,0.25)", fontFamily: "var(--font-inter)" }}
+                    >
+                      Bekijk
+                    </span>
+                  ) : (
+                    <a
+                      href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:opacity-70"
+                      style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
+                    >
+                      Bekijk
+                    </a>
+                  )}
                   <DeleteButton id={auto.id} naam={`${auto.merk} ${auto.model}`} />
                 </div>
               )}

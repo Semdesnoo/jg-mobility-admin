@@ -16,6 +16,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     auto.prijs = body.prijs;
   }
 
+  // Zichtbaarheid staat los van de status: verbergen mag bij elke status, en zichtbaar
+  // maken zet niets anders terug. Alleen een echte boolean telt — anders zou een PATCH
+  // die alleen over de prijs gaat de auto ongemerkt op zichtbaar zetten.
+  if (typeof body.verborgen === "boolean") {
+    auto.verborgen = body.verborgen;
+  }
+
   if (body.status === "verkocht") {
     auto.verkocht = true;
     auto.gereserveerd = false;

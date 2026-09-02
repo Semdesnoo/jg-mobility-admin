@@ -52,6 +52,7 @@ type FormState = {
   omschrijving: string;
   verkocht: boolean;
   gereserveerd: boolean;
+  verborgen: boolean;
   cilinderinhoud: string;
   aantalDeuren: string;
   aantalCilinders: string;
@@ -80,6 +81,7 @@ const leegFormulier = (): FormState => ({
   omschrijving: "",
   verkocht: false,
   gereserveerd: false,
+  verborgen: false,
   cilinderinhoud: "",
   aantalDeuren: "",
   aantalCilinders: "",
@@ -107,6 +109,7 @@ const formulierVanAuto = (a: Auto): FormState => ({
   omschrijving: a.omschrijving ?? "",
   verkocht: !!a.verkocht,
   gereserveerd: !!a.gereserveerd,
+  verborgen: !!a.verborgen,
   cilinderinhoud: a.cilinderinhoud ?? "",
   aantalDeuren: a.aantalDeuren ?? "",
   aantalCilinders: a.aantalCilinders ?? "",
@@ -647,6 +650,19 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
                 <option value="beschikbaar">Beschikbaar</option>
                 <option value="gereserveerd">Gereserveerd</option>
                 <option value="verkocht">Verkocht</option>
+              </select>
+            </Veld>
+            {/* Losstaand van de status: je kunt een beschikbare auto verbergen zolang de
+                foto's nog niet klaar zijn, en een verkochte auto van de site halen zonder
+                dat hij uit je administratie verdwijnt. */}
+            <Veld label="Op de website">
+              <select
+                value={form.verborgen ? "verborgen" : "zichtbaar"}
+                onChange={(e) => set("verborgen", e.target.value === "verborgen")}
+                {...selectProps}
+              >
+                <option value="zichtbaar">Zichtbaar</option>
+                <option value="verborgen">Verborgen — niet op de website</option>
               </select>
             </Veld>
           </div>

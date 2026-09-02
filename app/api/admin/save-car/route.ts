@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       fotos,
       verkocht: Boolean(body.verkocht),
       gereserveerd: Boolean(body.gereserveerd),
+      verborgen: Boolean(body.verborgen),
       omschrijving: String(body.omschrijving ?? ""),
       opties,
       toegevoegd_op,
