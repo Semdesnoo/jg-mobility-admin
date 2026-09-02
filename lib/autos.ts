@@ -12,6 +12,9 @@ export type Auto = {
   transmissie: string;
   vermogen: string;
   kleur: string;
+  // Vraagprijs zonder btw tonen (bedrijfswagens). `prijs` blijft ook dan het bedrag
+  // INCLUSIEF btw — dit vlaggetje bepaalt alleen invoer en presentatie, zie lib/prijs.ts.
+  prijsExclBtw?: boolean;
   // Extra kenmerken
   apk: string;
   btw: string;

@@ -7,6 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { X, Plus, ArrowLeft, Search, Upload, Sparkles } from "lucide-react";
 import type { Auto } from "@/lib/autos";
+import { zonderBtw, metBtw } from "@/lib/prijs";
 import { useAiTaak } from "@/app/admin/dashboard/AiTaken";
 import { useDialoog } from "@/app/admin/dashboard/Dialoog";
 
@@ -40,6 +41,8 @@ type FormState = {
   bouwjaar: string;
   bodytype: string;
   prijs: string;
+  /** Staat de switch op "excl. btw"? Dan is het veld hierboven het bedrag zonder btw. */
+  prijsExclBtw: boolean;
   km: string;
   brandstof: string;
   transmissie: string;
@@ -69,6 +72,7 @@ const leegFormulier = (): FormState => ({
   bouwjaar: "",
   bodytype: "Hatchback",
   prijs: "",
+  prijsExclBtw: false,
   km: "",
   brandstof: "Benzine",
   transmissie: "Handgeschakeld",
@@ -96,7 +100,10 @@ const formulierVanAuto = (a: Auto): FormState => ({
   versie: a.versie ?? "",
   bouwjaar: a.bouwjaar ? String(a.bouwjaar) : "",
   bodytype: a.bodytype || "Hatchback",
-  prijs: a.prijs != null ? String(a.prijs) : "",
+  // In de database staat altijd het bedrag inclusief btw; in het veld zetten we het
+  // bedrag zoals je het destijds hebt ingevoerd.
+  prijs: a.prijs != null ? String(a.prijsExclBtw ? zonderBtw(a.prijs) : a.prijs) : "",
+  prijsExclBtw: !!a.prijsExclBtw,
   km: a.km != null ? String(a.km) : "",
   brandstof: a.brandstof || "Benzine",
   transmissie: a.transmissie || "Handgeschakeld",
@@ -174,8 +181,27 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
       ? aiTaak.resultaat
       : null;
 
+  // Personenauto's gaan inclusief btw, bedrijfswagens exclusief. Dat volgt vanzelf uit
+  // de carrosserie, zodat je er bij een bestelbus niet aan hoeft te denken. Schuif je de
+  // switch zelf om, dan blijft die keuze staan — vanaf dat moment weet jij het beter.
+  // Marge is de uitzondering die geen keuze is: daar valt geen btw apart te tonen.
+  const prijsModusHandmatig = useRef(false);
+  const pasPrijsModusToe = (f: FormState): FormState => {
+    if (f.btw === "Marge") return f.prijsExclBtw ? { ...f, prijsExclBtw: false } : f;
+    if (prijsModusHandmatig.current) return f;
+    const hoort = f.bodytype === "Bestelauto";
+    return f.prijsExclBtw === hoort ? f : { ...f, prijsExclBtw: hoort };
+  };
+
   const set = (key: keyof FormState, value: string | boolean) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => pasPrijsModusToe({ ...prev, [key]: value }));
+
+  /** De switch onder de vraagprijs. Wat je hebt getypt blijft staan — alleen de betekenis
+   *  verandert, en de regel eronder laat meteen het andere bedrag zien. */
+  const zetPrijsModus = (excl: boolean) => {
+    prijsModusHandmatig.current = true;
+    setForm((prev) => ({ ...prev, prijsExclBtw: excl }));
+  };
 
   const status = form.verkocht ? "verkocht" : form.gereserveerd ? "gereserveerd" : "beschikbaar";
   const setStatus = (v: string) =>
@@ -255,7 +281,7 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
       aantalCilinders: data.aantalCilinders ? String(data.aantalCilinders) : form.aantalCilinders,
     };
 
-    setForm(updatedForm);
+    setForm(pasPrijsModusToe(updatedForm));
     setRdwLoading(false);
 
     // Ligt de tekst voor dit kenteken al klaar — bijvoorbeeld omdat je tussendoor naar
@@ -387,7 +413,10 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
 
       const auto = {
         ...form,
-        prijs: Number(form.prijs),
+        // De database krijgt altijd het bedrag INCLUSIEF btw — daar rekent de rest van
+        // het dashboard mee. Het vlaggetje `prijsExclBtw` gaat mee zodat het formulier
+        // en de website weten hoe ze het moeten tonen.
+        prijs: form.prijsExclBtw ? metBtw(Number(form.prijs)) : Number(form.prijs),
         km: Number(form.km),
         bouwjaar: Number(form.bouwjaar),
         fotos: fotoUrls,
@@ -592,8 +621,59 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
             <Veld label="Bouwjaar">
               <input type="number" value={form.bouwjaar} onChange={(e) => set("bouwjaar", e.target.value)} placeholder="bijv. 2020" {...inputProps} />
             </Veld>
-            <Veld label="Vraagprijs (€) *">
-              <input type="number" value={form.prijs} onChange={(e) => set("prijs", e.target.value)} placeholder="bijv. 15000" {...inputProps} />
+            <Veld label={`Vraagprijs (€) * — ${form.prijsExclBtw ? "exclusief btw" : "inclusief btw"}`}>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={form.prijs}
+                  onChange={(e) => set("prijs", e.target.value)}
+                  placeholder="bijv. 15000"
+                  {...inputProps}
+                  className="flex-1 min-w-0 px-4 py-2.5 text-sm outline-none"
+                />
+                <div className="flex flex-shrink-0">
+                  {([false, true] as const).map((excl) => {
+                    const actief = form.prijsExclBtw === excl;
+                    const geblokkeerd = excl && form.btw === "Marge";
+                    return (
+                      <button
+                        key={String(excl)}
+                        type="button"
+                        onClick={() => !geblokkeerd && zetPrijsModus(excl)}
+                        disabled={geblokkeerd}
+                        title={
+                          geblokkeerd
+                            ? "Een margeauto heeft geen btw om apart te tonen"
+                            : excl
+                              ? "Prijs zonder btw — gebruikelijk bij bedrijfswagens"
+                              : "Prijs inclusief btw — gebruikelijk bij personenauto's"
+                        }
+                        className="px-3 py-2.5 text-xs font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        style={{
+                          fontFamily: "var(--font-inter)",
+                          backgroundColor: actief ? "#001337" : "#ffffff",
+                          color: actief ? "#ffffff" : "rgba(0,19,55,0.5)",
+                          border: "1px solid rgba(0,19,55,0.15)",
+                          borderLeftWidth: excl ? 0 : 1,
+                        }}
+                      >
+                        {excl ? "excl." : "incl."}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Het andere bedrag er meteen bij: zo zie je bij het intikken van een
+                  bestelbus wat de klant met btw kwijt is, zonder zelf te rekenen. */}
+              <p className="text-[11px] mt-1.5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                {form.btw === "Marge"
+                  ? "Marge — geen btw om apart te tonen."
+                  : Number(form.prijs) > 0
+                    ? form.prijsExclBtw
+                      ? `= €${metBtw(Number(form.prijs)).toLocaleString("nl-NL")} inclusief btw`
+                      : `= €${zonderBtw(Number(form.prijs)).toLocaleString("nl-NL")} exclusief btw`
+                    : "Bedrijfswagens zet je op excl.; dat gaat vanzelf zodra je Bestelauto kiest."}
+              </p>
             </Veld>
             <Veld label="Kilometerstand *">
               <input type="number" value={form.km} onChange={(e) => set("km", e.target.value)} placeholder="bijv. 85000" {...inputProps} />

@@ -62,6 +62,7 @@ import FotosOpruimen from "./FotosOpruimen";
 import FotoStatus from "./FotoStatus";
 import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
+import { prijsTekst } from "@/lib/prijs";
 
 type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "inruil" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "inkoopverklaring" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
 
@@ -81,6 +82,8 @@ type Auto = {
   kenteken?: string;
   vin?: string;              // chassisnummer — intern, komt niet op de website
   verborgen?: boolean;       // uit de etalage: blijft hier staan, verdwijnt van de website
+  btw?: string;              // "Marge" of "BTW-auto"
+  prijsExclBtw?: boolean;    // bedrijfswagen: prijs tonen zonder btw (prijs zelf blijft incl.)
   toegevoegd_op?: string;    // ISO — basis voor de standtijd
   verkocht_op?: string;
 };
@@ -1114,9 +1117,10 @@ function VoorraadTabel({
                 {dagen != null ? `${dagen} dgn` : "—"}
               </p>
 
-              {/* Prijs */}
+              {/* Prijs — bij een bedrijfswagen het bedrag zonder btw, net als op de website,
+                  zodat je hier hetzelfde getal leest als wat de klant ziet. */}
               <p className="hidden md:block text-sm font-bold text-right" style={{ width: 100, ...VAST, color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                €{auto.prijs.toLocaleString("nl-NL")}
+                {prijsTekst(auto.prijs, auto.prijsExclBtw)}
               </p>
 
               {/* Status — klikbaar: dit is de handeling die het vaakst nodig is */}
@@ -1156,7 +1160,7 @@ function VoorraadTabel({
               {/* Mobiel: prijs + status op één regel */}
               <div className="md:hidden flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                  €{auto.prijs.toLocaleString("nl-NL")}
+                  {prijsTekst(auto.prijs, auto.prijsExclBtw)}
                 </span>
                 {alleenLezen ? (
                   <span
@@ -2254,6 +2258,7 @@ type VerkoopAuto = {
   kleur?: string;
   kenteken?: string;
   vin?: string;
+  btw?: string;
   verkocht?: boolean;
   verkocht_op?: string; // ISO-datum; bepaalt de volgorde (laatst verkocht bovenaan)
   fotos?: string[];
@@ -2412,7 +2417,11 @@ function FacturenContent() {
       auto_km: a.km ? String(a.km) : prev.auto_km,
       auto_kleur: a.kleur ?? prev.auto_kleur,
       auto_vin: a.vin || prev.auto_vin,
+      // De verkoopprijs is het bedrag INCLUSIEF btw — de factuur rekent zelf terug met
+      // /1,21 zodra btw_type op 21% staat. Daarom ook die soort meenemen: een
+      // bedrijfswagen die als marge op de factuur belandt kost je de btw.
       verkoopprijs: a.prijs ? String(a.prijs) : prev.verkoopprijs,
+      btw_type: a.btw ? (/marge/i.test(a.btw) ? "marge" : "21") : prev.btw_type,
     }));
     setFout(null);
   };

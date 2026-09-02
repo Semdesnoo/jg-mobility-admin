@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
       bekleding: String(body.bekleding ?? ""),
       kleurExterieur: String(body.kleurExterieur ?? ""),
       fotos,
+      // Presentatie, geen bedrag: `prijs` hierboven is en blijft inclusief btw.
+      prijsExclBtw: Boolean(body.prijsExclBtw),
       verkocht: Boolean(body.verkocht),
       gereserveerd: Boolean(body.gereserveerd),
       verborgen: Boolean(body.verborgen),
