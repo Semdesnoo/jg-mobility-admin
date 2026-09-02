@@ -8,6 +8,7 @@ import Image from "next/image";
 import { X, Plus, ArrowLeft, Search, Upload, Sparkles } from "lucide-react";
 import type { Auto } from "@/lib/autos";
 import { zonderBtw, metBtw } from "@/lib/prijs";
+import { isBedrijfswagen, normaliseerBodytype } from "@/lib/voertuig";
 import { useAiTaak } from "@/app/admin/dashboard/AiTaken";
 import { useDialoog } from "@/app/admin/dashboard/Dialoog";
 
@@ -63,6 +64,10 @@ type FormState = {
 
 const STANDAARD_CATEGORIEEN = ["Exterieur", "Interieur", "Technologie", "Aandrijving"];
 
+const CARROSSERIEEN = [
+  "Hatchback", "Sedan", "Stationwagen", "SUV", "MPV", "Coupe", "Cabriolet", "Bestelauto",
+];
+
 const leegFormulier = (): FormState => ({
   kenteken: "",
   vin: "",
@@ -99,7 +104,9 @@ const formulierVanAuto = (a: Auto): FormState => ({
   model: a.model ?? "",
   versie: a.versie ?? "",
   bouwjaar: a.bouwjaar ? String(a.bouwjaar) : "",
-  bodytype: a.bodytype || "Hatchback",
+  // Auto's van vóór de RDW-vertaling kunnen "Gesloten opbouw" bevatten. Zonder deze
+  // omzetting toont de keuzelijst "Hatchback" terwijl er iets anders is opgeslagen.
+  bodytype: normaliseerBodytype(a.bodytype, CARROSSERIEEN),
   // In de database staat altijd het bedrag inclusief btw; in het veld zetten we het
   // bedrag zoals je het destijds hebt ingevoerd.
   prijs: a.prijs != null ? String(a.prijsExclBtw ? zonderBtw(a.prijs) : a.prijs) : "",
@@ -189,7 +196,7 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
   const pasPrijsModusToe = (f: FormState): FormState => {
     if (f.btw === "Marge") return f.prijsExclBtw ? { ...f, prijsExclBtw: false } : f;
     if (prijsModusHandmatig.current) return f;
-    const hoort = f.bodytype === "Bestelauto";
+    const hoort = isBedrijfswagen(f.bodytype);
     return f.prijsExclBtw === hoort ? f : { ...f, prijsExclBtw: hoort };
   };
 
@@ -700,7 +707,13 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
             </Veld>
             <Veld label="Carrosserie">
               <select value={form.bodytype} onChange={(e) => set("bodytype", e.target.value)} {...selectProps}>
-                {["Hatchback", "Sedan", "Stationwagen", "SUV", "MPV", "Coupe", "Cabriolet", "Bestelauto"].map((b) => (
+                {/* Staat er iets in de database wat wij niet kennen, dan zetten we het er
+                    als keuze bij. Anders wijst de lijst een andere waarde aan dan er is
+                    opgeslagen en verandert de carrosserie zodra je iets anders bewerkt. */}
+                {(CARROSSERIEEN.includes(form.bodytype) || !form.bodytype
+                  ? CARROSSERIEEN
+                  : [...CARROSSERIEEN, form.bodytype]
+                ).map((b) => (
                   <option key={b}>{b}</option>
                 ))}
               </select>

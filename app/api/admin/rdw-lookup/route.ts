@@ -3,6 +3,10 @@ import { NextRequest } from "next/server";
 // RDW levert alles als string; per dataset verschillen de velden.
 type RdwRij = Record<string, string | undefined>;
 
+// RDW geeft geen carrosserienaam maar de *inrichting* van het voertuig. Voor een
+// personenauto levert dat bruikbare woorden op; voor een bestelbus krijg je "Gesloten
+// opbouw" of "Open laadvloer" — en die stonden zo op de website. Alles wat een
+// bedrijfswagen aanduidt wordt daarom één waarde: Bestelauto.
 const CARROSSERIE_MAP: Record<string, string> = {
   Personenauto: "Hatchback",
   Stationwagen: "Stationwagen",
@@ -14,7 +18,19 @@ const CARROSSERIE_MAP: Record<string, string> = {
   Hatchback: "Hatchback",
   Terreinwagen: "SUV",
   Bestelauto: "Bestelauto",
+  "Gesloten opbouw": "Bestelauto",
+  "Open laadvloer": "Bestelauto",
+  "Open laadbak": "Bestelauto",
+  Bakwagen: "Bestelauto",
+  "Chassis cabine": "Bestelauto",
+  Kipper: "Bestelauto",
+  Koelwagen: "Bestelauto",
 };
+
+/** De carrosseriekeuzes die het formulier kent — iets anders heeft geen zin. */
+const BEKENDE_CARROSSERIE = [
+  "Hatchback", "Sedan", "Stationwagen", "SUV", "MPV", "Coupe", "Cabriolet", "Bestelauto",
+];
 
 function capitalize(s: string) {
   if (!s) return "";
@@ -76,7 +92,13 @@ export async function GET(request: NextRequest) {
     }
 
     const inrichting = v.inrichting ? capitalize(v.inrichting) : "";
-    const bodytype = CARROSSERIE_MAP[inrichting] ?? inrichting ?? "Hatchback";
+    // Staat de inrichting niet in de lijst hierboven, dan beslist de voertuigsoort:
+    // "Bedrijfsauto" wordt een Bestelauto, de rest valt terug op Hatchback. Zo komt er
+    // nooit meer RDW-jargon als carrosserie in de voorraad te staan.
+    const isBedrijfsauto = /bedrijfsauto/i.test(v.voertuigsoort ?? "");
+    const bodytype =
+      CARROSSERIE_MAP[inrichting] ??
+      (BEKENDE_CARROSSERIE.includes(inrichting) ? inrichting : isBedrijfsauto ? "Bestelauto" : "Hatchback");
 
     const merk = v.merk ? capitalize(v.merk) : "";
     const model = v.handelsbenaming ?? "";
