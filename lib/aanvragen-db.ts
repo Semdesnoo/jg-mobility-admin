@@ -136,7 +136,12 @@ function rij(r: Record<string, unknown>): Aanvraag {
     budget: (r.budget as string) ?? "",
     notitie: (r.notitie as string) ?? "",
     status: (r.status as string) ?? "nieuw",
-    aangemaakt: String(r.aangemaakt ?? ""),
+    // Een TIMESTAMPTZ komt als Date terug uit de driver. String() maakt daar
+    // "Thu Sep 03 2026 21:44:25 GMT+0200" van, en het scherm groepeert de dagen op de
+    // eerste tien tekens en sorteert die als tekst — waardoor "Wed Sep 02" bovén
+    // "Thu Sep 03" belandde. Als ISO klopt de sleutel, de sortering en de volgorde.
+    aangemaakt:
+      r.aangemaakt instanceof Date ? r.aangemaakt.toISOString() : String(r.aangemaakt ?? ""),
     gmail_message_id: (r.gmail_message_id as string) ?? null,
     onderwerp: (r.onderwerp as string) ?? "",
     kenteken: (r.kenteken as string) ?? "",
