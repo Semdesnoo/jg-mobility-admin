@@ -1051,10 +1051,16 @@ function Detail({
                 // terug naar "geen auto" (de waarde komt uit a.auto_id) en bleef de
                 // aanvraag in het tabblad Per auto onder de vórige auto hangen — met de
                 // naam van de nieuwe erbij. Een rij die zichzelf tegenspreekt.
+                //
+                // Het kenteken alleen invullen als het nog leeg is. Bij een inruilaanvraag
+                // van de website staat daar het kenteken van de auto VAN DE KLANT — en dat
+                // is het enige waar je hem op kunt taxeren. Overschrijven we dat met het
+                // kenteken van onze eigen voorraadauto, dan is de inruilauto weg en kun je
+                // hem alleen nog uit de omschrijving raden.
                 patch({
                   auto_id: gekozenAuto ? gekozenAuto.id : null,
                   auto_naam: gekozenAuto ? `${gekozenAuto.merk ?? ""} ${gekozenAuto.model ?? ""}`.trim() : "",
-                  kenteken: gekozenAuto?.kenteken ?? "",
+                  ...(a.kenteken ? {} : { kenteken: gekozenAuto?.kenteken ?? "" }),
                 });
               }}
             >
