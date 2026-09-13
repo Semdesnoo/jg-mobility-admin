@@ -204,10 +204,16 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
     setForm((prev) => pasPrijsModusToe({ ...prev, [key]: value }));
 
   /** De switch onder de vraagprijs. Wat je hebt getypt blijft staan — alleen de betekenis
-   *  verandert, en de regel eronder laat meteen het andere bedrag zien. */
+   *  verandert, en de regel eronder laat meteen het andere bedrag zien. Kies je "excl."
+   *  bij een margeauto, dan is dat geen dode knop: een prijs zonder btw hoort bij een
+   *  BTW-auto, dus zetten we het btw-veld daar meteen op — dat is wat je bedoelt. */
   const zetPrijsModus = (excl: boolean) => {
     prijsModusHandmatig.current = true;
-    setForm((prev) => ({ ...prev, prijsExclBtw: excl }));
+    setForm((prev) => ({
+      ...prev,
+      prijsExclBtw: excl,
+      btw: excl && prev.btw === "Marge" ? "BTW-auto" : prev.btw,
+    }));
   };
 
   const status = form.verkocht ? "verkocht" : form.gereserveerd ? "gereserveerd" : "beschikbaar";
@@ -641,19 +647,15 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
                 <div className="flex flex-shrink-0">
                   {([false, true] as const).map((excl) => {
                     const actief = form.prijsExclBtw === excl;
-                    const geblokkeerd = excl && form.btw === "Marge";
                     return (
                       <button
                         key={String(excl)}
                         type="button"
-                        onClick={() => !geblokkeerd && zetPrijsModus(excl)}
-                        disabled={geblokkeerd}
+                        onClick={() => zetPrijsModus(excl)}
                         title={
-                          geblokkeerd
-                            ? "Een margeauto heeft geen btw om apart te tonen"
-                            : excl
-                              ? "Prijs zonder btw — gebruikelijk bij bedrijfswagens"
-                              : "Prijs inclusief btw — gebruikelijk bij personenauto's"
+                          excl
+                            ? "Prijs zonder btw — gebruikelijk bij bedrijfswagens. Zet de auto meteen op BTW-auto."
+                            : "Prijs inclusief btw — gebruikelijk bij personenauto's"
                         }
                         className="px-3 py-2.5 text-xs font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                         style={{
