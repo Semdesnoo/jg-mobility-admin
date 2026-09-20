@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import Image from "next/image";
 import {
   ArrowLeftRight, Archive, Car, Check, ClipboardCopy, RotateCcw, Search, Tag, FolderPlus, Wallet,
 } from "lucide-react";
@@ -47,6 +48,7 @@ type VoorraadAuto = {
   verkocht?: boolean;
   gereserveerd?: boolean;
   kenteken?: string;
+  fotos?: string[];
 };
 
 /** Wat de marge-calculator van onze eigen auto's weet: wat hij kostte en wat erin ging. */
@@ -763,7 +765,7 @@ export default function InruilContent({
         })}
       </nav>
 
-      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1500, margin: "0 auto" }}>
+      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1360, margin: "0 auto" }}>
         {tab === "archief" ? (
           <InruilArchiefTab
             rijen={archief}
@@ -1113,42 +1115,58 @@ export default function InruilContent({
             meta={gekozen ? undefined : `${beschikbaar.length} in voorraad`}
           >
             {autos.length > 6 && (
-              <div className="mb-3">
+              <div className="mb-3 relative">
+                <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.ink(0.3), pointerEvents: "none" }} />
                 <input
                   type="text"
                   value={zoek}
                   onChange={(e) => setZoek(e.target.value)}
                   placeholder="Zoek in de voorraad…"
-                  style={inputStijl}
+                  style={{ ...inputStijl, paddingLeft: 32 }}
                 />
               </div>
             )}
 
             <div
-              className="flex flex-col"
-              style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${T.line}` }}
+              className="flex flex-col gap-1.5"
+              style={{ maxHeight: 288, overflowY: "auto", paddingRight: 2 }}
             >
               {beschikbaar.length === 0 && (
-                <p className="px-3 py-4" style={klein()}>
+                <p className="px-3 py-4 text-center" style={klein()}>
                   {autos.length === 0
                     ? "De voorraad is nog niet geladen."
                     : "Geen auto's gevonden — vul hieronder zelf een vraagprijs in."}
                 </p>
               )}
-              {beschikbaar.map((a, i) => {
+              {beschikbaar.map((a) => {
                 const actief = a.id === autoId;
+                const foto = a.fotos?.[0];
                 return (
                   <button
                     key={a.id}
                     type="button"
                     onClick={() => kiesAuto(a)}
-                    className="flex items-center gap-3 px-3 py-2.5 text-left transition-all hover:opacity-75"
+                    className="flex items-center gap-3 px-2.5 py-2 text-left transition-all"
                     style={{
-                      borderTop: i > 0 ? `1px solid ${T.line}` : undefined,
-                      backgroundColor: actief ? "rgba(0,19,55,0.05)" : "#ffffff",
-                      borderLeft: `3px solid ${actief ? T.navy : "transparent"}`,
+                      backgroundColor: actief ? "rgba(29,78,216,0.06)" : "#ffffff",
+                      border: `1px solid ${actief ? T.blauw : T.line}`,
+                      borderRadius: "var(--radius-control)",
                     }}
+                    onMouseEnter={(e) => { if (!actief) e.currentTarget.style.backgroundColor = "rgba(0,19,55,0.02)"; }}
+                    onMouseLeave={(e) => { if (!actief) e.currentTarget.style.backgroundColor = "#ffffff"; }}
                   >
+                    {/* Thumbnail */}
+                    <span
+                      className="relative flex-shrink-0 overflow-hidden flex items-center justify-center"
+                      style={{ width: 52, height: 38, backgroundColor: "#001337", borderRadius: 7 }}
+                    >
+                      {foto ? (
+                        <Image src={foto} alt="" fill sizes="52px" className="object-cover" />
+                      ) : (
+                        <Car size={14} style={{ color: "rgba(255,255,255,0.25)" }} />
+                      )}
+                    </span>
+                    {/* Naam + jaar/km */}
                     <span className="min-w-0 flex-1">
                       <span
                         className="block truncate"
@@ -1162,9 +1180,11 @@ export default function InruilContent({
                           .join(" · ")}
                       </span>
                     </span>
-                    <span className="flex-shrink-0" style={num(14)}>
+                    {/* Prijs */}
+                    <span className="flex-shrink-0 text-right" style={num(14)}>
                       {fmt(a.prijs)}
                     </span>
+                    {actief && <Check size={15} style={{ color: T.blauw, flexShrink: 0 }} />}
                   </button>
                 );
               })}
