@@ -712,26 +712,56 @@ function DashboardContent({
   // Prijs- en statusbewerking zitten in VoorraadTabel — hier alleen het totaal.
   const totaalWaarde = beschikbaar.reduce((s, a) => s + a.prijs, 0);
 
+  // Tijdsgebonden begroeting maakt van het Dashboard een echte startpagina.
+  const uur = new Date().getHours();
+  const groet = uur < 6 ? "Goedenacht" : uur < 12 ? "Goedemorgen" : uur < 18 ? "Goedemiddag" : "Goedenavond";
+  const vandaag = new Date().toLocaleDateString("nl-NL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        subtitle={`Laatste update: ${lastRefresh.toLocaleTimeString("nl-NL", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`}
-        action={
-          <a
-            href="https://www.jgmobility.nl/aanbod"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-all hover:opacity-70"
-            style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-          >
-            <ExternalLink size={12} /> Website
-          </a>
-        }
-      />
+      {/* Homepagina-hero: navy welkomstbalk met de dag en een korte stand van zaken. */}
+      <div
+        className="relative overflow-hidden px-4 md:px-8 py-7 md:py-9"
+        style={{ background: "linear-gradient(120deg,#001a4a 0%,#001337 60%,#000e29 100%)" }}
+      >
+        {/* zachte gloed rechtsboven */}
+        <div
+          aria-hidden
+          style={{ position: "absolute", top: -60, right: -40, width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)" }}
+        />
+        <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] tracking-[0.22em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-inter)" }}>
+              {vandaag}
+            </p>
+            <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight" style={{ fontFamily: "var(--font-playfair)" }}>
+              {groet}, Jimi
+            </h2>
+            <p className="text-sm mt-2" style={{ color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-inter)" }}>
+              {beschikbaar.length} {beschikbaar.length === 1 ? "auto" : "auto's"} in de etalage
+              {" · "}€{totaalWaarde.toLocaleString("nl-NL")} aan voorraad
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden md:inline text-[11px] mr-1" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-inter)" }}>
+              Bijgewerkt {lastRefresh.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            <a
+              href="https://www.jgmobility.nl/aanbod"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5"
+              style={{ backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "#ffffff", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}
+            >
+              <ExternalLink size={13} /> Website
+            </a>
+          </div>
+        </div>
+      </div>
 
       <div className="p-4 md:p-8 flex flex-col gap-5 md:gap-7">
         {/* Statistieken */}
