@@ -1,23 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Globe, Award, FolderOpen, Archive, Brain } from "lucide-react";
+import { Search, Archive, Brain } from "lucide-react";
 import { T, micro, num } from "./inkoop/ui";
 import type { InkoopDossier, PrestatiesData } from "./inkoop/types";
 import TaxatieTab from "./inkoop/TaxatieTab";
-import MarktTab from "./inkoop/MarktTab";
-import PrestatiesTab from "./inkoop/PrestatiesTab";
-import DossiersTab from "./inkoop/DossiersTab";
 import ArchiefTab from "./inkoop/ArchiefTab";
 import PrijsgeheugenTab from "./inkoop/PrijsgeheugenTab";
 
-type TabId = "taxatie" | "markt" | "prestaties" | "dossiers" | "archief" | "prijsgeheugen";
+type TabId = "taxatie" | "archief" | "prijsgeheugen";
 
 const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[] = [
   { id: "taxatie", label: "Taxatietool", Icon: Search, context: "Waardebepaling aan de stoeprand" },
-  { id: "markt", label: "Marktoverzicht", Icon: Globe, context: "Live marktbeeld Nederland" },
-  { id: "prestaties", label: "Prestaties", Icon: Award, context: "Wat verkoopt er bij JG Mobility" },
-  { id: "dossiers", label: "Dossiers", Icon: FolderOpen, context: "Lopende inkooptrajecten" },
   { id: "archief", label: "Archief", Icon: Archive, context: "Bewaarde analyses per kwartaal" },
   { id: "prijsgeheugen", label: "Prijsgeheugen", Icon: Brain, context: "Wat auto's in het echt deden" },
 ];
@@ -56,12 +50,13 @@ export default function InkoopContent({
   const open = dossiers?.filter((d) => d.status === "nieuw" || d.status === "in_onderhandeling").length ?? null;
   const actieveTab = TABS.find((t) => t.id === tab)!;
 
-  const kerncijfers: { label: string; waarde: string; onClick?: () => void }[] = [
-    { label: "Open dossiers", waarde: open === null ? "—" : String(open), onClick: () => setTab("dossiers") },
+  // Kerncijfers rechts in de kop — informatief, niet meer klikbaar (de tabbladen
+  // waar ze naartoe sprongen zijn weg).
+  const kerncijfers: { label: string; waarde: string }[] = [
+    { label: "Open dossiers", waarde: open === null ? "—" : String(open) },
     {
       label: "Voorraad",
       waarde: prestaties ? String(prestaties.kpis.actieve_voorraad) : "—",
-      onClick: () => setTab("prestaties"),
     },
     {
       label: "Gem. marge",
@@ -69,7 +64,6 @@ export default function InkoopContent({
         prestaties?.kpis.gem_marge != null
           ? `€ ${Math.round(prestaties.kpis.gem_marge).toLocaleString("nl-NL")}`
           : "—",
-      onClick: () => setTab("prestaties"),
     },
   ];
 
@@ -95,16 +89,14 @@ export default function InkoopContent({
           {/* Op smalle schermen is er geen ruimte voor drie cijfers mét label, en drie
               kale getallen zeggen niets — dan alleen het eerste, wél met label. */}
           {kerncijfers.map((k, i) => (
-            <button
+            <div
               key={k.label}
-              type="button"
-              onClick={k.onClick}
-              className={`${i > 0 ? "hidden sm:flex" : "flex"} flex-col items-end justify-center px-3 md:px-4 transition-all hover:opacity-60`}
+              className={`${i > 0 ? "hidden sm:flex" : "flex"} flex-col items-end justify-center px-3 md:px-4`}
               style={{ borderLeft: i > 0 ? `1px solid ${T.line}` : undefined }}
             >
               <span style={{ ...micro(T.ink(0.32)), fontSize: 8.5 }}>{k.label}</span>
               <span style={num(15)}>{k.waarde}</span>
-            </button>
+            </div>
           ))}
         </div>
       </header>
@@ -116,7 +108,6 @@ export default function InkoopContent({
       >
         {TABS.map(({ id, label, Icon }) => {
           const actief = tab === id;
-          const teller = id === "dossiers" ? dossiers?.length : undefined;
           return (
             <button
               key={id}
@@ -135,9 +126,6 @@ export default function InkoopContent({
             >
               <Icon size={13} />
               {label}
-              {teller != null && teller > 0 && (
-                <span style={{ ...micro(actief ? T.ink(0.45) : T.ink(0.28)), fontSize: 9 }}>{teller}</span>
-              )}
             </button>
           );
         })}
@@ -150,14 +138,8 @@ export default function InkoopContent({
             dossiers={dossiers}
             prestaties={prestaties}
             onOpgeslagen={laadDossiers}
-            onTab={setTab}
             startKenteken={kenteken}
           />
-        )}
-        {tab === "markt" && <MarktTab />}
-        {tab === "prestaties" && <PrestatiesTab data={prestaties} />}
-        {tab === "dossiers" && (
-          <DossiersTab dossiers={dossiers} herlaad={laadDossiers} onNieuweTaxatie={() => setTab("taxatie")} />
         )}
         {tab === "archief" && <ArchiefTab />}
         {tab === "prijsgeheugen" && <PrijsgeheugenTab />}

@@ -14,8 +14,6 @@ import { berekenKoerslijst, weging } from "./koerslijst";
 import { useAiTaak } from "../AiTaken";
 import type { InkoopDossier, PrestatiesData, RdwData, TaxatieResultaat, Vergelijkbaar } from "./types";
 
-type TabId = "taxatie" | "markt" | "prestaties" | "dossiers";
-
 /**
  * Wat de marktscan doet. Dit is bewust een beschrijving en géén afvinklijst:
  * de API meldt geen tussenstand, dus we weten niet welk platform op welk moment
@@ -79,13 +77,11 @@ export default function TaxatieTab({
   dossiers,
   prestaties,
   onOpgeslagen,
-  onTab,
   startKenteken,
 }: {
   dossiers: InkoopDossier[] | null;
   prestaties: PrestatiesData | null;
   onOpgeslagen: () => Promise<void> | void;
-  onTab: (tab: TabId) => void;
   /** Vanuit het aanvragenoverzicht doorgestuurd: begin met dit kenteken al opgezocht. */
   startKenteken?: string;
 }) {
@@ -678,11 +674,9 @@ export default function TaxatieTab({
           ) : (
             <div className="flex flex-col">
               {dossiers.slice(0, 5).map((d, i) => (
-                <button
+                <div
                   key={d.id}
-                  type="button"
-                  onClick={() => onTab("dossiers")}
-                  className="flex items-center justify-between gap-2 px-4 py-2 text-left transition-all hover:bg-gray-50"
+                  className="flex items-center justify-between gap-2 px-4 py-2 text-left"
                   style={{ borderTop: i > 0 ? `1px solid ${T.line}` : undefined }}
                 >
                   <span className="min-w-0">
@@ -694,7 +688,7 @@ export default function TaxatieTab({
                     </span>
                   </span>
                   {d.bod_prijs > 0 && <span style={num(13)}>{fmt(d.bod_prijs)}</span>}
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -1256,7 +1250,7 @@ export default function TaxatieTab({
                 title={rdw ? `${rdw.merk} bij JG Mobility` : "Uw beste merken"}
                 icon={<Info size={13} style={{ color: T.ink(0.35) }} />}
                 meta="uit eigen verkoopdata"
-                className="xl:col-span-7"
+                className="xl:col-span-12"
               >
                 {!prestaties ? (
                   <div className="flex flex-col gap-2">
@@ -1287,28 +1281,6 @@ export default function TaxatieTab({
                     </p>
                   </div>
                 )}
-              </Panel>
-
-              {/* Snelle sprong naar de andere tabbladen */}
-              <Panel title="Verder kijken" className="xl:col-span-5">
-                <div className="flex flex-col gap-2.5">
-                  {([
-                    { tab: "markt" as const, titel: "Marktoverzicht", tekst: "Welke modellen zijn nu hot en welke kunt u beter laten staan." },
-                    { tab: "prestaties" as const, titel: "Prestaties", tekst: "Wat verkoopt er bij u, per merk, brandstof en prijssegment." },
-                    { tab: "dossiers" as const, titel: "Dossiers", tekst: "Lopende inkooptrajecten opvolgen van nieuw tot akkoord." },
-                  ]).map((k) => (
-                    <button
-                      key={k.tab}
-                      type="button"
-                      onClick={() => onTab(k.tab)}
-                      className="text-left px-3.5 py-3 transition-all hover:bg-gray-50"
-                      style={{ border: `1px solid ${T.line}` }}
-                    >
-                      <p style={{ fontFamily: T.play, fontSize: 13.5, fontWeight: 700, color: T.navy }}>{k.titel}</p>
-                      <p className="mt-0.5" style={body(11.5, T.ink(0.45))}>{k.tekst}</p>
-                    </button>
-                  ))}
-                </div>
               </Panel>
             </div>
           </>
