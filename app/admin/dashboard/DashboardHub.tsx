@@ -850,15 +850,10 @@ const STATUS_BREEDTE = 230;
 /**
  * Breedte van de actiekolom, in de kop én in de rij hetzelfde.
  *
- * Hier ging het mis: de kop reserveerde 200 en de rij gebruikte minWidth 200, terwijl
- * Bewerken + Bekijk + Verwijder samen ruim 240 breed zijn. De rij werd daardoor breder
- * dan de kop, hield minder ruimte over voor de autonaam, en alles ernaast schoof naar
- * links weg onder de verkeerde kolomkop.
- *
- * LET OP: de rij zelf gebruikt hiervoor de klasse `md:w-[250px]`, omdat die breedte
- * daar alleen op desktop mag gelden. Verander je dit getal, verander die klasse dan mee.
+ * Drie icoonknoppen naast elkaar (verbergen, bewerken, verwijderen), elk ~38px
+ * plus de tussenruimte. Houd dit gelijk aan de klasse `md:w-[140px]` op de rij.
  */
-const ACTIE_BREEDTE = 288;
+const ACTIE_BREEDTE = 140;
 
 /** Kolommen mogen niet krimpen: doen ze dat wel, dan krimpen kop en rij verschillend
  *  (een kop als "STANDTIJD" is nu eenmaal breder dan "4 dgn") en loopt het scheef. */
@@ -867,19 +862,20 @@ const VAST = { flexShrink: 0 } as const;
 /** Sorteerbare kolomkop. Buiten de tabel gedefinieerd zodat React hem niet bij
  *  elke render als nieuw componenttype ziet (dat remount de hele kop). */
 function SorteerKop({
-  veld, label, actief, oplopend, rechts = false, onClick,
+  veld, label, actief, oplopend, rechts = false, midden = false, onClick,
 }: {
   veld: SorteerVeld;
   label: string;
   actief: boolean;
   oplopend: boolean;
   rechts?: boolean;
+  midden?: boolean;
   onClick: (veld: SorteerVeld) => void;
 }) {
   return (
     <button
       onClick={() => onClick(veld)}
-      className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider transition-all hover:opacity-70 ${rechts ? "ml-auto" : ""}`}
+      className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider transition-all hover:opacity-70 ${rechts ? "ml-auto" : ""} ${midden ? "mx-auto" : ""}`}
       style={{ color: actief ? "#001337" : "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}
     >
       {label}
@@ -1018,7 +1014,7 @@ function VoorraadTabel({
   };
 
   return (
-    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", boxShadow: "0 1px 2px rgba(0,19,55,0.04), 0 8px 24px -16px rgba(0,19,55,0.18)", overflow: "hidden" }}>
       {/* Zoeken + filteren — op het dashboard overbodig, daar is het een overzicht */}
       <div
         className={`px-4 py-3 flex-col md:flex-row md:items-center gap-3 ${compact ? "hidden" : "flex"}`}
@@ -1039,20 +1035,25 @@ function VoorraadTabel({
         </span>
       </div>
 
-      {/* Kolomkoppen — alleen op desktop, mobiel wordt het een lijst */}
+      {/* Kolomkoppen — alleen op desktop, mobiel wordt het een lijst.
+          De datakolommen (jaar t/m status) zijn gecentreerd en zitten in het midden:
+          na de auto-naam duwt een flex-spacer het datablok naar het midden, de acties
+          blijven rechts. */}
       <div
         className="hidden md:flex items-center gap-3 px-4 py-2"
         style={{ borderBottom: "1px solid rgba(0,19,55,0.07)", backgroundColor: "#fafbfc" }}
       >
         <div style={{ width: 48, ...VAST }} />
-        <div className="flex-1 min-w-0"><SorteerKop veld="auto" label="Auto" actief={sorteer === "auto"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 60, ...VAST }}><SorteerKop veld="bouwjaar" label="Jaar" actief={sorteer === "bouwjaar"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 90, ...VAST }}><SorteerKop veld="km" label="Km" actief={sorteer === "km"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 80, ...VAST }}><SorteerKop veld="standtijd" label="Standtijd" actief={sorteer === "standtijd"} oplopend={oplopend} onClick={sorteerOp} /></div>
-        <div style={{ width: 100, ...VAST }} className="flex"><SorteerKop veld="prijs" label="Prijs" actief={sorteer === "prijs"} oplopend={oplopend} onClick={sorteerOp} rechts /></div>
-        <div style={{ width: STATUS_BREEDTE, ...VAST }}>
+        <div style={{ width: 220, ...VAST }}><SorteerKop veld="auto" label="Auto" actief={sorteer === "auto"} oplopend={oplopend} onClick={sorteerOp} /></div>
+        <div className="flex-1" />
+        <div style={{ width: 64, ...VAST }} className="flex justify-center"><SorteerKop veld="bouwjaar" label="Jaar" actief={sorteer === "bouwjaar"} oplopend={oplopend} midden onClick={sorteerOp} /></div>
+        <div style={{ width: 90, ...VAST }} className="flex justify-center"><SorteerKop veld="km" label="Km" actief={sorteer === "km"} oplopend={oplopend} midden onClick={sorteerOp} /></div>
+        <div style={{ width: 84, ...VAST }} className="flex justify-center"><SorteerKop veld="standtijd" label="Standtijd" actief={sorteer === "standtijd"} oplopend={oplopend} midden onClick={sorteerOp} /></div>
+        <div style={{ width: 100, ...VAST }} className="flex justify-center"><SorteerKop veld="prijs" label="Prijs" actief={sorteer === "prijs"} oplopend={oplopend} midden onClick={sorteerOp} /></div>
+        <div style={{ width: STATUS_BREEDTE, ...VAST }} className="flex justify-center">
           <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Status</p>
         </div>
+        <div className="flex-1" />
         {!alleenLezen && <div style={{ width: ACTIE_BREEDTE, ...VAST }} />}
       </div>
 
@@ -1080,17 +1081,20 @@ function VoorraadTabel({
               className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-2.5 transition-all hover:bg-slate-50"
               style={{ borderBottom: "1px solid rgba(0,19,55,0.05)" }}
             >
-              {/* Foto */}
+              {/* Foto + naam. Op desktop lost md:contents de wrapper op zodat foto en
+                  naam directe flex-kinderen van de rij worden — gelijk aan de koprij. */}
               <div className="flex items-center gap-3 md:contents">
                 <div
                   className="relative flex-shrink-0 overflow-hidden"
-                  style={{ width: 48, height: 34, backgroundColor: "#001337", opacity: auto.verborgen ? 0.4 : 1, ...VAST }}
+                  style={{ width: 48, height: 34, backgroundColor: "#001337", borderRadius: 6, opacity: auto.verborgen ? 0.4 : 1, ...VAST }}
                 >
                   <Duimnagel src={auto.fotos?.[0]} />
                 </div>
 
-                {/* Naam — platte tekst; bewerken loopt via de knop rechts */}
-                <div className="flex-1 min-w-0">
+                {/* Naam — platte tekst; bewerken loopt via de knop rechts. Vaste breedte
+                    op desktop (gelijk aan de kop), zodat de datakolommen erna netjes
+                    uitlijnen. */}
+                <div className="flex-1 min-w-0 md:flex-none md:w-[220px]">
                   <p className="text-sm font-bold flex items-center gap-2 min-w-0" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
                     <span className="truncate" style={{ opacity: auto.verborgen ? 0.45 : 1 }}>
                       {auto.merk} {auto.model}
@@ -1123,28 +1127,31 @@ function VoorraadTabel({
                 </div>
               </div>
 
-              {/* Kolommen — desktop */}
-              <p className="hidden md:block text-xs" style={{ width: 60, ...VAST, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+              {/* Spacer duwt het datablok naar het midden (desktop). */}
+              <div className="hidden md:block flex-1" />
+
+              {/* Kolommen — desktop, gecentreerd en op dezelfde breedtes als de kop */}
+              <p className="hidden md:block text-xs text-center" style={{ width: 64, ...VAST, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
                 {auto.bouwjaar}
               </p>
-              <p className="hidden md:block text-xs" style={{ width: 90, ...VAST, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
+              <p className="hidden md:block text-xs text-center" style={{ width: 90, ...VAST, color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
                 {auto.km.toLocaleString("nl-NL")}
               </p>
               <p
-                className="hidden md:block text-xs font-semibold"
-                style={{ width: 80, ...VAST, color: lang ? "#b45309" : "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}
+                className="hidden md:block text-xs font-semibold text-center"
+                style={{ width: 84, ...VAST, color: lang ? "#b45309" : "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}
               >
                 {dagen != null ? `${dagen} dgn` : "—"}
               </p>
 
               {/* Prijs — bij een bedrijfswagen het bedrag zonder btw, net als op de website,
                   zodat je hier hetzelfde getal leest als wat de klant ziet. */}
-              <p className="hidden md:block text-sm font-bold text-right" style={{ width: 100, ...VAST, color: "#001337", fontFamily: "var(--font-playfair)" }}>
+              <p className="hidden md:block text-sm font-bold text-center" style={{ width: 100, ...VAST, color: "#001337", fontFamily: "var(--font-playfair)" }}>
                 {prijsTekst(auto.prijs, auto.prijsExclBtw)}
               </p>
 
               {/* Status — klikbaar: dit is de handeling die het vaakst nodig is */}
-              <div style={{ width: STATUS_BREEDTE, ...VAST }} className="hidden md:flex items-center gap-1">
+              <div style={{ width: STATUS_BREEDTE, ...VAST }} className="hidden md:flex items-center justify-center gap-1">
                 {alleenLezen ? (
                   <span
                     className="inline-block px-2 py-1 text-[10px] font-semibold uppercase tracking-wide"
@@ -1212,12 +1219,13 @@ function VoorraadTabel({
                 )}
               </div>
 
-              {/* Acties — één bewerkknop, die naar de bewerkpagina gaat.
-                  Alleen op desktop een vaste breedte: op mobiel staat de rij onder
-                  elkaar en zou die uitsteken. De 288 hieronder moet gelijk blijven aan
-                  ACTIE_BREEDTE in de kolomkop. */}
+              {/* Spacer tussen status en acties (desktop), zodat de acties rechts blijven. */}
+              <div className="hidden md:block flex-1" />
+
+              {/* Acties — icoonknoppen: verbergen, bewerken (potlood), verwijderen (prullenbak).
+                  Vaste breedte op desktop, gelijk aan ACTIE_BREEDTE in de kop. */}
               {!alleenLezen && (
-                <div className="flex items-center gap-1.5 flex-wrap w-full md:w-[288px] md:flex-none md:flex-nowrap md:justify-end">
+                <div className="flex items-center gap-1.5 flex-wrap w-full md:w-[140px] md:flex-none md:flex-nowrap md:justify-end">
                   {/* Uit de etalage halen. De auto blijft hier gewoon staan met al zijn
                       gegevens; alleen de website slaat hem over. */}
                   <button
@@ -1230,43 +1238,26 @@ function VoorraadTabel({
                         : "Staat op de website — klik om hem te verbergen"
                     }
                     aria-label={auto.verborgen ? "Weer op de website zetten" : "Verbergen van de website"}
-                    className="px-2 py-1.5 transition-all hover:opacity-70 disabled:opacity-40"
+                    className="inline-flex items-center justify-center transition-all hover:-translate-y-0.5 disabled:opacity-40"
                     style={{
+                      width: 38,
+                      height: 38,
                       border: `1px solid ${auto.verborgen ? "rgba(0,19,55,0.3)" : "rgba(0,19,55,0.15)"}`,
-                      backgroundColor: auto.verborgen ? "rgba(0,19,55,0.06)" : "transparent",
+                      backgroundColor: auto.verborgen ? "rgba(0,19,55,0.06)" : "#ffffff",
                       color: auto.verborgen ? "#001337" : "rgba(0,19,55,0.45)",
                     }}
                   >
-                    {auto.verborgen ? <EyeOff size={13} /> : <Eye size={13} />}
+                    {auto.verborgen ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                   <Link
                     href={`/admin/auto-bewerken/${auto.id}`}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-90"
-                    style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                    aria-label="Bewerken"
+                    title="Bewerken"
+                    className="inline-flex items-center justify-center transition-all hover:-translate-y-0.5"
+                    style={{ width: 38, height: 38, backgroundColor: "#001337", color: "#ffffff" }}
                   >
-                    <Pencil size={11} /> Bewerken
+                    <Pencil size={15} />
                   </Link>
-                  {/* Verborgen? Dan bestaat de pagina op de website niet meer, dus een
-                      link erheen zou je op een 404 zetten. */}
-                  {auto.verborgen ? (
-                    <span
-                      title="Deze auto staat niet op de website"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold cursor-not-allowed"
-                      style={{ border: "1px solid rgba(0,19,55,0.08)", color: "rgba(0,19,55,0.25)", fontFamily: "var(--font-inter)" }}
-                    >
-                      <Eye size={12} /> Bekijk
-                    </span>
-                  ) : (
-                    <a
-                      href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:opacity-70"
-                      style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
-                    >
-                      <Eye size={12} /> Bekijk
-                    </a>
-                  )}
                   <DeleteButton id={auto.id} naam={`${auto.merk} ${auto.model}`} />
                 </div>
               )}
@@ -1948,11 +1939,13 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
         action={
           <Link
             href="/admin/auto-toevoegen"
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-all duration-150 hover:-translate-y-0.5"
             style={{
               backgroundColor: "#001337",
               color: "#ffffff",
               fontFamily: "var(--font-inter)",
+              borderRadius: "var(--radius-control)",
+              boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)",
             }}
           >
             <Plus size={14} /> Nieuwe auto
@@ -1988,6 +1981,7 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
                   style={{
                     backgroundColor: actief ? "rgba(255,255,255,0.18)" : "rgba(0,19,55,0.06)",
                     color: actief ? "#ffffff" : "rgba(0,19,55,0.5)",
+                    borderRadius: 999,
                   }}
                 >
                   {w.aantal}

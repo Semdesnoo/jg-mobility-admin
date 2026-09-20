@@ -33,15 +33,18 @@ export default function DeleteButton({ id, naam }: { id: number; naam: string })
       onClick={handleDelete}
       aria-label={`${naam} verwijderen`}
       title="Verwijderen"
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wide transition-all hover:-translate-y-0.5"
+      className="inline-flex items-center justify-center transition-all hover:-translate-y-0.5"
       style={{
+        width: 38,
+        height: 38,
         border: "1px solid rgba(220,38,38,0.3)",
         color: "#dc2626",
-        fontFamily: "var(--font-inter)",
+        backgroundColor: "#ffffff",
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fef2f2"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#ffffff"; }}
     >
-      <Trash2 size={13} />
-      Verwijder
+      <Trash2 size={15} />
     </button>
   );
 }
