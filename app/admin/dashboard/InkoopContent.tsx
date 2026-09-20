@@ -135,7 +135,6 @@ export default function InkoopContent({
       <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1800, margin: "0 auto" }}>
         {tab === "taxatie" && (
           <TaxatieTab
-            dossiers={dossiers}
             prestaties={prestaties}
             onOpgeslagen={laadDossiers}
             startKenteken={kenteken}

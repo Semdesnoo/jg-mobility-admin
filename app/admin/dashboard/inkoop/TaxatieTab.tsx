@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
-  BarChart2, Check, Clock, Gauge, History, Info, Plus, RotateCcw, Search, X, ExternalLink,
+  BarChart2, Check, Clock, Gauge, Plus, RotateCcw, Search, X, ExternalLink,
 } from "lucide-react";
 import {
   T, num, micro, body, klein, fmt, fmtGetal, fmtKm, scoreKleur,
-  Panel, SectionRule, Meter, Pill,
+  Panel, Meter, Pill,
   Field, inputStijl, Btn, Chip, Spinner, Foutmelding, PanelVoet,
   Th, Td, TabelWrap, rijStijl,
 } from "./ui";
 import { berekenKoerslijst, weging } from "./koerslijst";
 import { useAiTaak } from "../AiTaken";
-import type { InkoopDossier, PrestatiesData, RdwData, TaxatieResultaat, Vergelijkbaar } from "./types";
+import type { PrestatiesData, RdwData, TaxatieResultaat, Vergelijkbaar } from "./types";
 
 /**
  * Wat de marktscan doet. Dit is bewust een beschrijving en géén afvinklijst:
@@ -74,12 +74,10 @@ function Verkoopbaarheid({ oordeel, reden }: { oordeel?: string; reden?: string 
 }
 
 export default function TaxatieTab({
-  dossiers,
   prestaties,
   onOpgeslagen,
   startKenteken,
 }: {
-  dossiers: InkoopDossier[] | null;
   prestaties: PrestatiesData | null;
   onOpgeslagen: () => Promise<void> | void;
   /** Vanuit het aanvragenoverzicht doorgestuurd: begin met dit kenteken al opgezocht. */
@@ -655,44 +653,6 @@ export default function TaxatieTab({
             </p>
           </div>
         </Panel>
-
-        {/* Rail-voet — houdt de onderkant gevuld met echte context */}
-        <Panel
-          title="Laatste taxaties"
-          icon={<History size={13} style={{ color: T.ink(0.35) }} />}
-          meta={dossiers ? `${dossiers.length} totaal` : undefined}
-          flush
-        >
-          {dossiers === null ? (
-            <div className="p-4 flex flex-col gap-2">
-              {[0, 1, 2].map((i) => <div key={i} className="animate-pulse" style={{ height: 14, backgroundColor: "rgba(0,19,55,0.06)" }} />)}
-            </div>
-          ) : dossiers.length === 0 ? (
-            <p className="p-4" style={body(11.5, T.ink(0.4))}>
-              Nog geen opgeslagen taxaties. Zodra u een analyse opslaat verschijnt die hier.
-            </p>
-          ) : (
-            <div className="flex flex-col">
-              {dossiers.slice(0, 5).map((d, i) => (
-                <div
-                  key={d.id}
-                  className="flex items-center justify-between gap-2 px-4 py-2 text-left"
-                  style={{ borderTop: i > 0 ? `1px solid ${T.line}` : undefined }}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate" style={{ fontFamily: T.inter, fontSize: 11.5, fontWeight: 600, color: T.navy }}>
-                      {d.merk} {d.model}
-                    </span>
-                    <span className="block truncate" style={klein(T.ink(0.35))}>
-                      {d.kenteken || d.datum}
-                    </span>
-                  </span>
-                  {d.bod_prijs > 0 && <span style={num(13)}>{fmt(d.bod_prijs)}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
       </aside>
 
       {/* ══ CANVAS ════════════════════════════════════════════════ */}
@@ -1207,83 +1167,6 @@ export default function TaxatieTab({
               rand wijken meer dan 25% van het gemiddelde af.
             </PanelVoet>
           </Panel>
-        )}
-
-        {/* ── Lege staat: leg de methode uit in plaats van wit te blijven ── */}
-        {!m && !laden && (
-          <>
-            <SectionRule label="Zo werkt de taxatie" right="JG koerslijst · versie 2" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[
-                {
-                  Icon: Search,
-                  titel: "1 · RDW-nieuwprijs",
-                  tekst:
-                    "Het kenteken levert merk, model, bouwjaar, brandstof en — belangrijk — de catalogusprijs waarmee de auto ooit is afgeleverd. Dat is het startpunt van de hele keten.",
-                },
-                {
-                  Icon: Gauge,
-                  titel: "2 · JG koerslijst",
-                  tekst:
-                    "Op die nieuwprijs gaat de Nederlandse afschrijvingscurve, gevolgd door een correctie voor de kilometerstand ten opzichte van de ruim 14.000 km per jaar die gemiddeld is. Dit rekenen we direct uit.",
-                },
-                {
-                  Icon: BarChart2,
-                  titel: "3 · Live marktscan",
-                  tekst:
-                    "Vervolgens zoeken we het werkelijke aanbod op Marktplaats, AutoScout24 en Gaspedaal. Hoe meer vergelijkbare advertenties er zijn, hoe zwaarder de live markt weegt ten opzichte van de koerslijst.",
-                },
-              ].map(({ Icon, titel, tekst }) => (
-                <Panel key={titel}>
-                  <Icon size={18} style={{ color: T.ink(0.3) }} />
-                  <p className="mt-3 mb-1.5" style={{ fontFamily: T.play, fontSize: 15, fontWeight: 700, color: T.navy }}>
-                    {titel}
-                  </p>
-                  <p style={body(12, T.ink(0.5))}>{tekst}</p>
-                </Panel>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-              {/* Eigen prestatiecontext — echte data, ook zonder taxatie */}
-              <Panel
-                title={rdw ? `${rdw.merk} bij JG Mobility` : "Uw beste merken"}
-                icon={<Info size={13} style={{ color: T.ink(0.35) }} />}
-                meta="uit eigen verkoopdata"
-                className="xl:col-span-12"
-              >
-                {!prestaties ? (
-                  <div className="flex flex-col gap-2">
-                    {[0, 1, 2].map((i) => <div key={i} className="animate-pulse" style={{ height: 16, backgroundColor: "rgba(0,19,55,0.06)" }} />)}
-                  </div>
-                ) : prestaties.merk_stats.length === 0 ? (
-                  <p style={body(12, T.ink(0.45))}>
-                    Nog geen verkoopdata. Zodra er auto&apos;s als verkocht zijn gemarkeerd verschijnt hier hoe elk
-                    merk het bij u doet.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
-                    {(eigenMerk ? [eigenMerk] : [...prestaties.merk_stats].sort((a, c) => c.verkocht - a.verkocht).slice(0, 5)).map((s) => (
-                      <div key={s.merk}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span style={{ fontFamily: T.play, fontSize: 13.5, fontWeight: 700, color: T.navy }}>{s.merk}</span>
-                          <span style={klein(T.ink(0.45))}>
-                            {s.verkocht} verkocht · {s.beschikbaar} op voorraad · gem. {fmt(s.gemPrijs)}
-                          </span>
-                        </div>
-                        <Meter value={s.verkoopPercentage} max={100} color={scoreKleur(s.verkoopPercentage, 100)} />
-                      </div>
-                    ))}
-                    <p className="mt-1" style={klein()}>
-                      {eigenMerk
-                        ? `U verkocht ${eigenMerk.verkocht} van de ${eigenMerk.totaal} ${eigenMerk.merk}'s die u had — dat is uw eigen doorloop op dit merk.`
-                        : "Vul een kenteken in om te zien hoe dat merk het bij u doet."}
-                    </p>
-                  </div>
-                )}
-              </Panel>
-            </div>
-          </>
         )}
 
         {/* Colofon */}
