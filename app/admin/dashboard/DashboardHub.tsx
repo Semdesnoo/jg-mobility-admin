@@ -41,6 +41,8 @@ import {
   FileSignature,
   ArrowLeftRight,
   Receipt,
+  Menu,
+  X,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -107,7 +109,7 @@ type IconProps = { size?: number; style?: React.CSSProperties; className?: strin
 type NavItem = { id: Tab; label: string; icon: React.ComponentType<IconProps> };
 
 // Menu gegroepeerd onder kopjes (zoals een dashboard met secties).
-// `icon` wordt gebruikt voor het vakje van de groep op het hub-startscherm.
+// `icon` blijft beschikbaar per groep; de items dragen hun eigen icoon in de zijbalk.
 const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: NavItem[] }[] = [
   {
     title: "Dashboard",
@@ -155,6 +157,10 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
   },
 ];
 
+// Platte tab→label map, afgeleid van NAV_GROUPS. Voedt de titel in de mobiele balk.
+const HUIDIGE_LABEL: Record<Tab, string> = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label])),
+) as Record<Tab, string>;
 
 function PageHeader({
   title,
@@ -314,25 +320,181 @@ function verzamelAandachtspunten(beschikbaar: Auto[]): Aandachtspunt[] {
 }
 
 
+// ── Zijbalk ─────────────────────────────────────────────────────
+// Eén navigatie voor het hele paneel: álle secties onder hun kopje.
+// Wordt hergebruikt door de vaste desktop-rail en de mobiele lade, zodat
+// er maar één bron van waarheid is en de twee nooit uit elkaar lopen.
+function Zijbalk({
+  tab,
+  onSelect,
+  onNotif,
+  refresh,
+  refreshing,
+  countdown,
+  lastRefresh,
+  onClose,
+}: {
+  tab: Tab;
+  onSelect: (id: Tab) => void;
+  onNotif: (t: Tab) => void;
+  refresh: () => void;
+  refreshing: boolean;
+  countdown: number;
+  lastRefresh: Date;
+  onClose?: () => void;
+}) {
+  return (
+    <div
+      className="flex flex-col h-full"
+      style={{ background: "linear-gradient(180deg,#001a4a 0%,#001337 55%,#000e29 100%)" }}
+    >
+      {/* Kop — logo links, meldingen (+ sluitknop op mobiel) rechts */}
+      <div
+        className="px-5 pt-5 pb-4 flex items-start justify-between"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+      >
+        <div>
+          <p
+            className="text-[9px] tracking-[0.22em] uppercase mb-1.5"
+            style={{ color: "rgba(255,255,255,0.32)", fontFamily: "var(--font-inter)" }}
+          >
+            Beheer
+          </p>
+          <h1
+            className="text-xl font-bold text-white leading-none"
+            style={{ fontFamily: "var(--font-playfair)" }}
+          >
+            JG Mobility
+          </h1>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <MeldingenBel onGaNaar={onNotif} />
+          {onClose && (
+            <button
+              onClick={onClose}
+              aria-label="Menu sluiten"
+              className="md:hidden flex items-center justify-center transition-colors"
+              style={{
+                width: 34,
+                height: 34,
+                color: "rgba(255,255,255,0.6)",
+                backgroundColor: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: "var(--radius-control)",
+              }}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Navigatie — alle groepen zichtbaar */}
+      <nav className="flex-1 py-3 px-3 overflow-y-auto jg-scroll-dark">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} className="mb-3">
+            <p
+              className="px-2 pt-2 pb-1.5 text-[9px] font-semibold tracking-[0.18em] uppercase"
+              style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}
+            >
+              {group.title}
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {group.items.map(({ id, label, icon: Icon }) => {
+                const actief = tab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onSelect(id)}
+                    className="relative w-full flex items-center gap-3 pl-3 pr-2.5 py-2 text-[13px] text-left transition-colors duration-150"
+                    style={{
+                      fontFamily: "var(--font-inter)",
+                      color: actief ? "#ffffff" : "rgba(255,255,255,0.5)",
+                      backgroundColor: actief ? "rgba(255,255,255,0.1)" : "transparent",
+                      borderRadius: "var(--radius-control)",
+                      fontWeight: actief ? 600 : 500,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!actief) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!actief) e.currentTarget.style.backgroundColor = "transparent";
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        width: 3,
+                        height: actief ? 18 : 0,
+                        borderRadius: 999,
+                        backgroundColor: "#ffffff",
+                        transition: "height 150ms ease",
+                      }}
+                    />
+                    <Icon size={15} style={{ opacity: actief ? 1 : 0.85, flexShrink: 0 }} />
+                    <span className="truncate">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Voettekst — verversstatus + uitloggen */}
+      <div className="px-4 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+        <button
+          onClick={refresh}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 mb-2.5 text-[11px] transition-opacity hover:opacity-70"
+          style={{ color: "rgba(255,255,255,0.34)", fontFamily: "var(--font-inter)" }}
+        >
+          <RefreshCw size={10} className={refreshing ? "animate-spin" : ""} />
+          {refreshing
+            ? "Verversen..."
+            : `${countdown}s · ${lastRefresh.toLocaleTimeString("nl-NL", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`}
+        </button>
+        <form action="/api/admin/logout" method="POST">
+          <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium transition-colors duration-150"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.06)",
+              color: "rgba(255,255,255,0.55)",
+              fontFamily: "var(--font-inter)",
+              borderRadius: "var(--radius-control)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.11)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)")}
+          >
+            <LogOut size={12} />
+            Uitloggen
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
 export default function DashboardHub() {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [hubOpen, setHubOpen] = useState(true);
-  // Welke hub-groep is gekozen — de zijbalk toont alleen de items van deze groep.
-  // Terug naar de hub om een andere groep te openen.
-  const [groep, setGroep] = useState<string>(NAV_GROUPS[0].title);
-  const actieveGroep = NAV_GROUPS.find((g) => g.title === groep) ?? NAV_GROUPS[0];
+  // Mobiel: de zijbalk zit standaard verstopt en schuift als lade open.
+  // Op desktop staat de zijbalk altijd vast; deze vlag doet daar niets.
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const openGroep = (titel: string, eersteTab: Tab) => {
-    setGroep(titel);
-    setTab(eersteTab);
-    setHubOpen(false);
-  };
-
-  // Spring naar een tab én zet de zijbalk op de groep waar die tab in zit.
-  // Zonder dat laatste toont het menu een andere sectie dan de pagina die openstaat.
-  // Optioneel focus-doel: naar welk dossier of welke auto de bestemming moet
-  // springen. Zo brengt een knop op de ene pagina je rechtstreeks naar de plek
-  // op de andere pagina waar je iets moet aanpassen, in plaats van naar een lijst.
+  // Spring naar een tab, optioneel met een focus-doel: naar welk dossier of welke
+  // auto de bestemming moet springen. Zo brengt een knop op de ene pagina je
+  // rechtstreeks naar de plek op de andere pagina waar je iets moet aanpassen,
+  // in plaats van naar een kale lijst.
   const [navFocus, setNavFocus] = useState<{
     dossierId?: number;
     autoId?: number;
@@ -340,11 +502,9 @@ export default function DashboardHub() {
     kenteken?: string;
   } | null>(null);
   const gaNaarTab = (doel: Tab, focus?: { dossierId?: number; autoId?: number; kenteken?: string }) => {
-    const groepVanTab = NAV_GROUPS.find((g) => g.items.some((i) => i.id === doel));
-    if (groepVanTab) setGroep(groepVanTab.title);
     setTab(doel);
     setNavFocus(focus ?? null);
-    setHubOpen(false);
+    setMenuOpen(false);
   };
   const [autos, setAutos] = useState<Auto[]>([]);
   // Begint op true: de eerste lading loopt al vanaf de eerste render mee, dus de
@@ -401,195 +561,75 @@ export default function DashboardHub() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#eef1f5" }}>
-      {/* ── Zijbalk (alleen desktop) ──
-          Toont álle secties tegelijk (een echt dashboard-menu), niet één groep
-          per keer. Klik op een item opent de tab én zet meteen de juiste groep,
-          zodat de mobiele balk en de hub in sync blijven. */}
+      {/* ── Zijbalk desktop: vast, altijd zichtbaar ── */}
       <aside
-        className="hidden md:flex flex-col flex-shrink-0"
-        style={{
-          width: "244px",
-          background: "linear-gradient(180deg,#001a4a 0%,#001337 55%,#000e29 100%)",
-          height: "100vh",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-        }}
+        className="hidden md:block flex-shrink-0"
+        style={{ width: "244px", height: "100vh", borderRight: "1px solid rgba(255,255,255,0.06)" }}
       >
-        {/* Logo */}
-        <div className="px-6 pt-6 pb-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-          <p
-            className="text-[9px] tracking-[0.22em] uppercase mb-1.5"
-            style={{ color: "rgba(255,255,255,0.32)", fontFamily: "var(--font-inter)" }}
-          >
-            Beheer
-          </p>
-          <h1
-            className="text-xl font-bold text-white leading-none"
-            style={{ fontFamily: "var(--font-playfair)" }}
-          >
-            JG Mobility
-          </h1>
-        </div>
-
-        {/* Hub-knop */}
-        <div className="px-3 pt-3 pb-1">
-          <button
-            onClick={() => setHubOpen(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors duration-150"
-            style={{
-              fontFamily: "var(--font-inter)",
-              color: "rgba(255,255,255,0.7)",
-              backgroundColor: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.09)",
-              borderRadius: "var(--radius-control)",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.11)")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)")}
-          >
-            <LayoutGrid size={15} />
-            <span className="font-medium">Hub</span>
-          </button>
-        </div>
-
-        {/* Navigatie — alle groepen zichtbaar */}
-        <nav className="flex-1 py-2 px-3 overflow-y-auto jg-scroll-dark">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.title} className="mb-3">
-              <p
-                className="px-2 pt-2 pb-1.5 text-[9px] font-semibold tracking-[0.18em] uppercase"
-                style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}
-              >
-                {group.title}
-              </p>
-              <div className="flex flex-col gap-0.5">
-                {group.items.map(({ id, label, icon: Icon }) => {
-                  const actief = tab === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => {
-                        setGroep(group.title);
-                        setTab(id);
-                      }}
-                      className="group/nav relative w-full flex items-center gap-3 pl-3 pr-2.5 py-2 text-[13px] text-left transition-colors duration-150"
-                      style={{
-                        fontFamily: "var(--font-inter)",
-                        color: actief ? "#ffffff" : "rgba(255,255,255,0.5)",
-                        backgroundColor: actief ? "rgba(255,255,255,0.1)" : "transparent",
-                        borderRadius: "var(--radius-control)",
-                        fontWeight: actief ? 600 : 500,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!actief) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!actief) e.currentTarget.style.backgroundColor = "transparent";
-                      }}
-                    >
-                      {/* Actief-indicator links */}
-                      <span
-                        aria-hidden
-                        style={{
-                          position: "absolute",
-                          left: 0,
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          width: 3,
-                          height: actief ? 18 : 0,
-                          borderRadius: 999,
-                          backgroundColor: "#ffffff",
-                          transition: "height 150ms ease",
-                        }}
-                      />
-                      <Icon size={15} style={{ opacity: actief ? 1 : 0.85, flexShrink: 0 }} />
-                      <span className="truncate">{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* Voettekst */}
-        <div className="px-4 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-          <button
-            onClick={refresh}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 mb-2.5 text-[11px] transition-opacity hover:opacity-70"
-            style={{ color: "rgba(255,255,255,0.34)", fontFamily: "var(--font-inter)" }}
-          >
-            <RefreshCw size={10} className={refreshing ? "animate-spin" : ""} />
-            {refreshing
-              ? "Verversen..."
-              : `${countdown}s · ${lastRefresh.toLocaleTimeString("nl-NL", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}`}
-          </button>
-          <form action="/api/admin/logout" method="POST">
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium transition-colors duration-150"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.55)",
-                fontFamily: "var(--font-inter)",
-                borderRadius: "var(--radius-control)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.11)")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)")}
-            >
-              <LogOut size={12} />
-              Uitloggen
-            </button>
-          </form>
-        </div>
+        <Zijbalk
+          tab={tab}
+          onSelect={(id) => setTab(id)}
+          onNotif={gaNaarTab}
+          refresh={refresh}
+          refreshing={refreshing}
+          countdown={countdown}
+          lastRefresh={lastRefresh}
+        />
       </aside>
+
+      {/* ── Zijbalk mobiel: lade die over de inhoud schuift ── */}
+      {menuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Verduistering achter de lade — klik sluit */}
+          <button
+            aria-label="Menu sluiten"
+            onClick={() => setMenuOpen(false)}
+            className="absolute inset-0"
+            style={{ backgroundColor: "rgba(0,8,25,0.5)", backdropFilter: "blur(2px)" }}
+          />
+          <aside className="relative w-[80%] max-w-[300px] h-full shadow-2xl">
+            <Zijbalk
+              tab={tab}
+              onSelect={(id) => {
+                setTab(id);
+                setMenuOpen(false);
+              }}
+              onNotif={gaNaarTab}
+              refresh={refresh}
+              refreshing={refreshing}
+              countdown={countdown}
+              lastRefresh={lastRefresh}
+              onClose={() => setMenuOpen(false)}
+            />
+          </aside>
+        </div>
+      )}
 
       {/* ── Hoofdinhoud ── */}
       <main className="flex-1 overflow-y-auto jg-scroll">
-        {/* Mobiel: terug naar de hub + de items van de gekozen groep
-            (op mobiel is er geen zijbalk, dus die items horen hier) */}
+        {/* Mobiel: slanke balk met hamburger die de zijbalk-lade opent. */}
         <div
-          className={`md:hidden sticky top-0 z-20 ${hubOpen ? "hidden" : "block"}`}
-          style={{ backgroundColor: "#001337" }}
+          className="md:hidden sticky top-0 z-30 flex items-center gap-3 px-4"
+          style={{ height: "54px", backgroundColor: "#001337", borderBottom: "1px solid rgba(255,255,255,0.08)" }}
         >
-          <div className="flex items-center gap-3 px-4" style={{ height: "52px" }}>
-            <button
-              onClick={() => setHubOpen(true)}
-              className="flex items-center gap-1.5 text-sm transition-all hover:opacity-70"
-              style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-inter)" }}
-            >
-              ← Hub
-            </button>
-            <span className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-inter)" }}>
-              {actieveGroep.title}
-            </span>
-          </div>
-          {actieveGroep.items.length > 1 && (
-            <div
-              className="flex items-center gap-1 px-3 pb-2 overflow-x-auto"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: "8px" }}
-            >
-              {actieveGroep.items.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all"
-                  style={{
-                    fontFamily: "var(--font-inter)",
-                    color: tab === id ? "#001337" : "rgba(255,255,255,0.55)",
-                    backgroundColor: tab === id ? "#ffffff" : "rgba(255,255,255,0.07)",
-                    borderRadius: 999,
-                  }}
-                >
-                  <Icon size={12} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
+          <button
+            onClick={() => setMenuOpen(true)}
+            aria-label="Menu openen"
+            className="flex items-center justify-center transition-opacity hover:opacity-80"
+            style={{
+              width: 36,
+              height: 36,
+              color: "#ffffff",
+              backgroundColor: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "var(--radius-control)",
+            }}
+          >
+            <Menu size={18} />
+          </button>
+          <span className="text-sm font-semibold text-white truncate" style={{ fontFamily: "var(--font-inter)" }}>
+            {HUIDIGE_LABEL[tab] ?? "JG Mobility"}
+          </span>
         </div>
         {tab === "dashboard" && (
           <DashboardContent
@@ -645,121 +685,6 @@ export default function DashboardHub() {
           </div>
         )}
       </main>
-
-      {/* ── Hub (full-screen startscherm, mobiel én desktop) ── */}
-      {hubOpen && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
-          style={{ backgroundColor: "#001337" }}
-        >
-          {/* Bovenbalk — logo links, uitloggen rechts */}
-          <div className="flex-shrink-0 px-5 md:px-10 pt-7 md:pt-8 pb-4 flex items-center justify-between">
-            <div>
-              <p className="text-[9px] tracking-widest uppercase mb-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}>
-                Beheer
-              </p>
-              <h1 className="text-xl md:text-2xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
-                JG Mobility
-              </h1>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <MeldingenBel onGaNaar={gaNaarTab} />
-              <form action="/api/admin/logout" method="POST">
-                <button
-                  type="submit"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all hover:opacity-80"
-                  style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)", border: "1px solid rgba(255,255,255,0.1)" }}
-                >
-                  <LogOut size={11} />
-                  Uitloggen
-                </button>
-              </form>
-            </div>
-          </div>
-
-          {/* Midden — vakjes gecentreerd op het scherm */}
-          <div className="flex-1 flex items-center justify-center px-5 md:px-10 py-8">
-            <div className="w-full max-w-3xl">
-              <p
-                className="text-center text-[10px] md:text-[11px] tracking-widest uppercase mb-6 md:mb-8"
-                style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}
-              >
-                Waar wil je heen?
-              </p>
-
-              {/* Hoofdkopjes als vakjes — klik opent die sectie met het menu links */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
-                {NAV_GROUPS.map((group) => {
-                  const Icon = group.icon;
-                  return (
-                    <button
-                      key={group.title}
-                      onClick={() => openGroep(group.title, group.items[0].id)}
-                      className="group flex flex-col items-center justify-center gap-3 md:gap-4 py-7 md:py-9 px-3 transition-all duration-200 active:scale-95 hover:-translate-y-1"
-                      style={{
-                        backgroundColor: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        borderRadius: "var(--radius-card)",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.09)";
-                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
-                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
-                      }}
-                    >
-                      {/* Icoonvlak */}
-                      <div
-                        className="flex items-center justify-center transition-all"
-                        style={{
-                          width: 56,
-                          height: 56,
-                          backgroundColor: "rgba(255,255,255,0.08)",
-                          border: "1px solid rgba(255,255,255,0.14)",
-                          borderRadius: "var(--radius-control)",
-                        }}
-                      >
-                        <Icon size={26} style={{ color: "#ffffff" }} />
-                      </div>
-                      {/* Titel onder het icoon */}
-                      <p
-                        className="text-xs md:text-sm font-semibold leading-tight text-center text-white"
-                        style={{ fontFamily: "var(--font-inter)" }}
-                      >
-                        {group.title}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Snelle stats — slanke regel onder de vakjes */}
-              <div className="mt-8 md:mt-10 flex items-center justify-center">
-                {[
-                  { label: "Beschikbaar", value: beschikbaar.length },
-                  { label: "Verkocht", value: verkocht.length },
-                  { label: "Totaal", value: autos.length },
-                ].map((s, i) => (
-                  <div
-                    key={s.label}
-                    className="px-6 md:px-9 text-center"
-                    style={{ borderLeft: i === 0 ? "none" : "1px solid rgba(255,255,255,0.1)" }}
-                  >
-                    <p className="text-xl md:text-2xl font-bold text-white" style={{ fontFamily: "var(--font-playfair)" }}>
-                      {s.value}
-                    </p>
-                    <p className="text-[9px] md:text-[10px] tracking-wider uppercase mt-0.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-inter)" }}>
-                      {s.label}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
