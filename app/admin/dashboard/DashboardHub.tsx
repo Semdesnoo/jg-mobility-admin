@@ -168,7 +168,12 @@ function PageHeader({
   return (
     <div
       className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between relative md:sticky md:top-0 z-10"
-      style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
+      style={{
+        backgroundColor: "rgba(255,255,255,0.85)",
+        backdropFilter: "saturate(180%) blur(10px)",
+        WebkitBackdropFilter: "saturate(180%) blur(10px)",
+        borderBottom: "1px solid rgba(0,19,55,0.08)",
+      }}
     >
       <div className="min-w-0">
         <h2
@@ -208,16 +213,28 @@ function StatCard({
 }) {
   return (
     <div
-      className="relative p-5 md:p-6 overflow-hidden transition-all duration-200 hover:-translate-y-0.5"
+      className="group relative p-5 md:p-6 overflow-hidden transition-all duration-200 hover:-translate-y-0.5"
       style={{
         backgroundColor: "#ffffff",
         border: "1px solid rgba(0,19,55,0.07)",
-        boxShadow: "0 1px 3px rgba(0,19,55,0.05)",
+        borderRadius: "var(--radius-card)",
+        boxShadow: "0 1px 2px rgba(0,19,55,0.04), 0 8px 24px -16px rgba(0,19,55,0.18)",
       }}
     >
-      {/* accentstreep links */}
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: accent }} />
-      <div className="flex items-start justify-between gap-2 mb-3">
+      {/* zachte accentgloed rechtsboven */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: -30,
+          right: -30,
+          width: 90,
+          height: 90,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${accent}12 0%, transparent 70%)`,
+        }}
+      />
+      <div className="relative flex items-start justify-between gap-2 mb-3">
         <p
           className="text-[11px] font-semibold uppercase tracking-wider"
           style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}
@@ -227,14 +244,14 @@ function StatCard({
         {Icon && (
           <div
             className="flex items-center justify-center flex-shrink-0"
-            style={{ width: 30, height: 30, backgroundColor: `${accent}14`, borderRadius: 8 }}
+            style={{ width: 32, height: 32, backgroundColor: `${accent}14`, borderRadius: 9 }}
           >
             <Icon size={15} style={{ color: accent }} />
           </div>
         )}
       </div>
       <p
-        className="text-2xl md:text-[28px] font-bold leading-none"
+        className="relative text-2xl md:text-[28px] font-bold leading-none"
         style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}
       >
         {value}
@@ -383,78 +400,123 @@ export default function DashboardHub() {
   const verkocht = autos.filter((a) => a.verkocht);
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#f0f2f5" }}>
-      {/* ── Zijbalk (alleen desktop) ── */}
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#eef1f5" }}>
+      {/* ── Zijbalk (alleen desktop) ──
+          Toont álle secties tegelijk (een echt dashboard-menu), niet één groep
+          per keer. Klik op een item opent de tab én zet meteen de juiste groep,
+          zodat de mobiele balk en de hub in sync blijven. */}
       <aside
         className="hidden md:flex flex-col flex-shrink-0"
-        style={{ width: "220px", backgroundColor: "#001337", height: "100vh" }}
+        style={{
+          width: "244px",
+          background: "linear-gradient(180deg,#001a4a 0%,#001337 55%,#000e29 100%)",
+          height: "100vh",
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+        }}
       >
         {/* Logo */}
-        <div className="px-6 py-6" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="px-6 pt-6 pb-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <p
-            className="text-[9px] tracking-widest uppercase mb-1.5"
-            style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-inter)" }}
+            className="text-[9px] tracking-[0.22em] uppercase mb-1.5"
+            style={{ color: "rgba(255,255,255,0.32)", fontFamily: "var(--font-inter)" }}
           >
             Beheer
           </p>
           <h1
-            className="text-xl font-bold text-white"
+            className="text-xl font-bold text-white leading-none"
             style={{ fontFamily: "var(--font-playfair)" }}
           >
             JG Mobility
           </h1>
         </div>
 
-        {/* Navigatie */}
-        <nav className="flex-1 py-3 overflow-y-auto">
-          {/* Terug naar het hub-startscherm */}
+        {/* Hub-knop */}
+        <div className="px-3 pt-3 pb-1">
           <button
             onClick={() => setHubOpen(true)}
-            className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-left transition-all hover:opacity-80"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors duration-150"
             style={{
               fontFamily: "var(--font-inter)",
-              color: "rgba(255,255,255,0.55)",
-              backgroundColor: "rgba(255,255,255,0.05)",
-              borderLeft: "2px solid transparent",
+              color: "rgba(255,255,255,0.7)",
+              backgroundColor: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: "var(--radius-control)",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.11)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)")}
           >
             <LayoutGrid size={15} />
-            Hub
+            <span className="font-medium">Hub</span>
           </button>
-          {/* Alleen de gekozen groep — via de hub wissel je van groep */}
-          <div className="mb-1.5">
-            <p
-              className="px-5 pt-3 pb-1 text-[9px] font-semibold tracking-widest uppercase"
-              style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-inter)" }}
-            >
-              {actieveGroep.title}
-            </p>
-            {actieveGroep.items.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-left transition-all"
-                style={{
-                  fontFamily: "var(--font-inter)",
-                  color: tab === id ? "#ffffff" : "rgba(255,255,255,0.42)",
-                  backgroundColor: tab === id ? "rgba(255,255,255,0.09)" : "transparent",
-                  borderLeft: `2px solid ${tab === id ? "#ffffff" : "transparent"}`,
-                }}
+        </div>
+
+        {/* Navigatie — alle groepen zichtbaar */}
+        <nav className="flex-1 py-2 px-3 overflow-y-auto jg-scroll-dark">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title} className="mb-3">
+              <p
+                className="px-2 pt-2 pb-1.5 text-[9px] font-semibold tracking-[0.18em] uppercase"
+                style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}
               >
-                <Icon size={15} />
-                {label}
-              </button>
-            ))}
-          </div>
+                {group.title}
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {group.items.map(({ id, label, icon: Icon }) => {
+                  const actief = tab === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => {
+                        setGroep(group.title);
+                        setTab(id);
+                      }}
+                      className="group/nav relative w-full flex items-center gap-3 pl-3 pr-2.5 py-2 text-[13px] text-left transition-colors duration-150"
+                      style={{
+                        fontFamily: "var(--font-inter)",
+                        color: actief ? "#ffffff" : "rgba(255,255,255,0.5)",
+                        backgroundColor: actief ? "rgba(255,255,255,0.1)" : "transparent",
+                        borderRadius: "var(--radius-control)",
+                        fontWeight: actief ? 600 : 500,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!actief) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!actief) e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      {/* Actief-indicator links */}
+                      <span
+                        aria-hidden
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          width: 3,
+                          height: actief ? 18 : 0,
+                          borderRadius: 999,
+                          backgroundColor: "#ffffff",
+                          transition: "height 150ms ease",
+                        }}
+                      />
+                      <Icon size={15} style={{ opacity: actief ? 1 : 0.85, flexShrink: 0 }} />
+                      <span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Voettekst */}
-        <div className="px-5 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="px-4 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
           <button
             onClick={refresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 mb-3 text-[11px] transition-all hover:opacity-70"
-            style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}
+            className="flex items-center gap-1.5 mb-2.5 text-[11px] transition-opacity hover:opacity-70"
+            style={{ color: "rgba(255,255,255,0.34)", fontFamily: "var(--font-inter)" }}
           >
             <RefreshCw size={10} className={refreshing ? "animate-spin" : ""} />
             {refreshing
@@ -467,12 +529,16 @@ export default function DashboardHub() {
           <form action="/api/admin/logout" method="POST">
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium transition-all hover:opacity-70"
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium transition-colors duration-150"
               style={{
-                backgroundColor: "rgba(255,255,255,0.07)",
-                color: "rgba(255,255,255,0.45)",
+                backgroundColor: "rgba(255,255,255,0.06)",
+                color: "rgba(255,255,255,0.55)",
                 fontFamily: "var(--font-inter)",
+                borderRadius: "var(--radius-control)",
+                border: "1px solid rgba(255,255,255,0.08)",
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.11)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)")}
             >
               <LogOut size={12} />
               Uitloggen
@@ -482,7 +548,7 @@ export default function DashboardHub() {
       </aside>
 
       {/* ── Hoofdinhoud ── */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto jg-scroll">
         {/* Mobiel: terug naar de hub + de items van de gekozen groep
             (op mobiel is er geen zijbalk, dus die items horen hier) */}
         <div
@@ -515,6 +581,7 @@ export default function DashboardHub() {
                     fontFamily: "var(--font-inter)",
                     color: tab === id ? "#001337" : "rgba(255,255,255,0.55)",
                     backgroundColor: tab === id ? "#ffffff" : "rgba(255,255,255,0.07)",
+                    borderRadius: 999,
                   }}
                 >
                   <Icon size={12} />
@@ -628,10 +695,19 @@ export default function DashboardHub() {
                     <button
                       key={group.title}
                       onClick={() => openGroep(group.title, group.items[0].id)}
-                      className="group flex flex-col items-center justify-center gap-3 md:gap-4 py-7 md:py-9 px-3 transition-all active:scale-95 hover:-translate-y-1"
+                      className="group flex flex-col items-center justify-center gap-3 md:gap-4 py-7 md:py-9 px-3 transition-all duration-200 active:scale-95 hover:-translate-y-1"
                       style={{
                         backgroundColor: "rgba(255,255,255,0.05)",
                         border: "1px solid rgba(255,255,255,0.12)",
+                        borderRadius: "var(--radius-card)",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.09)";
+                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
+                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
                       }}
                     >
                       {/* Icoonvlak */}
@@ -642,6 +718,7 @@ export default function DashboardHub() {
                           height: 56,
                           backgroundColor: "rgba(255,255,255,0.08)",
                           border: "1px solid rgba(255,255,255,0.14)",
+                          borderRadius: "var(--radius-control)",
                         }}
                       >
                         <Icon size={26} style={{ color: "#ffffff" }} />
@@ -1279,7 +1356,7 @@ function Paneel({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", boxShadow: "0 1px 2px rgba(0,19,55,0.04), 0 8px 24px -16px rgba(0,19,55,0.18)", overflow: "hidden" }}>
       <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
         <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
           <Icon size={14} style={{ color: "#001337" }} />
@@ -1306,7 +1383,8 @@ function SnelleActies({ onTab }: { onTab: (t: Tab) => void }) {
   const stijl = {
     backgroundColor: "#ffffff",
     border: "1px solid rgba(0,19,55,0.07)",
-    boxShadow: "0 1px 3px rgba(0,19,55,0.05)",
+    borderRadius: "var(--radius-control)",
+    boxShadow: "0 1px 2px rgba(0,19,55,0.04), 0 8px 24px -16px rgba(0,19,55,0.18)",
     fontFamily: "var(--font-inter)",
     color: "#001337",
   };
@@ -1318,7 +1396,7 @@ function SnelleActies({ onTab }: { onTab: (t: Tab) => void }) {
           <Link
             key={label}
             href={href}
-            className="flex items-center gap-2.5 px-4 py-3 text-xs font-semibold transition-all hover:-translate-y-0.5"
+            className="flex items-center gap-2.5 px-4 py-3 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5"
             style={stijl}
           >
             <Icon size={14} style={{ color: "#1d4ed8" }} />
@@ -1328,7 +1406,7 @@ function SnelleActies({ onTab }: { onTab: (t: Tab) => void }) {
           <button
             key={label}
             onClick={actie}
-            className="flex items-center gap-2.5 px-4 py-3 text-xs font-semibold text-left transition-all hover:-translate-y-0.5"
+            className="flex items-center gap-2.5 px-4 py-3 text-xs font-semibold text-left transition-all duration-200 hover:-translate-y-0.5"
             style={stijl}
           >
             <Icon size={14} style={{ color: "#1d4ed8" }} />
@@ -4725,7 +4803,7 @@ function KentekenWidget() {
     : [];
 
   return (
-    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", boxShadow: "0 1px 2px rgba(0,19,55,0.04), 0 8px 24px -16px rgba(0,19,55,0.18)", overflow: "hidden" }}>
       <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
         <div className="flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: "rgba(0,19,55,0.06)", borderRadius: 7 }}>
           <Search size={14} style={{ color: "#001337" }} />

@@ -8,6 +8,9 @@
   --white: #ffffff;
   --gray-light: #f8f8f8;
   --gray: #9ca3af;
+  /* Eén afrondingsschaal voor het hele dashboard: kaarten zachter, knoppen iets strakker. */
+  --radius-card: 14px;
+  --radius-control: 10px;
 }
 
 * {
@@ -36,4 +39,51 @@ body {
   background-color: var(--white);
   color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Slankere, rustigere scrollbars — past beter bij een dashboard dan de dikke systeembalk. */
+.jg-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 19, 55, 0.18) transparent;
+}
+.jg-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.jg-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.jg-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 19, 55, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.jg-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 19, 55, 0.32);
+  background-clip: padding-box;
+}
+
+/* Donkere variant voor de navy-zijbalk. */
+.jg-scroll-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.jg-scroll-dark::-webkit-scrollbar {
+  width: 7px;
+}
+.jg-scroll-dark::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.jg-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.26);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
