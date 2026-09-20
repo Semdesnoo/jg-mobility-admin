@@ -87,3 +87,15 @@ body {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ── Consistente afronding over het hele dashboard ──
+   Eén regel rondt elke knop en elk invoerveld af. Een element dat zélf een radius
+   zet — via inline style (pills op 999px, icoonknoppen) of een Tailwind rounded-*
+   klasse — wint altijd van deze element-selector, dus die blijven ongemoeid.
+   Alleen de kale, scherpe hoeken (radius 0) worden hierdoor afgerond. */
+button,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  border-radius: var(--radius-control);
+}

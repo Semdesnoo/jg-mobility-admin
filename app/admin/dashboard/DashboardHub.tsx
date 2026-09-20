@@ -1267,20 +1267,20 @@ function VoorraadTabel({
                   {auto.verborgen ? (
                     <span
                       title="Deze auto staat niet op de website"
-                      className="px-2.5 py-1.5 text-[11px] font-semibold cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold cursor-not-allowed"
                       style={{ border: "1px solid rgba(0,19,55,0.08)", color: "rgba(0,19,55,0.25)", fontFamily: "var(--font-inter)" }}
                     >
-                      Bekijk
+                      <Eye size={12} /> Bekijk
                     </span>
                   ) : (
                     <a
                       href={`https://www.jgmobility.nl/aanbod/${auto.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:opacity-70"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:opacity-70"
                       style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}
                     >
-                      Bekijk
+                      <Eye size={12} /> Bekijk
                     </a>
                   )}
                   <DeleteButton id={auto.id} naam={`${auto.merk} ${auto.model}`} />

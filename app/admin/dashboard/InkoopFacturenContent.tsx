@@ -594,9 +594,10 @@ export default function InkoopFacturenContent() {
                   </button>
                   <button
                     onClick={() => { setBestand(null); if (bestandRef.current) bestandRef.current.value = ""; }}
-                    className="px-3 py-2 text-[12px] font-semibold transition-all hover:opacity-70"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold transition-all hover:opacity-70"
                     style={{ border: "1px solid rgba(0,19,55,0.12)", color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}
                   >
+                    <Trash2 size={12} />
                     Verwijder
                   </button>
                 </div>
