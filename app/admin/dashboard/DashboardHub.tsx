@@ -717,16 +717,22 @@ function DashboardContent({
 
   return (
     <div>
-      {/* Homepagina-hero: navy welkomstbalk met de dag en een korte stand van zaken. */}
+      {/* Homepagina-hero: navy welkomstbalk met de dag en een korte stand van zaken.
+          z-20 tilt de hero (én de meldingen-dropdown die eronder hangt) boven de
+          kaarten die erna komen. Geen overflow-hidden op de hero zelf: dat knipte de
+          openklappende meldingen af — de gloed wordt daarom apart geclipt. */}
       <div
-        className="relative overflow-hidden px-4 md:px-8 py-7 md:py-9"
+        className="relative z-20 px-4 md:px-8 py-7 md:py-9"
         style={{ background: "linear-gradient(120deg,#001a4a 0%,#001337 60%,#000e29 100%)" }}
       >
-        {/* zachte gloed rechtsboven */}
-        <div
-          aria-hidden
-          style={{ position: "absolute", top: -60, right: -40, width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)" }}
-        />
+        {/* zachte gloed rechtsboven — in een eigen geclipt laagje zodat hij binnen de
+            hero blijft zonder de rest af te knippen */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div
+            aria-hidden
+            style={{ position: "absolute", top: -60, right: -40, width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)" }}
+          />
+        </div>
         <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
             <p className="text-[10px] tracking-[0.22em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-inter)" }}>
