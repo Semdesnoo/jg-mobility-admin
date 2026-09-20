@@ -43,6 +43,10 @@ import {
   Receipt,
   Menu,
   X,
+  Printer,
+  Download,
+  Send,
+  MailCheck,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import KlantenContent from "./KlantenContent";
@@ -2059,7 +2063,11 @@ const LEEG_FORM: FactuurForm = {
   vervaldatum: "", notitie: "",
 };
 
-function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: boolean } = {}): string {
+function genereerFactuurHTML(
+  f: Factuur,
+  logoSrc: string,
+  opts: { betaald?: boolean; stempel?: "origineel" | "kopie" } = {},
+): string {
   const autoBasePrijs = Number(f.verkoopprijs);
   let extraRegels: FactuurRegel[] = [];
   try { extraRegels = JSON.parse(f.regels || "[]").filter((r: FactuurRegel) => r.omschrijving && Number(r.prijs) > 0); } catch { /* */ }
@@ -2092,6 +2100,14 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
     : "";
   const betaaldBadge = betaald
     ? `<div style="display:inline-block;margin-top:10px;padding:5px 13px;background:#dcfce7;border:1px solid #15803d;font-size:8.5pt;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#15803d">&#10003; Betaald</div>`
+    : "";
+
+  // Stempel rechtsboven: origineel is voor onze administratie, kopie voor de klant.
+  // Elke keer dat je afdrukt rolt er dus één origineel én één kopie uit de printer.
+  const stempelBadge = opts.stempel
+    ? `<div style="display:block;margin-top:10px;font-size:8pt;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${
+        opts.stempel === "origineel" ? "#001337" : "#94a3b8"
+      }">${opts.stempel === "origineel" ? "Origineel &middot; administratie" : "Kopie &middot; klant"}</div>`
     : "";
 
   const regelRijen = [
@@ -2153,6 +2169,7 @@ function genereerFactuurHTML(f: Factuur, logoSrc: string, opts: { betaald?: bool
         <div style="font-size:28pt;font-weight:300;letter-spacing:8px;color:#001337;line-height:1;text-transform:uppercase">Factuur</div>
         <div style="font-size:10pt;color:#94a3b8;margin-top:6px;letter-spacing:.5px">#${f.factuur_nr}</div>
         ${betaaldBadge}
+        ${stempelBadge}
       </td>
     </tr>
   </table>
@@ -2591,16 +2608,48 @@ function FacturenContent() {
     });
   };
 
+  // Afdrukken levert TWEE pagina's in één printtaak: een origineel voor onze eigen
+  // administratie en een kopie voor de klant. Zo rolt er bij elke afdruk precies één
+  // van elk uit de printer, herkenbaar aan het stempel rechtsboven.
   const printFactuur = async (f: Factuur) => {
     const logoSrc = await haalLogoSrc();
-    const html = genereerFactuurHTML(f, logoSrc);
+    const origineel = genereerFactuurHTML(f, logoSrc, { stempel: "origineel" });
+    const kopie = genereerFactuurHTML(f, logoSrc, { stempel: "kopie" });
+
+    // Beide documenten los renderen, dan alleen hun <body>-inhoud samenvoegen met een
+    // harde pagina-einde ertussen. De losse <html>/<head> van de tweede pagina hoort
+    // niet middenin het gecombineerde document.
+    const pak = (html: string): string => {
+      const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      return m ? m[1] : html;
+    };
+    const gecombineerd = `<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Factuur ${f.factuur_nr}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  body { font-family:'Helvetica Neue',Arial,sans-serif; color:#1e293b; background:#fff; }
+  .vel { width:794px; margin:0 auto; }
+  .paginabreuk { page-break-after:always; break-after:page; }
+  @media print { @page { size:A4; margin:0; } .vel { width:100%; } }
+  table { border-collapse:collapse; }
+</style>
+</head>
+<body>
+  <div class="vel paginabreuk">${pak(origineel)}</div>
+  <div class="vel">${pak(kopie)}</div>
+</body>
+</html>`;
+
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;";
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
     if (!doc) return;
     doc.open();
-    doc.write(html);
+    doc.write(gecombineerd);
     doc.close();
     iframe.contentWindow?.focus();
     setTimeout(() => {
@@ -3793,52 +3842,82 @@ function FacturenContent() {
                               </button>
                             ))}
                           </div>
-                          <div className="flex gap-2 flex-wrap">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Hoofdactie: afdrukken levert origineel + kopie */}
                             <button
                               onClick={() => printFactuur(f)}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
-                              style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5"
+                              style={{ backgroundColor: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
+                              title="Print een origineel (voor ons) én een kopie (voor de klant)"
                             >
-                              Afdrukken / PDF
+                              <Printer size={14} />
+                              Afdrukken
+                              <span className="hidden sm:inline opacity-60 font-normal">· origineel + kopie</span>
                             </button>
+
                             <button
                               onClick={() => downloadFactuur(f)}
                               disabled={downloadStatus[f.id] === "laden"}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
-                              style={{ backgroundColor: downloadStatus[f.id] === "ok" ? "#15803d" : "#334155", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{
+                                backgroundColor: "#ffffff",
+                                color: downloadStatus[f.id] === "ok" ? "#15803d" : "#334155",
+                                border: `1px solid ${downloadStatus[f.id] === "ok" ? "#bbf7d0" : "rgba(0,19,55,0.15)"}`,
+                                fontFamily: "var(--font-inter)",
+                                borderRadius: "var(--radius-control)",
+                              }}
                             >
-                              {downloadStatus[f.id] === "laden" ? "PDF maken..." : downloadStatus[f.id] === "ok" ? "✓ Opgeslagen" : "Opslaan als PDF"}
+                              <Download size={14} />
+                              {downloadStatus[f.id] === "laden" ? "PDF maken..." : downloadStatus[f.id] === "ok" ? "Opgeslagen" : "PDF"}
                             </button>
+
+                            {/* Scheiding tussen printen/opslaan en de mailacties */}
+                            <span className="hidden sm:block self-stretch w-px my-0.5" style={{ backgroundColor: "rgba(0,19,55,0.1)" }} />
+
                             <button
                               onClick={() => verstuurMail(f)}
                               disabled={mailStatus[f.id] === "laden"}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
-                              style={{ backgroundColor: (mailStatus[f.id] === "ok" || f.factuurmail_verstuurd_op) ? "#15803d" : "#1d4ed8", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{ backgroundColor: (mailStatus[f.id] === "ok" || f.factuurmail_verstuurd_op) ? "#15803d" : "#1d4ed8", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(29,78,216,0.5)" }}
                             >
-                              {mailStatus[f.id] === "laden" ? "PDF maken..." : (mailStatus[f.id] === "ok" || f.factuurmail_verstuurd_op) ? "✓ Verstuurd" : "Verstuur per mail"}
+                              <Send size={14} />
+                              {mailStatus[f.id] === "laden" ? "PDF maken..." : (mailStatus[f.id] === "ok" || f.factuurmail_verstuurd_op) ? "Verstuurd" : "Verstuur factuur"}
                             </button>
+
                             <button
                               onClick={() => verstuurBedankmail(f)}
                               disabled={bedankStatus[f.id] === "laden"}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-60"
-                              style={{ backgroundColor: (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "#065f46" : "#047857", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{ backgroundColor: (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "#065f46" : "#047857", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(4,120,87,0.5)" }}
+                              title="Stuur de betaalde factuur met bedankje en reviewverzoek"
                             >
-                              {bedankStatus[f.id] === "laden" ? "PDF maken..." : (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "✓ Verstuurd" : "Bedankmail + factuur"}
+                              <MailCheck size={14} />
+                              {bedankStatus[f.id] === "laden" ? "PDF maken..." : (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "Bedankt verstuurd" : "Bedankmail"}
                             </button>
-                            <button
-                              onClick={() => startBewerken(f)}
-                              className="px-4 py-2 text-xs font-semibold transition-all hover:opacity-80"
-                              style={{ border: "1px solid rgba(0,19,55,0.2)", color: "#001337", fontFamily: "var(--font-inter)" }}
-                            >
-                              Bewerken
-                            </button>
-                            <button
-                              onClick={() => verwijder(f.id)}
-                              className="px-4 py-2 text-xs transition-all hover:opacity-70"
-                              style={{ color: "#b91c1c", border: "1px solid #fecaca", fontFamily: "var(--font-inter)" }}
-                            >
-                              Verwijder
-                            </button>
+
+                            {/* Rechts, apart: bewerken (potlood) en verwijderen (prullenbak) */}
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <button
+                                onClick={() => startBewerken(f)}
+                                aria-label="Factuur bewerken"
+                                title="Bewerken"
+                                className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
+                                style={{ width: 38, height: 38, color: "#001337", backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.15)", borderRadius: "var(--radius-control)" }}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                onClick={() => verwijder(f.id)}
+                                aria-label="Factuur verwijderen"
+                                title="Verwijderen"
+                                className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
+                                style={{ width: 38, height: 38, color: "#b91c1c", backgroundColor: "#ffffff", border: "1px solid #fecaca", borderRadius: "var(--radius-control)" }}
+                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fef2f2"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#ffffff"; }}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
                           </div>
                           {(f.factuurmail_verstuurd_op || f.bedankmail_verstuurd_op) && (
                             <div className="mt-3 flex flex-col gap-1">

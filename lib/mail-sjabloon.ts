@@ -37,6 +37,8 @@ const BEDRIJF = {
   telefoon: "+31 6 21331374",
   website: "www.jgmobility.nl",
   iban: "NL94 ABNA 0154171638",
+  // Directe link naar de Google-reviewkaart van JG Mobility.
+  review: "https://www.google.com/search?sca_esv=26379294fd94e568&sxsrf=APpeQns9A_5ibwcn_rMrQcwYr5mNuXpi2g:1789924250796&q=jg+mobility&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_wVkVRa7EJ5RsmEOQhTELqEUC8F7xrRateTEaWbxW7H8xiS5LcN0vsToHupqd_2gpJOS3VQ%3D&uds=AJ5uw18gNhEE-1kkRZFnq5lN2SLilyl-KVal4Wm_rz2kEN6NHK6V8bIiiGI3ClhoFgKKIc2YKv-E7GDyw230jAsE5ozBne_6QnE-36VDOQQ_GqG9JF7itZ8&sa=X&sqi=2&ved=2ahUKEwjuwJK50_2WAxWH7QIHHSShISgQ3PALegQILxAF&biw=1536&bih=695&dpr=1.25",
 } as const;
 
 const euro = (n: number) => `&euro; ${Math.round(n).toLocaleString("nl-NL")}`;
@@ -264,6 +266,9 @@ export function bedankMail(g: MailGegevens): { onderwerp: string; html: string; 
       !!g.kenteken && `Kenteken: ${g.kenteken}`,
       `Voldaan bedrag: ${bedrag}`,
       "",
+      "Zou u ons willen helpen? Wij zouden het enorm op prijs stellen als u een review achterlaat op Google. Het kost u een minuut en helpt ons enorm:",
+      BEDRIJF.review,
+      "",
       "Komt u er onverhoopt achter dat er iets niet klopt, laat het ons dan gerust weten — daar komen we samen uit.",
       "",
       "Met vriendelijke groet,",
@@ -286,6 +291,15 @@ export function bedankMail(g: MailGegevens): { onderwerp: string; html: string; 
         g.kenteken ? regel("Kenteken", veilig(g.kenteken)) : "",
         regel("Voldaan bedrag", euro(g.totaal), true),
       ].join(""),
+      blok: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${KLEUR.groenVlak};border:1px solid ${KLEUR.groen};">
+               <tr><td align="center" style="padding:20px 22px;">
+                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:${KLEUR.navy};padding-bottom:6px;">Tevreden over ons?</div>
+                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:${KLEUR.tekst};padding-bottom:16px;">
+                   Wij zouden het enorm op prijs stellen als u een review wilt plaatsen op het internet. Het kost u een minuut en helpt ons enorm.
+                 </div>
+                 <a href="${BEDRIJF.review}" style="display:inline-block;background-color:${KLEUR.groen};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:6px;">Review achterlaten op Google</a>
+               </td></tr>
+             </table>`,
       afsluiting: `Komt u er onverhoopt achter dat er iets niet klopt, laat het ons dan gerust weten — daar komen we samen uit.<br /><br />Met vriendelijke groet,<br /><strong>Jimi Gaillard</strong><br /><span style="color:${KLEUR.grijs};">${BEDRIJF.naam}</span>`,
     }),
   };

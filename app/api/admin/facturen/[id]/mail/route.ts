@@ -52,6 +52,20 @@ const ONZICHTBAAR = new RegExp(
 const STANDAARD_AFZENDER = "JG Mobility <info@jgmobility.nl>";
 
 /**
+ * TIJDELIJK — testmodus.
+ *
+ * Zolang deze waarde gevuld is gaan ALLE factuur- en bedankmails naar dit ene adres in
+ * plaats van naar de klant. Zo kun je de nieuwe mails veilig uitproberen zonder dat er
+ * echt iets naar een klant gaat. Het echte klantadres moet nog wél ingevuld zijn (anders
+ * weet je bij een live-mail niet of het adres klopt), maar de verzending gaat naar de
+ * testontvanger.
+ *
+ * UITZETTEN: leeg deze string (of zet FACTUUR_TEST_ONTVANGER leeg) en de mails gaan weer
+ * gewoon naar de klant.
+ */
+const TEST_ONTVANGER = (process.env.FACTUUR_TEST_ONTVANGER ?? "semdesnoo@outlook.com").trim();
+
+/**
  * Maakt van de instelling een afzender die de mailserver accepteert.
  *
  * Waarom dit nodig is: hier ging het drie keer mis. De code plakte er eerst blind
@@ -202,13 +216,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const resend = new Resend(apiKey);
+    // In testmodus gaat de mail naar de testontvanger; anders naar de klant zelf.
+    const ontvanger = TEST_ONTVANGER || (f.klant_email as string);
     // LET OP: de SDK gooit geen fout bij een afgekeurde verzending. Het antwoord MOET
     // gelezen worden, anders ziet een mislukte mail eruit als een geslaagde.
     const { data, error } = await resend.emails.send({
       from: afzender,
-      to: f.klant_email as string,
+      to: ontvanger,
       replyTo: "info@jgmobility.nl",
-      subject: onderwerp,
+      subject: TEST_ONTVANGER ? `[TEST → ${f.klant_email}] ${onderwerp}` : onderwerp,
       html,
       // De platte-tekstversie gaat mee. Een mail met alleen HTML is voor spamfilters een
       // signaal op zich: echte post van bedrijven stuurt allebei mee, bulkmail vaak niet.
