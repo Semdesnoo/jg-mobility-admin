@@ -13,6 +13,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     kenteken, vin, klant_adres, klant_postcode, klant_stad,
     bodemprijs, fee_percentage, fee_vast, looptijd_maanden, uitbetaling_dagen,
     terugname_kosten, bijzondere_afspraken, contract_nr, contract_op,
+    contract_gemaild_op, laatste_update_op, auto_updates,
   } = body;
 
   const getal = (w: unknown) =>
@@ -54,6 +55,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       bijzondere_afspraken = COALESCE(${bijzondere_afspraken ?? null}, bijzondere_afspraken),
       contract_nr = COALESCE(${contract_nr ?? null}, contract_nr),
       contract_op = COALESCE(${contract_op ?? null}, contract_op),
+      contract_gemaild_op = CASE
+        WHEN ${contract_gemaild_op ?? null} IS NOT NULL THEN ${contract_gemaild_op ?? null}::date
+        ELSE contract_gemaild_op
+      END,
+      laatste_update_op = CASE
+        WHEN ${laatste_update_op ?? null} IS NOT NULL THEN ${laatste_update_op ?? null}::date
+        ELSE laatste_update_op
+      END,
+      auto_updates = COALESCE(${typeof auto_updates === "boolean" ? auto_updates : null}, auto_updates),
       platform_prijzen = CASE
         WHEN ${platform_prijzen ? JSON.stringify(platform_prijzen) : null}::jsonb IS NOT NULL
         THEN ${platform_prijzen ? JSON.stringify(platform_prijzen) : null}::jsonb

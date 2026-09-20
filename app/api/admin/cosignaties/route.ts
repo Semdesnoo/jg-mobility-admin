@@ -29,6 +29,12 @@ async function migrate() {
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS bijzondere_afspraken TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_nr TEXT DEFAULT ''`;
     await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_op TEXT DEFAULT ''`;
+    // Nieuwe flow: wanneer het contract naar de klant is gemaild (start van de
+    // verkoopperiode), wanneer de laatste statusupdate-mail uitging, en of de
+    // automatische tweewekelijkse update aan staat voor deze auto.
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS contract_gemaild_op DATE`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS laatste_update_op DATE`;
+    await sql`ALTER TABLE cosignaties ADD COLUMN IF NOT EXISTS auto_updates BOOLEAN DEFAULT true`;
   } catch { /* table may not exist yet */ }
 }
 
@@ -53,14 +59,13 @@ export async function POST(req: Request) {
     const id = `cos_${Date.now()}`;
     const datum = now.toLocaleDateString("nl-NL");
     const tijd = now.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
-    const geaccepteerd_op = now.toISOString().slice(0, 10);
     await sql`
       INSERT INTO cosignaties (id, datum, tijd, naam, email, telefoon, merk, model, bouwjaar, km,
-        vraagprijs, opmerking, aantal_fotos, status, notitie, geaccepteerd_op,
+        vraagprijs, opmerking, aantal_fotos, status, notitie,
         kleur, brandstof, bodytype, apk, vermogen)
       VALUES (${id}, ${datum}, ${tijd}, ${naam ?? ""}, ${email ?? ""}, ${telefoon ?? ""},
               ${merk ?? ""}, ${model ?? ""}, ${bouwjaar ?? ""}, ${km ?? ""},
-              ${vraagprijs ?? ""}, ${opmerking ?? ""}, 0, 'geaccepteerd', '', ${geaccepteerd_op}::date,
+              ${vraagprijs ?? ""}, ${opmerking ?? ""}, 0, 'nieuw', '',
               ${kleur ?? ""}, ${brandstof ?? ""}, ${bodytype ?? ""}, ${apk ?? ""}, ${vermogen ?? ""})
     `;
     return Response.json({ ok: true, id });

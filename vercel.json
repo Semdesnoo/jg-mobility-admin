@@ -3,6 +3,10 @@
     {
       "path": "/api/admin/inkoopfacturen/scan-email/cron",
       "schedule": "0 5 * * 1"
+    },
+    {
+      "path": "/api/admin/cosignaties/updates-cron",
+      "schedule": "0 6 * * 1"
     }
   ]
 }

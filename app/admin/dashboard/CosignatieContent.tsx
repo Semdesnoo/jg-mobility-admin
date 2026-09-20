@@ -1,9 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Handshake, ChevronDown, ChevronUp, Trash2, RefreshCw, Send, ExternalLink } from "lucide-react";
+import {
+  Plus, Handshake, ChevronDown, ChevronUp, Trash2, RefreshCw, Send,
+  ExternalLink, FileSignature, Check, X, Mail, Phone, CircleCheck, Clock,
+} from "lucide-react";
 import { useDialoog } from "./Dialoog";
 import { toonBedrag, bedragUit, AUTO_ONDERGRENS } from "@/lib/bedrag";
+import { genereerContractHTML, type ContractGegevens } from "@/lib/consignatie-contract";
 
 type Cosignatie = {
   id: string;
@@ -16,6 +20,8 @@ type Cosignatie = {
   model: string;
   bouwjaar: string;
   km: string;
+  kleur?: string;
+  brandstof?: string;
   vraagprijs: string;
   opmerking: string;
   aantal_fotos: number;
@@ -23,14 +29,30 @@ type Cosignatie = {
   notitie: string;
   platform_prijzen?: Record<string, string> | null;
   geaccepteerd_op?: string;
+  // Contract
+  kenteken?: string; vin?: string;
+  klant_adres?: string; klant_postcode?: string; klant_stad?: string;
+  bodemprijs?: number; fee_percentage?: number; fee_vast?: number;
+  looptijd_maanden?: number; uitbetaling_dagen?: number; terugname_kosten?: number;
+  bijzondere_afspraken?: string;
+  contract_nr?: string; contract_op?: string;
+  contract_gemaild_op?: string | null;
+  laatste_update_op?: string | null;
+  auto_updates?: boolean;
 };
 
+/**
+ * De vier stappen van de consignatieflow. Elke aanvraag doorloopt ze op volgorde:
+ * nieuw → geaccepteerd → lopend, of nieuw → afgewezen.
+ */
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  nieuw:          { label: "Nieuw",          color: "#b45309", bg: "#fef3c7" },
-  in_behandeling: { label: "In behandeling", color: "#1d4ed8", bg: "#dbeafe" },
-  geaccepteerd:   { label: "Geaccepteerd",   color: "#15803d", bg: "#dcfce7" },
-  afgewezen:      { label: "Afgewezen",      color: "#b91c1c", bg: "#fee2e2" },
+  nieuw:        { label: "Nieuw",        color: "#b45309", bg: "#fef3c7" },
+  geaccepteerd: { label: "Geaccepteerd", color: "#1d4ed8", bg: "#dbeafe" },
+  lopend:       { label: "In verkoop",   color: "#15803d", bg: "#dcfce7" },
+  afgewezen:    { label: "Afgewezen",    color: "#b91c1c", bg: "#fee2e2" },
 };
+// Volgorde van de stappenbalk boven aan een geopende aanvraag.
+const FLOW = ["nieuw", "geaccepteerd", "lopend"] as const;
 
 const PLATFORMS: Record<string, string> = {
   marktplaats: "Marktplaats.nl",
@@ -38,9 +60,12 @@ const PLATFORMS: Record<string, string> = {
   autoscout24: "AutoScout24.nl",
 };
 
+const STANDAARD = { fee: 10, looptijd: 6, uitbetaling: 0, terugname: 50 } as const;
+const getal = (w: unknown) => Number(String(w ?? "").replace(/[^0-9.,-]/g, "").replace(",", ".")) || 0;
+
 const S = {
   label: { color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" } as React.CSSProperties,
-  veld: { border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", backgroundColor: "#fafafa" } as React.CSSProperties,
+  veld: { border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", backgroundColor: "#fafafa", borderRadius: "var(--radius-control)" } as React.CSSProperties,
 };
 
 type LeegForm = {
@@ -49,7 +74,6 @@ type LeegForm = {
   kleur: string; brandstof: string; bodytype: string; apk: string; vermogen: string;
   vraagprijs: string; opmerking: string;
 };
-
 const LEEG: LeegForm = {
   naam: "", email: "", telefoon: "",
   merk: "", model: "", bouwjaar: "", km: "",
@@ -57,8 +81,80 @@ const LEEG: LeegForm = {
   vraagprijs: "", opmerking: "",
 };
 
+// ── Contract-PDF helpers (client-side, zelfde aanpak als ContractenContent) ──
+async function haalLogo(): Promise<string> {
+  try {
+    const res = await fetch(encodeURI("/JG Mobility Transparant.png"));
+    if (!res.ok) return "";
+    const blob = await res.blob();
+    return await new Promise<string>((klaar) => {
+      const lezer = new FileReader();
+      lezer.onloadend = () => klaar(String(lezer.result ?? ""));
+      lezer.onerror = () => klaar("");
+      lezer.readAsDataURL(blob);
+    });
+  } catch { return ""; }
+}
+
+function contractGegevens(c: Cosignatie, nummer: string): ContractGegevens {
+  return {
+    contract_nr: nummer,
+    datum: new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }),
+    klant_naam: c.naam || "—",
+    klant_adres: c.klant_adres, klant_postcode: c.klant_postcode, klant_stad: c.klant_stad,
+    klant_email: c.email, klant_telefoon: c.telefoon,
+    merk: c.merk, model: c.model, bouwjaar: c.bouwjaar,
+    kenteken: c.kenteken, vin: c.vin, km: c.km, kleur: c.kleur, brandstof: c.brandstof,
+    vraagprijs: getal(c.vraagprijs),
+    bodemprijs: getal(c.bodemprijs),
+    fee_vast: getal(c.fee_vast),
+    fee_percentage: getal(c.fee_percentage) || STANDAARD.fee,
+    looptijd_maanden: getal(c.looptijd_maanden) || STANDAARD.looptijd,
+    uitbetaling_dagen: c.uitbetaling_dagen == null ? STANDAARD.uitbetaling : getal(c.uitbetaling_dagen),
+    terugname_kosten: c.terugname_kosten == null ? STANDAARD.terugname : getal(c.terugname_kosten),
+    bijzondere_afspraken: c.bijzondere_afspraken,
+  };
+}
+
+/** Rendert contract-HTML naar een base64-PDF via html2pdf (voor de mailbijlage). */
+async function contractNaarPdf(html: string): Promise<string> {
+  const html2pdf = (await import("html2pdf.js")).default;
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;";
+  document.body.appendChild(frame);
+  return await new Promise<string>((resolve, reject) => {
+    frame.onload = async () => {
+      try {
+        const body = frame.contentDocument?.body;
+        if (!body) { reject(new Error("Render mislukt")); return; }
+        const dataUri = await html2pdf().set({
+          margin: 0,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        }).from(body).output("datauristring");
+        frame.remove();
+        resolve((dataUri as string).split(",")[1]);
+      } catch (e) { frame.remove(); reject(e); }
+    };
+    const doc = frame.contentDocument;
+    if (doc) { doc.open(); doc.write(html); doc.close(); }
+  });
+}
+
+/** Afdrukken via verborgen iframe. */
+function drukAf(html: string) {
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px";
+  document.body.appendChild(frame);
+  const doc = frame.contentWindow?.document;
+  if (!doc) { frame.remove(); return; }
+  doc.open(); doc.write(html); doc.close();
+  setTimeout(() => { frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => frame.remove(), 2000); }, 500);
+}
+
 export default function CosignatieContent() {
-  const { vraag } = useDialoog();
+  const { vraag, melden } = useDialoog();
   const [aanvragen, setAanvragen] = useState<Cosignatie[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -68,18 +164,12 @@ export default function CosignatieContent() {
   const [prijzenLaden, setPrijzenLaden] = useState<Record<string, boolean>>({});
   const [updateLaden, setUpdateLaden] = useState<Record<string, boolean>>({});
   const [updateOk, setUpdateOk] = useState<Record<string, boolean>>({});
-  const [filterStatus, setFilterStatus] = useState<string>("alle");
+  const [contractLaden, setContractLaden] = useState<Record<string, boolean>>({});
+  const [filterStatus, setFilterStatus] = useState<string>("nieuw");
   const [rdwLaden, setRdwLaden] = useState(false);
-  // De klok hoort niet tijdens het renderen te worden uitgelezen: React mag een render
-  // opnieuw draaien, en dan komt er een ander getal uit hetzelfde scherm. Hij staat dus
-  // in state — maar wél een state die bijblijft. Puur bevriezen bij het openen gaat mis
-  // op de tablet die de hele dag aan staat: dan blijft een auto na middernacht "12 dagen
-  // in consignatie" tonen terwijl het er 13 zijn, en dat getal stuurt het gesprek met de
-  // klant aan.
   const [nu, setNu] = useState(() => Date.now());
+
   useEffect(() => {
-    // Een dagenteller hoeft niet vaak bij, maar wel op de twee momenten die ertoe doen:
-    // als de dag verspringt terwijl het scherm openstaat, en als je er weer naar terugkomt.
     const tik = setInterval(() => setNu(Date.now()), 10 * 60 * 1000);
     const bijKomen = () => { if (document.visibilityState === "visible") setNu(Date.now()); };
     document.addEventListener("visibilitychange", bijKomen);
@@ -87,23 +177,14 @@ export default function CosignatieContent() {
   }, []);
 
   const laad = useCallback(async () => {
-    setLoading(true);
     const res = await fetch("/api/admin/cosignaties");
     if (res.ok) setAanvragen(await res.json());
-    setLoading(false);
   }, []);
 
-  // Eerste lading: alleen de promise-keten starten, geen setState in de effectbody zelf.
-  // De spinner draait al vanaf de eerste render (loading begint op true), dus hier hoeft
-  // hij alleen uitgezet te worden zodra het antwoord binnen is. `laad` hierboven blijft
-  // bestaan als verversfunctie na het aanmaken of bijwerken van een aanvraag.
   useEffect(() => {
     fetch("/api/admin/cosignaties")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (Array.isArray(d)) setAanvragen(d);
-        setLoading(false);
-      })
+      .then((d) => { if (Array.isArray(d)) setAanvragen(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
@@ -115,14 +196,10 @@ export default function CosignatieContent() {
       const d = await res.json();
       if (d.merk) setForm((p) => ({
         ...p,
-        merk:      d.merk      || p.merk,
-        model:     d.model     || p.model,
-        bouwjaar:  d.bouwjaar  ? String(d.bouwjaar) : p.bouwjaar,
-        kleur:     d.kleur     || p.kleur,
-        brandstof: d.brandstof || p.brandstof,
-        bodytype:  d.bodytype  || p.bodytype,
-        apk:       d.apk       || p.apk,
-        vermogen:  d.vermogen  || p.vermogen,
+        merk: d.merk || p.merk, model: d.model || p.model,
+        bouwjaar: d.bouwjaar ? String(d.bouwjaar) : p.bouwjaar,
+        kleur: d.kleur || p.kleur, brandstof: d.brandstof || p.brandstof,
+        bodytype: d.bodytype || p.bodytype, apk: d.apk || p.apk, vermogen: d.vermogen || p.vermogen,
       }));
     }
     setRdwLaden(false);
@@ -132,34 +209,26 @@ export default function CosignatieContent() {
     if (!form.merk.trim()) return;
     setSaving(true);
     const res = await fetch("/api/admin/cosignaties", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
     });
-    if (res.ok) {
-      await laad();
-      setForm(LEEG);
-      setToonNieuw(false);
-    }
+    if (res.ok) { await laad(); setForm(LEEG); setToonNieuw(false); setFilterStatus("nieuw"); }
     setSaving(false);
   };
 
-  const updateStatus = async (id: string, status: string) => {
+  const patchVeld = async (id: string, velden: Record<string, unknown>) => {
     await fetch(`/api/admin/cosignaties/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(velden),
     });
-    setAanvragen((p) => p.map((a) => (a.id === id ? { ...a, status } : a)));
+    setAanvragen((p) => p.map((a) => (a.id === id ? { ...a, ...velden } : a)));
   };
 
-  const updateNotitie = async (id: string, notitie: string) => {
+  /** Zet de status en, bij accepteren, meteen geaccepteerd_op via de server. */
+  const zetStatus = async (id: string, status: string) => {
     await fetch(`/api/admin/cosignaties/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notitie }),
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
     });
-    setAanvragen((p) => p.map((a) => (a.id === id ? { ...a, notitie } : a)));
+    await laad();
+    setFilterStatus(status);
   };
 
   const haalMarktprijzen = async (id: string) => {
@@ -179,21 +248,80 @@ export default function CosignatieContent() {
       setUpdateOk((p) => ({ ...p, [id]: true }));
       setTimeout(() => setUpdateOk((p) => ({ ...p, [id]: false })), 3000);
       await laad();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      await melden({ titel: "Update niet verstuurd", tekst: d.error || "Er ging iets mis. Probeer het nog een keer." });
     }
     setUpdateLaden((p) => ({ ...p, [id]: false }));
   };
 
+  /** Zorgt voor een contractnummer en levert het contract-HTML. */
+  const bouwContract = async (c: Cosignatie): Promise<{ html: string; nummer: string } | null> => {
+    let nummer = c.contract_nr ?? "";
+    if (!nummer) {
+      const res = await fetch(`/api/admin/cosignaties/${c.id}/contractnummer`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.contract_nr) {
+        await melden({ titel: "Contract niet gemaakt", tekst: d.error || "Het contractnummer kon niet worden aangemaakt." });
+        return null;
+      }
+      nummer = d.contract_nr;
+      await laad();
+    }
+    const logo = await haalLogo();
+    return { html: genereerContractHTML(contractGegevens(c, nummer), logo), nummer };
+  };
+
+  const ontbreekt = (c: Cosignatie): string[] => [
+    !c.naam?.trim() ? "naam eigenaar" : "",
+    !c.klant_adres?.trim() ? "adres eigenaar" : "",
+    !c.kenteken?.trim() ? "kenteken" : "",
+    getal(c.vraagprijs) <= 0 ? "vraagprijs" : "",
+    getal(c.fee_percentage) <= 0 && getal(c.fee_vast) <= 0 ? "vergoeding" : "",
+  ].filter(Boolean);
+
+  const drukContractAf = async (c: Cosignatie) => {
+    const r = await bouwContract(c);
+    if (r) drukAf(r.html);
+  };
+
+  const mailContract = async (c: Cosignatie) => {
+    if (!c.email) { await melden({ titel: "Geen e-mailadres", tekst: "Vul eerst het e-mailadres van de klant in." }); return; }
+    const mist = ontbreekt(c);
+    const bevestig = await vraag({
+      titel: "Contract mailen naar de klant?",
+      tekst: `${mist.length ? `Let op: nog niet ingevuld — ${mist.join(", ")}. Die blijven leeg op het contract.\n\n` : ""}Het consignatiecontract wordt als PDF naar ${c.email} gestuurd. De aanvraag gaat daarna naar "In verkoop" en de auto krijgt om de week automatisch een update-mail.`,
+      bevestig: "Ja, verstuur het contract",
+      annuleer: mist.length ? "Eerst invullen" : "Annuleer",
+    });
+    if (!bevestig) return;
+    setContractLaden((p) => ({ ...p, [c.id]: true }));
+    try {
+      const r = await bouwContract(c);
+      if (!r) return;
+      const pdfBase64 = await contractNaarPdf(r.html);
+      const res = await fetch(`/api/admin/cosignaties/${c.id}/mail-contract`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pdfBase64 }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Versturen mislukt");
+      await laad();
+      setFilterStatus("lopend");
+    } catch (e) {
+      await melden({ titel: "Contract niet verstuurd", tekst: e instanceof Error ? e.message : "Onbekende fout." });
+    } finally {
+      setContractLaden((p) => ({ ...p, [c.id]: false }));
+    }
+  };
+
   const verwijder = async (id: string) => {
-    // De verwijderknop zit onderaan een uitgeklapte kaart, ver van de naam bovenin — dus
-    // noem in de vraag om wélke aanvraag het gaat.
     const a = aanvragen.find((x) => x.id === id);
     const auto = [a?.merk, a?.model, a?.bouwjaar].filter(Boolean).join(" ");
     const wie = [a?.naam, auto].filter(Boolean).join(" — ") || "Deze aanvraag";
     const bevestigd = await vraag({
       titel: "Aanvraag verwijderen?",
       tekst: `${wie} wordt definitief verwijderd, samen met de interne notitie en de opgehaalde marktprijzen. Dit is niet ongedaan te maken.`,
-      bevestig: "Verwijderen",
-      gevaar: true,
+      bevestig: "Verwijderen", gevaar: true,
     });
     if (!bevestigd) return;
     await fetch(`/api/admin/cosignaties/${id}`, { method: "DELETE" });
@@ -202,28 +330,35 @@ export default function CosignatieContent() {
   };
 
   const gefilterd = filterStatus === "alle" ? aanvragen : aanvragen.filter((a) => a.status === filterStatus);
-  const nieuweAanvragen = aanvragen.filter((a) => a.status === "nieuw").length;
 
-  const dagsSinds = (datum: string | undefined) => {
+  const dagenSinds = (datum: string | null | undefined) => {
     if (!datum) return null;
     const d = new Date(datum);
-    const diff = Math.floor((nu - d.getTime()) / (1000 * 60 * 60 * 24));
-    return diff;
+    if (isNaN(d.getTime())) return null;
+    return Math.floor((nu - d.getTime()) / (1000 * 60 * 60 * 24));
   };
+
+  const telPer = (s: string) => aanvragen.filter((a) => a.status === s).length;
 
   return (
     <div>
-      <div className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10"
-        style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
+      {/* Kop */}
+      <div
+        className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10"
+        style={{ backgroundColor: "rgba(255,255,255,0.85)", backdropFilter: "saturate(180%) blur(10px)", WebkitBackdropFilter: "saturate(180%) blur(10px)", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
+      >
         <div>
-          <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Cosignatie</h2>
+          <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Consignatie</h2>
           <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-            {aanvragen.length} aanvragen{nieuweAanvragen > 0 ? ` · ${nieuweAanvragen} nieuw` : ""}
+            {telPer("nieuw")} nieuw · {telPer("geaccepteerd")} te contracteren · {telPer("lopend")} in verkoop
           </p>
         </div>
-        <button type="button" onClick={() => setToonNieuw((v) => !v)}
-          className="flex items-center justify-center gap-2 w-full sm:w-auto flex-shrink-0 px-5 py-2.5 text-sm font-semibold transition-all hover:opacity-90"
-          style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
+        <button
+          type="button"
+          onClick={() => setToonNieuw((v) => !v)}
+          className="flex items-center justify-center gap-2 w-full sm:w-auto flex-shrink-0 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:-translate-y-0.5"
+          style={{ backgroundColor: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
+        >
           <Plus size={14} /> Klant toevoegen
         </button>
       </div>
@@ -231,25 +366,19 @@ export default function CosignatieContent() {
       <div className="p-4 md:p-8">
         {/* Nieuw formulier */}
         {toonNieuw && (
-          <div className="mb-6" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+          <div className="mb-6" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
             <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={S.label}>Nieuwe cosignatie klant</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={S.label}>Nieuwe consignatie-aanvraag</p>
             </div>
             <div className="p-4 sm:p-5">
-              {/* Kenteken lookup */}
               <div className="flex gap-2 mb-5 items-end">
                 <div className="flex-1">
-                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>
-                    Kenteken (auto-invullen)
-                  </label>
-                  <input type="text" placeholder="bijv. AB-123-C"
-                    onBlur={(e) => rdwOpzoeken(e.target.value)}
-                    className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Kenteken (auto-invullen)</label>
+                  <input type="text" placeholder="bijv. AB-123-C" onBlur={(e) => rdwOpzoeken(e.target.value)} className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
                 </div>
                 {rdwLaden && <div className="mb-2 w-4 h-4 rounded-full border-2 animate-spin flex-shrink-0" style={{ borderColor: "rgba(0,19,55,0.1)", borderTopColor: "#001337" }} />}
               </div>
 
-              {/* Klantgegevens */}
               <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={S.label}>Klantgegevens</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 {([
@@ -260,17 +389,13 @@ export default function CosignatieContent() {
                 ]).map(({ label, field }) => (
                   <div key={field}>
                     <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>{label}</label>
-                    <input type="text" value={form[field]}
-                      onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
+                    <input type="text" value={form[field]} onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" style={S.veld} />
                   </div>
                 ))}
               </div>
 
-              {/* Auto-gegevens (deels via RDW) */}
               <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={S.label}>
-                Voertuig {rdwLaden && <span className="text-[9px] ml-1 opacity-60">RDW ophalen...</span>}
-                {!rdwLaden && form.merk && <span className="text-[9px] ml-1" style={{ color: "#15803d" }}>✓ RDW ingevuld</span>}
+                Voertuig {!rdwLaden && form.merk && <span className="text-[9px] ml-1" style={{ color: "#15803d" }}>✓ RDW ingevuld</span>}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {([
@@ -288,326 +413,438 @@ export default function CosignatieContent() {
                     <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>
                       {label}
                       {rdw && form[field] && <span className="ml-1 text-[8px]" style={{ color: "#15803d" }}>RDW</span>}
-                      {field === "km" && <span className="ml-1 text-[9px]" style={{ color: "#b45309" }}>Zelf invullen</span>}
                     </label>
-                    <input
-                      type="text"
-                      value={form[field]}
-                      onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
-                      placeholder={field === "km" ? "bijv. 85000" : ""}
-                      className="w-full px-3 py-2 text-sm outline-none"
-                      style={{
-                        ...S.veld,
-                        backgroundColor: rdw && form[field] ? "#f0fdf4" : "#fafafa",
-                        borderColor: rdw && form[field] ? "rgba(21,128,61,0.3)" : "rgba(0,19,55,0.15)",
-                      }}
-                    />
+                    <input type="text" value={form[field]} onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))} placeholder={field === "km" ? "bijv. 85000" : ""} className="w-full px-3 py-2 text-sm outline-none" style={{ ...S.veld, backgroundColor: rdw && form[field] ? "#f0fdf4" : "#fafafa", borderColor: rdw && form[field] ? "rgba(21,128,61,0.3)" : "rgba(0,19,55,0.15)" }} />
                   </div>
                 ))}
                 <div className="sm:col-span-2">
                   <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Opmerking</label>
-                  <textarea value={form.opmerking} rows={2}
-                    onChange={(e) => setForm((p) => ({ ...p, opmerking: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm outline-none resize-none" style={{ ...S.veld, lineHeight: 1.6 }} />
+                  <textarea value={form.opmerking} rows={2} onChange={(e) => setForm((p) => ({ ...p, opmerking: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none resize-none" style={{ ...S.veld, lineHeight: 1.6 }} />
                 </div>
               </div>
             </div>
             <div className="px-4 sm:px-5 pb-5 flex flex-wrap gap-2">
-              <button type="button" onClick={maakAan} disabled={saving || !form.merk.trim()}
-                className="px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
-                style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
-                {saving ? "Opslaan..." : "Klant toevoegen"}
+              <button type="button" onClick={maakAan} disabled={saving || !form.merk.trim()} className="px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                {saving ? "Opslaan..." : "Aanvraag toevoegen"}
               </button>
-              <button type="button" onClick={() => { setToonNieuw(false); setForm(LEEG); }}
-                className="px-4 py-2.5 text-sm"
-                style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>
+              <button type="button" onClick={() => { setToonNieuw(false); setForm(LEEG); }} className="px-4 py-2.5 text-sm" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
                 Annuleer
               </button>
             </div>
           </div>
         )}
 
-        {/* Status filter */}
-        {aanvragen.length > 0 && (
-          <div className="flex gap-1.5 mb-4 flex-wrap">
-            {(["alle", ...Object.keys(STATUS_LABELS)] as const).map((s) => {
-              const count = s === "alle" ? aanvragen.length : aanvragen.filter((a) => a.status === s).length;
-              return (
-                <button type="button" key={s} onClick={() => setFilterStatus(s)}
-                  className="px-3 py-1.5 text-xs font-semibold transition-all"
-                  style={{
-                    backgroundColor: filterStatus === s ? "#001337" : "transparent",
-                    color: filterStatus === s ? "#ffffff" : "rgba(0,19,55,0.4)",
-                    border: `1px solid ${filterStatus === s ? "#001337" : "rgba(0,19,55,0.12)"}`,
-                    fontFamily: "var(--font-inter)",
-                  }}>
-                  {s === "alle" ? "Alle" : STATUS_LABELS[s].label} ({count})
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Flow-filter */}
+        <div className="flex gap-1.5 mb-4 flex-wrap">
+          {(["nieuw", "geaccepteerd", "lopend", "afgewezen", "alle"] as const).map((s) => {
+            const count = s === "alle" ? aanvragen.length : telPer(s);
+            const actief = filterStatus === s;
+            return (
+              <button
+                type="button" key={s} onClick={() => setFilterStatus(s)}
+                className="px-3.5 py-1.5 text-xs font-semibold transition-all"
+                style={{
+                  backgroundColor: actief ? "#001337" : "#ffffff",
+                  color: actief ? "#ffffff" : "rgba(0,19,55,0.5)",
+                  border: `1px solid ${actief ? "#001337" : "rgba(0,19,55,0.12)"}`,
+                  borderRadius: 999,
+                }}
+              >
+                {s === "alle" ? "Alle" : STATUS_LABELS[s].label} ({count})
+              </button>
+            );
+          })}
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,19,55,0.1)", borderTopColor: "#001337" }} />
           </div>
-        ) : aanvragen.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-28"
-            style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
-            <Handshake size={40} style={{ color: "rgba(0,19,55,0.1)" }} />
-            <p className="text-lg font-bold mt-5 mb-2" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-              Nog geen aanvragen
+        ) : gefilterd.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)" }}>
+            <Handshake size={38} style={{ color: "rgba(0,19,55,0.12)" }} />
+            <p className="text-base font-bold mt-4" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+              {filterStatus === "nieuw" ? "Geen nieuwe aanvragen" : filterStatus === "alle" ? "Nog geen aanvragen" : `Niets ${STATUS_LABELS[filterStatus]?.label.toLowerCase() ?? ""}`}
             </p>
-            <p className="text-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-              Voeg een klant handmatig toe of wacht op aanvragen via de website.
+            <p className="text-sm mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+              Voeg een klant toe of wacht op aanvragen via de website.
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {gefilterd.map((a) => {
-              const sl = STATUS_LABELS[a.status] ?? STATUS_LABELS.nieuw;
-              const isOpen = openId === a.id;
-              const dagen = dagsSinds(a.geaccepteerd_op);
-              let prijzen: Record<string, string> = {};
-              try { prijzen = typeof a.platform_prijzen === "string" ? JSON.parse(a.platform_prijzen) : (a.platform_prijzen ?? {}); } catch { /* */ }
-
-              return (
-                <div key={a.id} style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
-                  <button type="button" onClick={() => setOpenId(isOpen ? null : a.id)}
-                    className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 text-left transition-all hover:bg-gray-50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                          {a.merk} {a.model}{" "}
-                          <span style={{ fontWeight: 400, color: "rgba(0,19,55,0.5)" }}>{a.bouwjaar}</span>
-                        </p>
-                        <span className="text-[10px] px-1.5 py-0.5 font-semibold"
-                          style={{ backgroundColor: sl.bg, color: sl.color, fontFamily: "var(--font-inter)" }}>
-                          {sl.label}
-                        </span>
-                        {dagen !== null && (
-                          <span className="text-[10px] px-1.5 py-0.5"
-                            style={{ backgroundColor: "rgba(0,19,55,0.05)", color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-                            {dagen} dag{dagen !== 1 ? "en" : ""}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
-                        {a.naam}{a.email ? ` · ${a.email}` : ""}{a.telefoon ? ` · ${a.telefoon}` : ""}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      {a.vraagprijs && (
-                        <p className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-                          {toonBedrag(a.vraagprijs, { minimaal: AUTO_ONDERGRENS })}
-                        </p>
-                      )}
-                      <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
-                        {a.datum}{a.aantal_fotos > 0 ? ` · ${a.aantal_fotos} foto's` : ""}
-                      </p>
-                    </div>
-                    {isOpen
-                      ? <ChevronUp size={14} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} />
-                      : <ChevronDown size={14} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} />}
-                  </button>
-
-                  {isOpen && (
-                    <div className="px-4 sm:px-5 pb-5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)" }}>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
-                        {/* Links: bewerkbare velden + marktprijzen */}
-                        <div>
-                          {/* Klantgegevens */}
-                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Klantgegevens</p>
-                          <div className="grid grid-cols-1 gap-2 mb-4">
-                            {([
-                              { label: "Naam", field: "naam" as const },
-                              { label: "E-mail", field: "email" as const },
-                              { label: "Telefoon", field: "telefoon" as const },
-                              { label: "Vraagprijs (€)", field: "vraagprijs" as const },
-                            ]).map(({ label, field }) => (
-                              <div key={field} className="flex items-center gap-2">
-                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>{label}</span>
-                                <input
-                                  type="text"
-                                  title={label}
-                                  placeholder={label}
-                                  defaultValue={a[field] ?? ""}
-                                  onBlur={(e) => {
-                                    if (e.target.value !== a[field]) {
-                                      fetch(`/api/admin/cosignaties/${a.id}`, {
-                                        method: "PATCH",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ [field]: e.target.value }),
-                                      });
-                                      setAanvragen((p) => p.map((x) => x.id === a.id ? { ...x, [field]: e.target.value } : x));
-                                    }
-                                  }}
-                                  className="flex-1 px-2 py-1 text-xs outline-none"
-                                  style={S.veld}
-                                />
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Autogegevens */}
-                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Voertuig</p>
-                          <div className="grid grid-cols-1 gap-2 mb-4">
-                            {([
-                              { label: "Merk", field: "merk" as const },
-                              { label: "Model", field: "model" as const },
-                              { label: "Bouwjaar", field: "bouwjaar" as const },
-                              { label: "Km-stand", field: "km" as const },
-                              { label: "Kleur", field: "kleur" as const },
-                              { label: "Brandstof", field: "brandstof" as const },
-                            ]).map(({ label, field }) => (
-                              <div key={field} className="flex items-center gap-2">
-                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>{label}</span>
-                                <input
-                                  type="text"
-                                  title={label}
-                                  placeholder={label}
-                                  defaultValue={(a as unknown as Record<string, string>)[field] ?? ""}
-                                  onBlur={(e) => {
-                                    if (e.target.value !== (a as unknown as Record<string, string>)[field]) {
-                                      fetch(`/api/admin/cosignaties/${a.id}`, {
-                                        method: "PATCH",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ [field]: e.target.value }),
-                                      });
-                                      setAanvragen((p) => p.map((x) => x.id === a.id ? { ...x, [field]: e.target.value } : x));
-                                    }
-                                  }}
-                                  className="flex-1 px-2 py-1 text-xs outline-none"
-                                  style={S.veld}
-                                />
-                              </div>
-                            ))}
-                            {dagen !== null && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>In consignatie</span>
-                                <span className="text-xs font-semibold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>{dagen} dag{dagen !== 1 ? "en" : ""}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Marktprijzen */}
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-                              Marktprijzen online
-                            </p>
-                            <button type="button" onClick={() => haalMarktprijzen(a.id)}
-                              disabled={prijzenLaden[a.id]}
-                              className="flex items-center gap-1 text-[10px] px-2 py-1 transition-all hover:opacity-70 disabled:opacity-40"
-                              style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>
-                              <RefreshCw size={9} className={prijzenLaden[a.id] ? "animate-spin" : ""} />
-                              {prijzenLaden[a.id] ? "Zoeken..." : "Ophalen"}
-                            </button>
-                          </div>
-                          {Object.keys(prijzen).length > 0 ? (
-                            <div style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.07)", padding: "10px 12px" }}>
-                              {Object.entries(prijzen).map(([platform, prijs]) => (
-                                <div key={platform} className="flex items-center justify-between py-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <ExternalLink size={9} style={{ color: "rgba(0,19,55,0.3)" }} />
-                                    <span className="text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>
-                                      {PLATFORMS[platform] ?? platform}
-                                    </span>
-                                  </div>
-                                  <span className="text-xs font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                                    {toonBedrag(prijs, { minimaal: AUTO_ONDERGRENS })}
-                                  </span>
-                                </div>
-                              ))}
-                              <div className="flex items-center justify-between pt-2 mt-1" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
-                                <span className="text-[10px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Gemiddeld</span>
-                                <span className="text-xs font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
-                                  {toonBedrag(
-                                    Object.values(prijzen).reduce((s, p) => s + (bedragUit(p) ?? 0), 0) /
-                                      Object.values(prijzen).length
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-xs" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
-                              Nog niet opgehaald — klik op &quot;Ophalen&quot; om actuele marktprijzen te zoeken.
-                            </p>
-                          )}
-
-                          {a.opmerking && (
-                            <div className="mt-4 p-3 text-xs" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: "1px solid rgba(0,19,55,0.07)", color: "rgba(0,19,55,0.65)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
-                              {a.opmerking}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Rechts: status + acties */}
-                        <div>
-                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Status</p>
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {Object.entries(STATUS_LABELS).map(([key, val]) => (
-                              <button type="button" key={key} onClick={() => updateStatus(a.id, key)}
-                                className="px-3 py-1 text-xs font-semibold transition-all"
-                                style={{
-                                  backgroundColor: a.status === key ? val.bg : "transparent",
-                                  color: a.status === key ? val.color : "rgba(0,19,55,0.4)",
-                                  border: `1px solid ${a.status === key ? val.color : "rgba(0,19,55,0.15)"}`,
-                                  fontFamily: "var(--font-inter)",
-                                }}>
-                                {val.label}
-                              </button>
-                            ))}
-                          </div>
-
-                          <p className="text-xs font-bold mb-1.5 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Interne notitie</p>
-                          <textarea defaultValue={a.notitie} rows={4}
-                            onBlur={(e) => { if (e.target.value !== a.notitie) updateNotitie(a.id, e.target.value); }}
-                            placeholder="Intern bijhouden wat er besproken is..."
-                            className="w-full px-3 py-2 text-xs outline-none resize-none mb-4"
-                            style={{ ...S.veld, lineHeight: 1.6 }} />
-
-                          <div className="flex flex-col gap-2">
-                            {/* Wekelijkse update */}
-                            {a.email && (
-                              <button type="button" onClick={() => verstuurUpdate(a.id)}
-                                disabled={updateLaden[a.id]}
-                                className="flex items-center justify-center gap-2 w-full py-2.5 text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-50"
-                                style={{ backgroundColor: updateOk[a.id] ? "#15803d" : "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}>
-                                <Send size={12} />
-                                {updateLaden[a.id] ? "Versturen..." : updateOk[a.id] ? "✓ Update verstuurd!" : "Stuur wekelijkse update"}
-                              </button>
-                            )}
-
-                            <div className="flex gap-2">
-                              {a.email && (
-                                <a href={`mailto:${a.email}`} className="flex-1 flex items-center justify-center py-2 text-xs font-semibold transition-all hover:opacity-80"
-                                  style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>
-                                  Mail klant
-                                </a>
-                              )}
-                              {a.telefoon && (
-                                <a href={`tel:${a.telefoon}`} className="flex-1 flex items-center justify-center py-2 text-xs font-semibold transition-all hover:opacity-80"
-                                  style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)" }}>
-                                  Bel klant
-                                </a>
-                              )}
-                            </div>
-                            <button type="button" onClick={() => verwijder(a.id)}
-                              className="text-xs py-1.5 transition-all hover:opacity-70 text-center"
-                              style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
-                              <Trash2 size={11} className="inline mr-1" /> Verwijder aanvraag
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {gefilterd.map((a) => (
+              <Kaart
+                key={a.id}
+                a={a}
+                open={openId === a.id}
+                onToggle={() => setOpenId(openId === a.id ? null : a.id)}
+                nu={nu}
+                dagenSinds={dagenSinds}
+                onStatus={zetStatus}
+                onPatch={patchVeld}
+                onMarktprijzen={haalMarktprijzen}
+                prijzenLaden={!!prijzenLaden[a.id]}
+                onUpdate={verstuurUpdate}
+                updateLaden={!!updateLaden[a.id]}
+                updateOk={!!updateOk[a.id]}
+                onDrukContract={drukContractAf}
+                onMailContract={mailContract}
+                contractLaden={!!contractLaden[a.id]}
+                ontbreekt={ontbreekt}
+                onVerwijder={verwijder}
+              />
+            ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ══ Eén aanvraagkaart met de volledige flow ══════════════════════
+function Kaart({
+  a, open, onToggle, nu, dagenSinds, onStatus, onPatch, onMarktprijzen, prijzenLaden,
+  onUpdate, updateLaden, updateOk, onDrukContract, onMailContract, contractLaden, ontbreekt, onVerwijder,
+}: {
+  a: Cosignatie;
+  open: boolean;
+  onToggle: () => void;
+  nu: number;
+  dagenSinds: (d: string | null | undefined) => number | null;
+  onStatus: (id: string, status: string) => void;
+  onPatch: (id: string, velden: Record<string, unknown>) => void;
+  onMarktprijzen: (id: string) => void;
+  prijzenLaden: boolean;
+  onUpdate: (id: string) => void;
+  updateLaden: boolean;
+  updateOk: boolean;
+  onDrukContract: (c: Cosignatie) => void;
+  onMailContract: (c: Cosignatie) => void;
+  contractLaden: boolean;
+  ontbreekt: (c: Cosignatie) => string[];
+  onVerwijder: (id: string) => void;
+}) {
+  const sl = STATUS_LABELS[a.status] ?? STATUS_LABELS.nieuw;
+  const dagenInVerkoop = dagenSinds(a.contract_gemaild_op || a.geaccepteerd_op);
+  let prijzen: Record<string, string> = {};
+  try { prijzen = typeof a.platform_prijzen === "string" ? JSON.parse(a.platform_prijzen) : (a.platform_prijzen ?? {}); } catch { /* */ }
+  const mist = ontbreekt(a);
+
+  return (
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+      {/* Kop-rij */}
+      <button type="button" onClick={onToggle} className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 text-left transition-all hover:bg-gray-50">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            <p className="text-sm font-bold" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+              {a.merk} {a.model}{" "}<span style={{ fontWeight: 400, color: "rgba(0,19,55,0.5)" }}>{a.bouwjaar}</span>
+            </p>
+            <span className="text-[10px] px-1.5 py-0.5 font-semibold" style={{ backgroundColor: sl.bg, color: sl.color, fontFamily: "var(--font-inter)", borderRadius: 999 }}>{sl.label}</span>
+            {a.status === "lopend" && dagenInVerkoop !== null && (
+              <span className="text-[10px] px-1.5 py-0.5" style={{ backgroundColor: "rgba(0,19,55,0.05)", color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)", borderRadius: 999 }}>
+                dag {dagenInVerkoop}
+              </span>
+            )}
+          </div>
+          <p className="text-xs" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+            {a.naam}{a.email ? ` · ${a.email}` : ""}{a.telefoon ? ` · ${a.telefoon}` : ""}
+          </p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          {a.vraagprijs && <p className="text-sm font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>{toonBedrag(a.vraagprijs, { minimaal: AUTO_ONDERGRENS })}</p>}
+          <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+            {a.datum}{a.aantal_fotos > 0 ? ` · ${a.aantal_fotos} foto's` : ""}
+          </p>
+        </div>
+        {open ? <ChevronUp size={14} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: "rgba(0,19,55,0.3)", flexShrink: 0 }} />}
+      </button>
+
+      {open && (
+        <div className="px-4 sm:px-5 pb-5" style={{ borderTop: "1px solid rgba(0,19,55,0.06)" }}>
+          {/* Stappenbalk */}
+          {a.status !== "afgewezen" && (
+            <div className="flex items-center gap-2 py-4 flex-wrap">
+              {FLOW.map((stap, i) => {
+                const idx = FLOW.indexOf(a.status as typeof FLOW[number]);
+                const bereikt = idx >= i;
+                const nu2 = a.status === stap;
+                const labels: Record<string, string> = { nieuw: "1 · Aanvraag", geaccepteerd: "2 · Contract", lopend: "3 · In verkoop" };
+                return (
+                  <div key={stap} className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold" style={{
+                      backgroundColor: nu2 ? "#001337" : bereikt ? "#dcfce7" : "rgba(0,19,55,0.05)",
+                      color: nu2 ? "#ffffff" : bereikt ? "#15803d" : "rgba(0,19,55,0.4)",
+                      fontFamily: "var(--font-inter)", borderRadius: 999,
+                    }}>
+                      {bereikt && !nu2 && <Check size={11} />}
+                      {labels[stap]}
+                    </span>
+                    {i < FLOW.length - 1 && <span style={{ width: 16, height: 1, backgroundColor: "rgba(0,19,55,0.15)" }} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* ── Links: gegevens + marktprijzen ── */}
+            <div>
+              <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Klant &amp; voertuig</p>
+              <div className="grid grid-cols-1 gap-2 mb-4">
+                {([
+                  { label: "Naam", field: "naam" as const },
+                  { label: "E-mail", field: "email" as const },
+                  { label: "Telefoon", field: "telefoon" as const },
+                  { label: "Vraagprijs", field: "vraagprijs" as const },
+                  { label: "Merk", field: "merk" as const },
+                  { label: "Model", field: "model" as const },
+                  { label: "Bouwjaar", field: "bouwjaar" as const },
+                  { label: "Km-stand", field: "km" as const },
+                ]).map(({ label, field }) => (
+                  <div key={field} className="flex items-center gap-2">
+                    <span className="text-[10px] flex-shrink-0" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", width: 80 }}>{label}</span>
+                    <input
+                      type="text" title={label} placeholder={label}
+                      defaultValue={(a as unknown as Record<string, string>)[field] ?? ""}
+                      onBlur={(e) => { if (e.target.value !== (a as unknown as Record<string, string>)[field]) onPatch(a.id, { [field]: e.target.value }); }}
+                      className="flex-1 px-2 py-1 text-xs outline-none" style={S.veld}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Marktprijzen */}
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Marktprijzen online</p>
+                <button type="button" onClick={() => onMarktprijzen(a.id)} disabled={prijzenLaden} className="flex items-center gap-1 text-[10px] px-2 py-1 transition-all hover:opacity-70 disabled:opacity-40" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                  <RefreshCw size={9} className={prijzenLaden ? "animate-spin" : ""} />{prijzenLaden ? "Zoeken..." : "Ophalen"}
+                </button>
+              </div>
+              {Object.keys(prijzen).length > 0 ? (
+                <div style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.07)", padding: "10px 12px", borderRadius: "var(--radius-control)" }}>
+                  {Object.entries(prijzen).map(([platform, prijs]) => (
+                    <div key={platform} className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-1.5">
+                        <ExternalLink size={9} style={{ color: "rgba(0,19,55,0.3)" }} />
+                        <span className="text-xs" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>{PLATFORMS[platform] ?? platform}</span>
+                      </div>
+                      <span className="text-xs font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>{toonBedrag(prijs, { minimaal: AUTO_ONDERGRENS })}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-2 mt-1" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
+                    <span className="text-[10px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Gemiddeld</span>
+                    <span className="text-xs font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
+                      {toonBedrag(Object.values(prijzen).reduce((s, p) => s + (bedragUit(p) ?? 0), 0) / Object.values(prijzen).length)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>Nog niet opgehaald — klik op &quot;Ophalen&quot;.</p>
+              )}
+
+              {a.opmerking && (
+                <div className="mt-4 p-3 text-xs" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: "1px solid rgba(0,19,55,0.07)", color: "rgba(0,19,55,0.65)", fontFamily: "var(--font-inter)", lineHeight: 1.6, borderRadius: "var(--radius-control)" }}>
+                  {a.opmerking}
+                </div>
+              )}
+
+              <p className="text-xs font-bold mb-1.5 mt-4 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Interne notitie</p>
+              <textarea defaultValue={a.notitie} rows={3} onBlur={(e) => { if (e.target.value !== a.notitie) onPatch(a.id, { notitie: e.target.value }); }} placeholder="Intern bijhouden wat er besproken is..." className="w-full px-3 py-2 text-xs outline-none resize-none" style={{ ...S.veld, lineHeight: 1.6 }} />
+            </div>
+
+            {/* ── Rechts: stap-afhankelijke acties ── */}
+            <div className="flex flex-col gap-4">
+              {/* STAP 1 — Nieuw: beoordelen */}
+              {a.status === "nieuw" && (
+                <div style={{ border: "1px solid rgba(0,19,55,0.1)", borderRadius: "var(--radius-card)", padding: 16 }}>
+                  <p className="text-xs font-bold mb-1 uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.5)", fontFamily: "var(--font-inter)" }}>Stap 1 · Beoordelen</p>
+                  <p className="text-[12px] mb-3" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+                    Bekijk de auto, haal eventueel marktprijzen op, en beslis of je de auto in consignatie neemt.
+                  </p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => onStatus(a.id, "geaccepteerd")} className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5" style={{ backgroundColor: "#15803d", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                      <CircleCheck size={15} /> Akkoord
+                    </button>
+                    <button type="button" onClick={() => onStatus(a.id, "afgewezen")} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5" style={{ border: "1px solid #fecaca", color: "#b91c1c", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                      <X size={15} /> Afwijzen
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STAP 2 — Geaccepteerd: contract opstellen + mailen */}
+              {a.status === "geaccepteerd" && (
+                <ContractStap a={a} onPatch={onPatch} mist={mist} onDruk={() => onDrukContract(a)} onMail={() => onMailContract(a)} contractLaden={contractLaden} />
+              )}
+
+              {/* STAP 3 — Lopend: in verkoop, updates */}
+              {a.status === "lopend" && (
+                <VerkoopStap a={a} nu={nu} onPatch={onPatch} onUpdate={() => onUpdate(a.id)} updateLaden={updateLaden} updateOk={updateOk} onContractOpnieuw={() => onDrukContract(a)} />
+              )}
+
+              {/* Afgewezen */}
+              {a.status === "afgewezen" && (
+                <div style={{ border: "1px solid #fecaca", borderRadius: "var(--radius-card)", padding: 16, backgroundColor: "#fef2f2" }}>
+                  <p className="text-sm font-bold mb-1" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>Afgewezen</p>
+                  <p className="text-[12px] mb-3" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)" }}>Deze aanvraag is afgewezen. Je kunt hem alsnog accepteren of verwijderen.</p>
+                  <button type="button" onClick={() => onStatus(a.id, "nieuw")} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                    Terugzetten naar nieuw
+                  </button>
+                </div>
+              )}
+
+              {/* Contact + verwijderen — altijd beschikbaar */}
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  {a.email && (
+                    <a href={`mailto:${a.email}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-all hover:opacity-80" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                      <Mail size={13} /> Mail klant
+                    </a>
+                  )}
+                  {a.telefoon && (
+                    <a href={`tel:${a.telefoon}`} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-all hover:opacity-80" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                      <Phone size={13} /> Bel klant
+                    </a>
+                  )}
+                </div>
+                <button type="button" onClick={() => onVerwijder(a.id)} className="text-xs py-1.5 transition-all hover:opacity-70 text-center" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
+                  <Trash2 size={11} className="inline mr-1" /> Verwijder aanvraag
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Stap 2: contract-afspraken + versturen ──
+function ContractStap({
+  a, onPatch, mist, onDruk, onMail, contractLaden,
+}: {
+  a: Cosignatie;
+  onPatch: (id: string, velden: Record<string, unknown>) => void;
+  mist: string[];
+  onDruk: () => void;
+  onMail: () => void;
+  contractLaden: boolean;
+}) {
+  const velden: { label: string; field: keyof Cosignatie; ph?: string; suffix?: string }[] = [
+    { label: "Adres eigenaar", field: "klant_adres", ph: "Straat 1" },
+    { label: "Postcode", field: "klant_postcode", ph: "1234 AB" },
+    { label: "Plaats", field: "klant_stad", ph: "Barendrecht" },
+    { label: "Kenteken", field: "kenteken", ph: "AB-123-C" },
+    { label: "Chassisnr", field: "vin", ph: "WVW…" },
+    { label: "Vergoeding %", field: "fee_percentage", ph: "10", suffix: "%" },
+    { label: "Of vast bedrag", field: "fee_vast", ph: "0", suffix: "€" },
+    { label: "Niet verkopen onder", field: "bodemprijs", ph: "17000", suffix: "€" },
+    { label: "Looptijd (mnd)", field: "looptijd_maanden", ph: "6" },
+    { label: "Terugname kosten", field: "terugname_kosten", ph: "50", suffix: "€" },
+  ];
+  return (
+    <div style={{ border: "1px solid rgba(29,78,216,0.25)", borderRadius: "var(--radius-card)", padding: 16, backgroundColor: "#f5f8ff" }}>
+      <p className="text-xs font-bold mb-1 uppercase tracking-wider" style={{ color: "#1d4ed8", fontFamily: "var(--font-inter)" }}>Stap 2 · Contract opstellen</p>
+      <p className="text-[12px] mb-3" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+        Vul de contractafspraken in en stuur het consignatiecontract als PDF naar de klant.
+      </p>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {velden.map(({ label, field, ph, suffix }) => (
+          <div key={String(field)}>
+            <label className="block text-[9px] font-semibold uppercase tracking-wider mb-1" style={S.label}>{label}{suffix ? ` (${suffix})` : ""}</label>
+            <input
+              type="text" placeholder={ph}
+              defaultValue={(a as unknown as Record<string, string | number>)[field as string] != null ? String((a as unknown as Record<string, string | number>)[field as string]) : ""}
+              onBlur={(e) => { const huidig = (a as unknown as Record<string, string | number>)[field as string]; if (e.target.value !== (huidig != null ? String(huidig) : "")) onPatch(a.id, { [field as string]: e.target.value }); }}
+              className="w-full px-2 py-1.5 text-xs outline-none" style={S.veld}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mb-3">
+        <label className="block text-[9px] font-semibold uppercase tracking-wider mb-1" style={S.label}>Bijzondere afspraken</label>
+        <textarea defaultValue={a.bijzondere_afspraken ?? ""} rows={2} onBlur={(e) => { if (e.target.value !== (a.bijzondere_afspraken ?? "")) onPatch(a.id, { bijzondere_afspraken: e.target.value }); }} placeholder="bijv. winterbanden gaan mee" className="w-full px-2 py-1.5 text-xs outline-none resize-none" style={{ ...S.veld, lineHeight: 1.5 }} />
+      </div>
+      {mist.length > 0 && (
+        <p className="text-[11px] mb-3 px-2.5 py-2" style={{ backgroundColor: "#fef3c7", color: "#b45309", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+          Nog niet ingevuld: {mist.join(", ")}. Die blijven leeg op het contract.
+        </p>
+      )}
+      <div className="flex flex-col gap-2">
+        <button type="button" onClick={onMail} disabled={contractLaden} className="inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-50" style={{ backgroundColor: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}>
+          {contractLaden ? <><RefreshCw size={15} className="animate-spin" /> Versturen...</> : <><FileSignature size={15} /> Contract mailen naar klant</>}
+        </button>
+        <button type="button" onClick={onDruk} disabled={contractLaden} className="inline-flex items-center justify-center gap-2 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-50" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+          Eerst afdrukken / bekijken
+        </button>
+      </div>
+      {a.contract_nr && <p className="text-[11px] mt-2" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>Contractnummer {a.contract_nr}</p>}
+    </div>
+  );
+}
+
+// ── Stap 3: in verkoop, automatische + handmatige updates ──
+function VerkoopStap({
+  a, nu, onPatch, onUpdate, updateLaden, updateOk, onContractOpnieuw,
+}: {
+  a: Cosignatie;
+  nu: number;
+  onPatch: (id: string, velden: Record<string, unknown>) => void;
+  onUpdate: () => void;
+  updateLaden: boolean;
+  updateOk: boolean;
+  onContractOpnieuw: () => void;
+}) {
+  const autoUpdates = a.auto_updates !== false;
+  const gemaild = a.contract_gemaild_op ? new Date(a.contract_gemaild_op) : null;
+  const laatste = a.laatste_update_op ? new Date(a.laatste_update_op) : null;
+  const dagenSindsUpdate = laatste ? Math.floor((nu - laatste.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const volgende = laatste ? Math.max(0, 14 - (dagenSindsUpdate ?? 0)) : 0;
+
+  return (
+    <div style={{ border: "1px solid rgba(21,128,61,0.25)", borderRadius: "var(--radius-card)", padding: 16, backgroundColor: "#f2fbf5" }}>
+      <p className="text-xs font-bold mb-1 uppercase tracking-wider" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>Stap 3 · In verkoop</p>
+      <p className="text-[12px] mb-3" style={{ color: "rgba(0,19,55,0.55)", fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
+        {gemaild ? `Contract gemaild op ${gemaild.toLocaleDateString("nl-NL")}. ` : ""}
+        De auto staat in de verkoop.
+      </p>
+
+      {/* Automatische updates aan/uit */}
+      <div className="flex items-center justify-between px-3 py-2.5 mb-3" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.08)", borderRadius: "var(--radius-control)" }}>
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>Automatische update om de week</p>
+          <p className="text-[10px]" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+            {autoUpdates
+              ? (laatste ? `Laatste: ${laatste.toLocaleDateString("nl-NL")} · volgende over ${volgende} dag${volgende !== 1 ? "en" : ""}` : "Eerste update binnen 14 dagen")
+              : "Staat uit — geen automatische mails"}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoUpdates}
+          onClick={() => onPatch(a.id, { auto_updates: !autoUpdates })}
+          className="relative flex-shrink-0 transition-all"
+          style={{ width: 42, height: 24, borderRadius: 999, backgroundColor: autoUpdates ? "#15803d" : "rgba(0,19,55,0.2)" }}
+        >
+          <span style={{ position: "absolute", top: 2, left: autoUpdates ? 20 : 2, width: 20, height: 20, borderRadius: 999, backgroundColor: "#fff", transition: "left 150ms ease" }} />
+        </button>
+      </div>
+
+      <button type="button" onClick={onUpdate} disabled={updateLaden} className="inline-flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-50 mb-2" style={{ backgroundColor: updateOk ? "#15803d" : "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+        {updateLaden ? <><RefreshCw size={14} className="animate-spin" /> Versturen...</> : updateOk ? <><Check size={14} /> Update verstuurd!</> : <><Send size={14} /> Nu handmatig update sturen</>}
+      </button>
+
+      <div className="flex flex-col gap-1.5">
+        <button type="button" onClick={onContractOpnieuw} className="inline-flex items-center justify-center gap-2 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+          <FileSignature size={13} /> Contract opnieuw bekijken
+        </button>
+        <div className="flex items-center gap-1.5 mt-1">
+          <Clock size={11} style={{ color: "rgba(0,19,55,0.35)" }} />
+          <span className="text-[10px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+            {a.contract_nr ? `Contract ${a.contract_nr}` : "Nog geen contractnummer"}
+          </span>
+        </div>
       </div>
     </div>
   );
