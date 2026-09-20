@@ -12,7 +12,6 @@ import {
   RefreshCw,
   LogOut,
   Plus,
-  ExternalLink,
   Calculator,
   Trash2,
   Users,
@@ -331,7 +330,6 @@ function verzamelAandachtspunten(beschikbaar: Auto[]): Aandachtspunt[] {
 function Zijbalk({
   tab,
   onSelect,
-  onNotif,
   refresh,
   refreshing,
   countdown,
@@ -340,7 +338,6 @@ function Zijbalk({
 }: {
   tab: Tab;
   onSelect: (id: Tab) => void;
-  onNotif: (t: Tab) => void;
   refresh: () => void;
   refreshing: boolean;
   countdown: number;
@@ -352,7 +349,7 @@ function Zijbalk({
       className="flex flex-col h-full"
       style={{ background: "linear-gradient(180deg,#001a4a 0%,#001337 55%,#000e29 100%)" }}
     >
-      {/* Kop — logo links, meldingen (+ sluitknop op mobiel) rechts */}
+      {/* Kop — logo links, sluitknop (alleen mobiel) rechts */}
       <div
         className="px-5 pt-5 pb-4 flex items-start justify-between"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
@@ -371,26 +368,23 @@ function Zijbalk({
             JG Mobility
           </h1>
         </div>
-        <div className="flex items-center gap-1.5">
-          <MeldingenBel onGaNaar={onNotif} />
-          {onClose && (
-            <button
-              onClick={onClose}
-              aria-label="Menu sluiten"
-              className="md:hidden flex items-center justify-center transition-colors"
-              style={{
-                width: 34,
-                height: 34,
-                color: "rgba(255,255,255,0.6)",
-                backgroundColor: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.09)",
-                borderRadius: "var(--radius-control)",
-              }}
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Menu sluiten"
+            className="md:hidden flex items-center justify-center transition-colors"
+            style={{
+              width: 34,
+              height: 34,
+              color: "rgba(255,255,255,0.6)",
+              backgroundColor: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: "var(--radius-control)",
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       {/* Navigatie — alle groepen zichtbaar */}
@@ -573,7 +567,6 @@ export default function DashboardHub() {
         <Zijbalk
           tab={tab}
           onSelect={(id) => setTab(id)}
-          onNotif={gaNaarTab}
           refresh={refresh}
           refreshing={refreshing}
           countdown={countdown}
@@ -598,7 +591,6 @@ export default function DashboardHub() {
                 setTab(id);
                 setMenuOpen(false);
               }}
-              onNotif={gaNaarTab}
               refresh={refresh}
               refreshing={refreshing}
               countdown={countdown}
@@ -750,15 +742,7 @@ function DashboardContent({
             <span className="hidden md:inline text-[11px] mr-1" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-inter)" }}>
               Bijgewerkt {lastRefresh.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
             </span>
-            <a
-              href="https://www.jgmobility.nl/aanbod"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5"
-              style={{ backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)", color: "#ffffff", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}
-            >
-              <ExternalLink size={13} /> Website
-            </a>
+            <MeldingenBel onGaNaar={onTab} />
           </div>
         </div>
       </div>
