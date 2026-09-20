@@ -14,7 +14,7 @@ type Auto = {
 };
 
 type Resultaat = {
-  intro?: string; advertentie?: string; instagram?: string; tiktok?: string; hashtags?: string;
+  intro?: string; advertentie?: string; instagram?: string; tiktok_titel?: string; tiktok?: string; hashtags?: string;
   error?: string; ontbrekendeSleutel?: boolean;
   /** true = kwam uit het archief, dus zonder tokens te verbruiken. */
   uitArchief?: boolean;
@@ -64,7 +64,7 @@ function KopieerKnop({ tekst }: { tekst: string }) {
 }
 
 /** Eén tekstblok met titel, hint, optionele tekenteller en kopieerknop. */
-function TekstBlok({ titel, tekst, hint, limiet }: { titel: string; tekst: string; hint?: string; limiet?: number }) {
+function TekstBlok({ titel, tekst, hint, limiet, groot, gecentreerd }: { titel: string; tekst: string; hint?: string; limiet?: number; groot?: boolean; gecentreerd?: boolean }) {
   return (
     <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
       <div className="px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
@@ -91,8 +91,19 @@ function TekstBlok({ titel, tekst, hint, limiet }: { titel: string; tekst: strin
         </div>
       </div>
       <pre
-        className="px-4 sm:px-5 py-4 text-sm whitespace-pre-wrap"
-        style={{ color: "#001337", fontFamily: "var(--font-inter)", lineHeight: 1.75, margin: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}
+        className={`px-4 sm:px-5 whitespace-pre-wrap ${groot ? "py-6" : "py-4"}`}
+        style={{
+          color: "#001337",
+          fontFamily: groot ? "var(--font-playfair)" : "var(--font-inter)",
+          fontSize: groot ? 26 : 14,
+          fontWeight: groot ? 700 : 400,
+          lineHeight: groot ? 1.25 : 1.75,
+          letterSpacing: groot ? "0.01em" : undefined,
+          textAlign: gecentreerd ? "center" : "left",
+          margin: 0,
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
+        }}
       >
         {tekst}
       </pre>
@@ -379,11 +390,20 @@ export default function SocialContent() {
             )}
 
             {platform === "tiktok" && (
-              <TekstBlok
-                titel="TikTok"
-                tekst={resultaat!.tiktok ?? ""}
-                hint="Korte caption met hook en hashtags — plak bij je TikTok-video"
-              />
+              <div className="flex flex-col gap-5">
+                <TekstBlok
+                  titel="TikTok — titel in beeld"
+                  tekst={resultaat!.tiktok_titel ?? ""}
+                  hint="Korte pakkende titel om als tekst over je video te zetten"
+                  groot
+                  gecentreerd
+                />
+                <TekstBlok
+                  titel="TikTok — caption"
+                  tekst={resultaat!.tiktok ?? ""}
+                  hint="Bijschrift met hook en hashtags — plak bij je TikTok-video"
+                />
+              </div>
             )}
           </>
         ) : (

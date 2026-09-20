@@ -54,12 +54,19 @@ uitnodiging: langskomen voor een proefrit, een DM sturen, of de link in bio.
 Prijs mag hier wel genoemd worden als die bekend is.
 
 ## 4. TIKTOK
-Een korte, pakkende caption bij een autovideo, 20 tot 45 woorden. Veel energie,
-spreektaal, tutoyeren met "je". Begin met een hook die in de eerste seconde pakt
-(een vraag, een claim of een getal). Noem 1 tot 3 opvallende dingen aan de auto.
-2 tot 4 emoji. Sluit af met een call-to-action (kom langs, stuur een DM, link in bio).
-Zet op de laatste regel 4 tot 6 TikTok-hashtags inclusief #fyp en #cartok, plus
-merk-/modelspecifiek en #jgmobility. Prijs mag genoemd worden als die bekend is.
+Lever twee dingen: een titel en een caption.
+
+TIKTOK-TITEL: een heel korte, pakkende titel van maximaal 6 woorden die als tekst
+IN BEELD op de video kan staan. Een hook die meteen pakt — een claim, een getal of
+een vraag. In hoofdletters mag. Voorbeelden: "DEZE BMW IS ONMISBAAR", "48.000 KM,
+BIJNA NIEUW", "JOUW VOLGENDE AUTO?". Geen hashtags, geen emoji in de titel.
+
+TIKTOK-CAPTION: een korte, pakkende caption bij de video, 20 tot 45 woorden. Veel
+energie, spreektaal, tutoyeren met "je". Begin met een hook die in de eerste seconde
+pakt. Noem 1 tot 3 opvallende dingen aan de auto. 2 tot 4 emoji. Sluit af met een
+call-to-action (kom langs, stuur een DM, link in bio). Zet op de laatste regel 4 tot
+6 TikTok-hashtags inclusief #fyp en #cartok, plus merk-/modelspecifiek en #jgmobility.
+Prijs mag genoemd worden als die bekend is.
 
 ## 5. HASHTAGS
 8 tot 12 stuks op een regel, gescheiden door spaties. Merk- en modelspecifiek,
@@ -127,7 +134,7 @@ function invoerHash(a: AutoInvoer): string {
     opties: (a.opties ?? []).map((o) => `${o.categorie ?? ""}:${(o.items ?? []).join(",")}`).sort(),
     extra: (a.extra ?? "").trim(),
     // Meeversioneren: na een promptwijziging horen oude teksten niet meer geldig te zijn.
-    promptversie: `intro${INTRO_MAX}-tiktok`,
+    promptversie: `intro${INTRO_MAX}-tiktok2`,
   };
   return createHash("sha256").update(JSON.stringify(relevant)).digest("hex").slice(0, 32);
 }
@@ -177,6 +184,7 @@ function zorgVoorTabel(): Promise<void> {
         intro TEXT DEFAULT '',
         advertentie TEXT DEFAULT '',
         instagram TEXT DEFAULT '',
+        tiktok_titel TEXT DEFAULT '',
         tiktok TEXT DEFAULT '',
         hashtags TEXT DEFAULT '',
         model TEXT DEFAULT '',
@@ -185,8 +193,9 @@ function zorgVoorTabel(): Promise<void> {
         aangemaakt TIMESTAMPTZ DEFAULT NOW()
       )
     `;
-    // Bestaande tabellen (van vóór TikTok) krijgen de kolom er alsnog bij.
+    // Bestaande tabellen (van vóór TikTok) krijgen de kolommen er alsnog bij.
     await sql`ALTER TABLE social_teksten ADD COLUMN IF NOT EXISTS tiktok TEXT DEFAULT ''`.catch(() => null);
+    await sql`ALTER TABLE social_teksten ADD COLUMN IF NOT EXISTS tiktok_titel TEXT DEFAULT ''`.catch(() => null);
     await sql`CREATE INDEX IF NOT EXISTS social_teksten_hash_idx ON social_teksten (invoer_hash, aangemaakt DESC)`.catch(() => null);
     await sql`CREATE INDEX IF NOT EXISTS social_teksten_auto_idx ON social_teksten (auto_id, aangemaakt DESC)`.catch(() => null);
   })().catch((e) => {
@@ -200,7 +209,7 @@ function zorgVoorTabel(): Promise<void> {
 
 type ArchiefRij = {
   id: string; auto_id: number | null; auto_naam: string; extra: string;
-  intro: string; advertentie: string; instagram: string; tiktok: string; hashtags: string;
+  intro: string; advertentie: string; instagram: string; tiktok_titel: string; tiktok: string; hashtags: string;
   model: string; tokens_in: number; tokens_uit: number; aangemaakt: string;
 };
 
@@ -252,6 +261,7 @@ export async function POST(request: NextRequest) {
           intro: r.intro,
           advertentie: r.advertentie,
           instagram: r.instagram,
+          tiktok_titel: r.tiktok_titel,
           tiktok: r.tiktok,
           hashtags: r.hashtags,
           uitArchief: true,
@@ -293,10 +303,11 @@ export async function POST(request: NextRequest) {
               intro: { type: "string", description: `Introductietekst voor boven de Molibox-advertentie, maximaal ${INTRO_MAX} tekens` },
               advertentie: { type: "string", description: "De volledige advertentietekst, zonder contactgegevens" },
               instagram: { type: "string", description: "Het Instagram-bijschrift zonder hashtags" },
+              tiktok_titel: { type: "string", description: "Korte pakkende TikTok-titel (max 6 woorden) om als tekst in beeld op de video te zetten, geen hashtags of emoji" },
               tiktok: { type: "string", description: "De TikTok-caption inclusief eigen hashtags op de laatste regel" },
               hashtags: { type: "string", description: "De hashtagregel voor Instagram, spaties ertussen" },
             },
-            required: ["intro", "advertentie", "instagram", "tiktok", "hashtags"],
+            required: ["intro", "advertentie", "instagram", "tiktok_titel", "tiktok", "hashtags"],
             additionalProperties: false,
           },
         },
@@ -309,7 +320,7 @@ export async function POST(request: NextRequest) {
     }
 
     const tekst = resp.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text ?? "";
-    let uit: { intro?: string; advertentie?: string; instagram?: string; tiktok?: string; hashtags?: string } = {};
+    let uit: { intro?: string; advertentie?: string; instagram?: string; tiktok_titel?: string; tiktok?: string; hashtags?: string } = {};
     try {
       uit = JSON.parse(tekst);
     } catch {
@@ -327,6 +338,7 @@ ${CONTACTBLOK}`
       : "";
 
     const instagram = uit.instagram ?? "";
+    const tiktokTitel = uit.tiktok_titel ?? "";
     const tiktok = uit.tiktok ?? "";
     const hashtags = uit.hashtags ?? "";
 
@@ -336,11 +348,11 @@ ${CONTACTBLOK}`
       await zorgVoorTabel();
       const rij = (await sql`
         INSERT INTO social_teksten
-          (id, auto_id, auto_naam, invoer_hash, extra, intro, advertentie, instagram, tiktok, hashtags,
+          (id, auto_id, auto_naam, invoer_hash, extra, intro, advertentie, instagram, tiktok_titel, tiktok, hashtags,
            model, tokens_in, tokens_uit)
         VALUES
           (${randomUUID()}, ${body.id ?? null}, ${naam}, ${hash}, ${(body.extra ?? "").trim()},
-           ${intro}, ${advertentie}, ${instagram}, ${tiktok}, ${hashtags},
+           ${intro}, ${advertentie}, ${instagram}, ${tiktokTitel}, ${tiktok}, ${hashtags},
            ${resp.model}, ${resp.usage.input_tokens}, ${resp.usage.output_tokens})
         RETURNING aangemaakt
       `) as { aangemaakt: string }[];
@@ -354,6 +366,7 @@ ${CONTACTBLOK}`
       introIngekort: ingekort,
       advertentie,
       instagram,
+      tiktok_titel: tiktokTitel,
       tiktok,
       hashtags,
       uitArchief: false,
