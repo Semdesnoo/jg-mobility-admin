@@ -46,6 +46,7 @@ import {
   Download,
   Send,
   MailCheck,
+  StickyNote,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import Dropdown from "./Dropdown";
@@ -135,7 +136,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "inruil",     label: "Inruil",           icon: ArrowLeftRight },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
       { id: "verkopers",  label: "Verkopersradar",   icon: Radar },
-      { id: "afspraken",  label: "Afspraken",        icon: Calendar },
+      { id: "afspraken",  label: "Notities",        icon: StickyNote },
       { id: "molibox",    label: "Molibox",          icon: LayoutGrid },
     ],
   },
@@ -1311,7 +1312,7 @@ function SnelleActies({ onTab }: { onTab: (t: Tab) => void }) {
     { label: "Nieuwe factuur", icon: FileText, actie: () => onTab("facturen") },
     { label: "Nieuwe taxatie", icon: TrendingDown, actie: () => onTab("inkoop") },
     { label: "Nieuwe klant", icon: Users, actie: () => onTab("klanten") },
-    { label: "Nieuwe afspraak", icon: Calendar, actie: () => onTab("afspraken") },
+    { label: "Nieuwe notitie", icon: StickyNote, actie: () => onTab("afspraken") },
     { label: "Marge berekenen", icon: Calculator, actie: () => onTab("calculator") },
   ];
 
