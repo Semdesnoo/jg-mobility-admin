@@ -122,6 +122,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
     items: [
       { id: "dashboard",    label: "Dashboard",       icon: LayoutDashboard },
       { id: "statistieken", label: "Statistieken",    icon: BarChart2 },
+      { id: "afspraken",    label: "Notities",        icon: StickyNote },
       { id: "merkanalyse",  label: "Standtijd & Merken", icon: Clock },
     ],
   },
@@ -136,7 +137,6 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "inruil",     label: "Inruil",           icon: ArrowLeftRight },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
       { id: "verkopers",  label: "Verkopersradar",   icon: Radar },
-      { id: "afspraken",  label: "Notities",        icon: StickyNote },
       { id: "molibox",    label: "Molibox",          icon: LayoutGrid },
     ],
   },
