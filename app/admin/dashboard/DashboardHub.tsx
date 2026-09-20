@@ -48,6 +48,7 @@ import {
   MailCheck,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
+import Dropdown from "./Dropdown";
 import KlantenContent from "./KlantenContent";
 import AfsprakenContent from "./AfsprakenContent";
 import InkoopContent from "./InkoopContent";
@@ -3344,17 +3345,29 @@ function FacturenContent() {
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>BTW type</label>
-                <select {...inp("btw_type")} className="w-full px-3 py-2 text-sm outline-none" style={veldStijl}>
-                  <option value="marge">Margeregeling (geen BTW)</option>
-                  <option value="21">21% BTW</option>
-                </select>
+                <Dropdown
+                  value={form.btw_type}
+                  onChange={(v) => setForm((p) => ({ ...p, btw_type: v }))}
+                  options={[
+                    { value: "marge", label: "Margeregeling (geen BTW)" },
+                    { value: "21", label: "21% BTW" },
+                  ]}
+                  className="px-3 py-2"
+                  style={{ backgroundColor: "#fafafa" }}
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>Betaalwijze</label>
-                <select {...inp("betaalwijze")} className="w-full px-3 py-2 text-sm outline-none" style={veldStijl}>
-                  <option value="bank">Bankoverschrijving</option>
-                  <option value="contant">Contant</option>
-                </select>
+                <Dropdown
+                  value={form.betaalwijze}
+                  onChange={(v) => setForm((p) => ({ ...p, betaalwijze: v }))}
+                  options={[
+                    { value: "bank", label: "Bankoverschrijving" },
+                    { value: "contant", label: "Contant" },
+                  ]}
+                  className="px-3 py-2"
+                  style={{ backgroundColor: "#fafafa" }}
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>Factuurdatum</label>
@@ -4521,11 +4534,15 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
                       </div>
                       <div>
                         <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>BTW type</label>
-                        <select value={btwType} onChange={(e) => setBtwType(e.target.value as "marge" | "21")}
-                          className="w-full px-3 py-2.5 text-sm" style={veld}>
-                          <option value="marge">Margeregeling (particulier)</option>
-                          <option value="21">21% BTW (bedrijf)</option>
-                        </select>
+                        <Dropdown
+                          value={btwType}
+                          onChange={(v) => setBtwType(v as "marge" | "21")}
+                          options={[
+                            { value: "marge", label: "Margeregeling (particulier)" },
+                            { value: "21", label: "21% BTW (bedrijf)" },
+                          ]}
+                          className="px-3 py-2.5"
+                        />
                       </div>
                       {btwType === "21" && (
                         <p className="col-span-full text-[10px] leading-relaxed" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>

@@ -11,6 +11,7 @@ import { zonderBtw, metBtw } from "@/lib/prijs";
 import { isBedrijfswagen, normaliseerBodytype } from "@/lib/voertuig";
 import { useAiTaak } from "@/app/admin/dashboard/AiTaken";
 import { useDialoog } from "@/app/admin/dashboard/Dialoog";
+import Dropdown from "@/app/admin/dashboard/Dropdown";
 
 type Optie = { categorie: string; items: string[] };
 
@@ -694,31 +695,34 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
         <Sectie titel="Kenmerken">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Veld label="Brandstof">
-              <select value={form.brandstof} onChange={(e) => set("brandstof", e.target.value)} {...selectProps}>
-                {["Benzine", "Diesel", "Elektrisch", "Hybride", "Hybride (Plug-in)", "LPG"].map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={form.brandstof}
+                onChange={(v) => set("brandstof", v)}
+                options={["Benzine", "Diesel", "Elektrisch", "Hybride", "Hybride (Plug-in)", "LPG"].map((b) => ({ value: b, label: b }))}
+                className="px-4 py-2.5"
+              />
             </Veld>
             <Veld label="Transmissie">
-              <select value={form.transmissie} onChange={(e) => set("transmissie", e.target.value)} {...selectProps}>
-                {["Handgeschakeld", "Automatisch", "Semi-automaat"].map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </select>
+              <Dropdown
+                value={form.transmissie}
+                onChange={(v) => set("transmissie", v)}
+                options={["Handgeschakeld", "Automatisch", "Semi-automaat"].map((t) => ({ value: t, label: t }))}
+                className="px-4 py-2.5"
+              />
             </Veld>
             <Veld label="Carrosserie">
-              <select value={form.bodytype} onChange={(e) => set("bodytype", e.target.value)} {...selectProps}>
-                {/* Staat er iets in de database wat wij niet kennen, dan zetten we het er
-                    als keuze bij. Anders wijst de lijst een andere waarde aan dan er is
-                    opgeslagen en verandert de carrosserie zodra je iets anders bewerkt. */}
-                {(CARROSSERIEEN.includes(form.bodytype) || !form.bodytype
+              {/* Staat er iets in de database wat wij niet kennen, dan zetten we het er
+                  als keuze bij. Anders wijst de lijst een andere waarde aan dan er is
+                  opgeslagen en verandert de carrosserie zodra je iets anders bewerkt. */}
+              <Dropdown
+                value={form.bodytype}
+                onChange={(v) => set("bodytype", v)}
+                options={(CARROSSERIEEN.includes(form.bodytype) || !form.bodytype
                   ? CARROSSERIEEN
                   : [...CARROSSERIEEN, form.bodytype]
-                ).map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </select>
+                ).map((b) => ({ value: b, label: b }))}
+                className="px-4 py-2.5"
+              />
             </Veld>
             <Veld label="Vermogen">
               <input value={form.vermogen} onChange={(e) => set("vermogen", e.target.value)} placeholder="bijv. 150 pk" {...inputProps} />
@@ -733,32 +737,41 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
               <input value={form.apk} onChange={(e) => set("apk", e.target.value)} placeholder="bijv. 06-2026 of Onbekend" {...inputProps} />
             </Veld>
             <Veld label="BTW / Marge">
-              <select value={form.btw} onChange={(e) => set("btw", e.target.value)} {...selectProps}>
-                {["Marge", "BTW-auto"].map((b) => <option key={b}>{b}</option>)}
-              </select>
+              <Dropdown
+                value={form.btw}
+                onChange={(v) => set("btw", v)}
+                options={["Marge", "BTW-auto"].map((b) => ({ value: b, label: b }))}
+                className="px-4 py-2.5"
+              />
             </Veld>
             <Veld label="Bekleding">
               <input value={form.bekleding} onChange={(e) => set("bekleding", e.target.value)} placeholder="bijv. Leder" {...inputProps} />
             </Veld>
             <Veld label="Status">
-              <select value={status} onChange={(e) => setStatus(e.target.value)} {...selectProps}>
-                <option value="beschikbaar">Beschikbaar</option>
-                <option value="gereserveerd">Gereserveerd</option>
-                <option value="verkocht">Verkocht</option>
-              </select>
+              <Dropdown
+                value={status}
+                onChange={(v) => setStatus(v)}
+                options={[
+                  { value: "beschikbaar", label: "Beschikbaar" },
+                  { value: "gereserveerd", label: "Gereserveerd" },
+                  { value: "verkocht", label: "Verkocht" },
+                ]}
+                className="px-4 py-2.5"
+              />
             </Veld>
             {/* Losstaand van de status: je kunt een beschikbare auto verbergen zolang de
                 foto's nog niet klaar zijn, en een verkochte auto van de site halen zonder
                 dat hij uit je administratie verdwijnt. */}
             <Veld label="Op de website">
-              <select
+              <Dropdown
                 value={form.verborgen ? "verborgen" : "zichtbaar"}
-                onChange={(e) => set("verborgen", e.target.value === "verborgen")}
-                {...selectProps}
-              >
-                <option value="zichtbaar">Zichtbaar</option>
-                <option value="verborgen">Verborgen — niet op de website</option>
-              </select>
+                onChange={(v) => set("verborgen", v === "verborgen")}
+                options={[
+                  { value: "zichtbaar", label: "Zichtbaar" },
+                  { value: "verborgen", label: "Verborgen — niet op de website" },
+                ]}
+                className="px-4 py-2.5"
+              />
             </Veld>
           </div>
         </Sectie>
@@ -984,15 +997,6 @@ const inputProps = {
   } as React.CSSProperties,
 };
 
-const selectProps = {
-  className: "w-full px-4 py-2.5 text-sm outline-none appearance-none cursor-pointer",
-  style: {
-    backgroundColor: "#ffffff",
-    border: "1px solid rgba(0,19,55,0.15)",
-    color: "#001337",
-    fontFamily: "var(--font-inter)",
-  } as React.CSSProperties,
-};
 
 function Sectie({ titel, children }: { titel: string; children: React.ReactNode }) {
   return (

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
 import { useDialoog } from "./Dialoog";
+import Dropdown from "./Dropdown";
 import { Plus, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 type Afspraak = {
@@ -310,9 +311,12 @@ export default function AfsprakenContent() {
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Type</label>
-                <select value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" style={S.veld}>
-                  {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
+                <Dropdown
+                  value={form.type}
+                  onChange={(v) => setForm((p) => ({ ...p, type: v }))}
+                  options={Object.entries(TYPES).map(([k, v]) => ({ value: k, label: v as string }))}
+                  className="px-3 py-2"
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Naam klant *</label>

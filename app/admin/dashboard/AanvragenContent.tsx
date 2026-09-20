@@ -15,6 +15,7 @@ import {
 } from "./inkoop/ui";
 import { useAiTaak } from "./AiTaken";
 import { useDialoog } from "./Dialoog";
+import Dropdown from "./Dropdown";
 
 /**
  * Dagoverzicht van aanvragen.
@@ -719,21 +720,29 @@ function NieuweAanvraag({
           <input style={inputStijl} value={f.email} onChange={(e) => zet("email", e.target.value)} placeholder="jan@voorbeeld.nl" />
         </Field>
         <Field label="Waar kwam het binnen">
-          <select style={inputStijl} value={f.bron} onChange={(e) => zet("bron", e.target.value)}>
-            {kanalen.map((w) => (
-              <option key={w} value={w}>{KANAAL[w]?.label ?? w}</option>
-            ))}
-          </select>
+          <Dropdown
+            value={f.bron}
+            onChange={(v) => zet("bron", v)}
+            options={kanalen.map((w) => ({ value: w, label: KANAAL[w]?.label ?? w }))}
+            className="px-2.5 py-[7px]"
+            style={{ fontSize: 12.5 }}
+          />
         </Field>
         <Field label="Over welke auto">
-          <select style={inputStijl} value={f.autoId} onChange={(e) => zet("autoId", e.target.value)}>
-            <option value="">— geen / andere auto —</option>
-            {autos.filter((x) => !x.verkocht).map((x) => (
-              <option key={x.id} value={String(x.id)}>
-                {`${x.merk ?? ""} ${x.model ?? ""}`.trim()}{x.kenteken ? ` · ${x.kenteken}` : ""}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            value={f.autoId}
+            onChange={(v) => zet("autoId", v)}
+            options={[
+              { value: "", label: "— geen / andere auto —" },
+              ...autos.filter((x) => !x.verkocht).map((x) => ({
+                value: String(x.id),
+                label: `${`${x.merk ?? ""} ${x.model ?? ""}`.trim()}${x.kenteken ? ` · ${x.kenteken}` : ""}`,
+              })),
+            ]}
+            placeholder="— geen / andere auto —"
+            className="px-2.5 py-[7px]"
+            style={{ fontSize: 12.5 }}
+          />
         </Field>
         <Field label="Waar gaat het over">
           <input style={inputStijl} value={f.onderwerp} onChange={(e) => zet("onderwerp", e.target.value)} placeholder="Vraagt of de prijs kan zakken" />
@@ -1042,11 +1051,10 @@ function Detail({
         <div className="grid grid-cols-1 gap-2">
           <Field label="Onze auto waar hij op reageert">
             {bewerken ? (
-            <select
-              style={inputStijl}
+            <Dropdown
               value={a.auto_id != null ? String(a.auto_id) : ""}
-              onChange={(e) => {
-                const gekozenAuto = autos.find((x) => String(x.id) === e.target.value);
+              onChange={(waarde) => {
+                const gekozenAuto = autos.find((x) => String(x.id) === waarde);
                 // auto_id MOET mee. Zonder dat sprong de keuzelijst na het herladen
                 // terug naar "geen auto" (de waarde komt uit a.auto_id) en bleef de
                 // aanvraag in het tabblad Per auto onder de vórige auto hangen — met de
@@ -1063,14 +1071,16 @@ function Detail({
                   ...(a.kenteken ? {} : { kenteken: gekozenAuto?.kenteken ?? "" }),
                 });
               }}
-            >
-              <option value="">— geen / andere auto —</option>
-              {autos.map((x) => (
-                <option key={x.id} value={String(x.id)}>
-                  {`${x.merk ?? ""} ${x.model ?? ""}`.trim()}{x.kenteken ? ` · ${x.kenteken}` : ""}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "— geen / andere auto —" },
+                ...autos.map((x) => ({
+                  value: String(x.id),
+                  label: `${`${x.merk ?? ""} ${x.model ?? ""}`.trim()}${x.kenteken ? ` · ${x.kenteken}` : ""}`,
+                })),
+              ]}
+              placeholder="— geen / andere auto —"
+              className="px-3 py-2"
+            />
             ) : (
               <p style={{ padding: "9px 12px", border: "1px solid transparent", fontFamily: T.inter, fontSize: 13, color: a.auto_naam ? T.navy : T.ink(0.3) }}>
                 {a.auto_naam || "—"}

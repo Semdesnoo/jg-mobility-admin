@@ -23,6 +23,7 @@ import {
 import VerkopersCriteria, { type Criteria as ZoekCriteria } from "./VerkopersCriteria";
 import { useAiTaak } from "./AiTaken";
 import { useDialoog } from "./Dialoog";
+import Dropdown from "./Dropdown";
 
 /** Wat een zoekronde oplevert. Wordt bewaard in de takenlaag, zodat het er nog
  *  staat als je tussendoor naar een ander tabblad bent geweest. */
@@ -854,28 +855,29 @@ function LeadsTab({
           />
         </div>
 
-        <select
-          value={merkFilter}
-          onChange={(e) => setMerkFilter(e.target.value)}
-          style={{ ...FILTER_VELD, width: "auto", minWidth: 130, paddingRight: 26 }}
-        >
-          <option value="">Alle merken</option>
-          {merkenInLijst.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+        <div style={{ width: 140 }}>
+          <Dropdown
+            value={merkFilter}
+            onChange={(v) => setMerkFilter(v)}
+            options={[{ value: "", label: "Alle merken" }, ...merkenInLijst.map((m) => ({ value: m, label: m }))]}
+            placeholder="Alle merken"
+            className="px-3 py-1.5 text-[13px]"
+          />
+        </div>
 
-        <select
-          value={bronFilter}
-          onChange={(e) => setBronFilter(e.target.value)}
-          style={{ ...FILTER_VELD, width: "auto", minWidth: 120, paddingRight: 26 }}
-        >
-          <option value="">Beide sites</option>
-          <option value="Marktplaats">Marktplaats</option>
-          <option value="AutoScout24">AutoScout24</option>
-        </select>
+        <div style={{ width: 130 }}>
+          <Dropdown
+            value={bronFilter}
+            onChange={(v) => setBronFilter(v)}
+            options={[
+              { value: "", label: "Beide sites" },
+              { value: "Marktplaats", label: "Marktplaats" },
+              { value: "AutoScout24", label: "AutoScout24" },
+            ]}
+            placeholder="Beide sites"
+            className="px-3 py-1.5 text-[13px]"
+          />
+        </div>
 
         <div className="flex items-center gap-1">
           <input
@@ -895,16 +897,19 @@ function LeadsTab({
           />
         </div>
 
-        <select
-          value={sortering}
-          onChange={(e) => setSortering(e.target.value as typeof sortering)}
-          style={{ ...FILTER_VELD, width: "auto", minWidth: 145, paddingRight: 26 }}
-        >
-          <option value="nieuwste">Nieuwste eerst</option>
-          <option value="prijs-af">Prijs hoog → laag</option>
-          <option value="prijs-op">Prijs laag → hoog</option>
-          <option value="kans">Beste kans eerst</option>
-        </select>
+        <div style={{ width: 155 }}>
+          <Dropdown
+            value={sortering}
+            onChange={(v) => setSortering(v as typeof sortering)}
+            options={[
+              { value: "nieuwste", label: "Nieuwste eerst" },
+              { value: "prijs-af", label: "Prijs hoog → laag" },
+              { value: "prijs-op", label: "Prijs laag → hoog" },
+              { value: "kans", label: "Beste kans eerst" },
+            ]}
+            className="px-3 py-1.5 text-[13px]"
+          />
+        </div>
 
         <Btn
           variant={selecteerStand ? "primair" : "ghost"}
@@ -2001,16 +2006,16 @@ function NakijkenTab({
                     style={{ ...FILTER_VELD, paddingLeft: 26, fontSize: 11.5 }}
                   />
                 </div>
-                <select
-                  value={merkFilter}
-                  onChange={(e) => setMerkFilter(e.target.value)}
-                  style={{ ...FILTER_VELD, width: "auto", minWidth: 104, paddingRight: 22, fontSize: 11.5 }}
-                >
-                  <option value="">Alle merken</option>
-                  {merkenInLijst.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
+                <div style={{ width: 120 }}>
+                  <Dropdown
+                    value={merkFilter}
+                    onChange={(v) => setMerkFilter(v)}
+                    options={[{ value: "", label: "Alle merken" }, ...merkenInLijst.map((m) => ({ value: m, label: m }))]}
+                    placeholder="Alle merken"
+                    className="px-2.5 py-1.5"
+                    style={{ fontSize: 11.5 }}
+                  />
+                </div>
                 {(zoek || merkFilter) && (
                   <button
                     type="button"

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useDialoog } from "./Dialoog";
+import Dropdown from "./Dropdown";
 import { Plus, Target, ChevronDown, ChevronUp, Trash2, UserCheck } from "lucide-react";
 
 type Lead = {
@@ -166,9 +167,12 @@ export default function LeadsContent() {
               ))}
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Bron</label>
-                <select value={form.bron} onChange={(e) => setForm((p) => ({ ...p, bron: e.target.value }))} className="w-full px-3 py-2 text-sm outline-none" style={S.veld}>
-                  {Object.entries(BRONNEN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
+                <Dropdown
+                  value={form.bron}
+                  onChange={(v) => setForm((p) => ({ ...p, bron: v }))}
+                  options={Object.entries(BRONNEN).map(([k, v]) => ({ value: k, label: v as string }))}
+                  className="px-3 py-2"
+                />
               </div>
               <div style={{ gridColumn: "span 2" }}>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={S.label}>Notitie</label>

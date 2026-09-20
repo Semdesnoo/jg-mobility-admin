@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useScrollNaar } from "@/lib/use-scroll-naar";
 import { Plus, Upload, Sparkles, Trash2, AlertTriangle, Check, Wallet, Mail, FileText, Paperclip } from "lucide-react";
 import InkoopFacturenOverzicht from "./InkoopFacturenOverzicht";
+import Dropdown from "./Dropdown";
 import { useDialoog } from "./Dialoog";
 
 type InkoopFactuur = {
@@ -630,17 +631,25 @@ export default function InkoopFacturenContent() {
               ))}
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>BTW-tarief</label>
-                <select {...invoer("btw_tarief")} className="w-full px-3 py-2 text-sm outline-none" style={veldStijl}>
-                  <option value="21">21%</option>
-                  <option value="9">9%</option>
-                  <option value="0">0% / geen BTW (marge)</option>
-                </select>
+                <Dropdown
+                  value={form.btw_tarief}
+                  onChange={(v) => setForm((p) => ({ ...p, btw_tarief: v }))}
+                  options={[
+                    { value: "21", label: "21%" },
+                    { value: "9", label: "9%" },
+                    { value: "0", label: "0% / geen BTW (marge)" },
+                  ]}
+                  className="px-3 py-2"
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>Categorie</label>
-                <select {...invoer("categorie")} className="w-full px-3 py-2 text-sm outline-none" style={veldStijl}>
-                  {CATEGORIEEN.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <Dropdown
+                  value={form.categorie}
+                  onChange={(v) => setForm((p) => ({ ...p, categorie: v }))}
+                  options={CATEGORIEEN.map((c) => ({ value: c, label: c }))}
+                  className="px-3 py-2"
+                />
               </div>
               <div className="sm:col-span-2 lg:col-span-1">
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={labelStijl}>Omschrijving</label>
