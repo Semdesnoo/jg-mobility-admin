@@ -419,10 +419,10 @@ export default function TaxatieTab({
     setSorteer((s) => ({ kolom, op: s.kolom === kolom ? !s.op : true }));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-[35fr_65fr] gap-4 items-start">
       {/* ══ RAIL ══════════════════════════════════════════════════ */}
       <aside
-        className="lg:col-span-4 xl:col-span-3 flex flex-col gap-4 self-start lg:sticky"
+        className="flex flex-col gap-4 self-start lg:sticky"
         style={{ top: T.chrome + 16 }}
       >
         {/* Stap 1 — voertuig */}
@@ -656,7 +656,7 @@ export default function TaxatieTab({
       </aside>
 
       {/* ══ CANVAS ════════════════════════════════════════════════ */}
-      <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-4 min-w-0">
+      <div className="flex flex-col gap-4 min-w-0">
         {fout && <Foutmelding>{fout}</Foutmelding>}
 
         {/* ── Uitslagbalk ── */}
