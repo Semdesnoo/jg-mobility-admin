@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FileSignature, Printer, Download, Search, Check, AlertTriangle } from "lucide-react";
 import {
-  T, micro, body, klein, Panel, Btn, Field, inputStijl, Spinner, Empty, Foutmelding, Pill,
+  T, micro, klein, Field, inputStijl, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
 import { genereerContractHTML, type ContractGegevens } from "@/lib/consignatie-contract";
 import { useDialoog } from "./Dialoog";
@@ -17,8 +17,10 @@ import { useDialoog } from "./Dialoog";
  * daar lag niets over op papier. Niet over de vergoeding, niet over hoe lang, niet over
  * wat er gebeurt als hij blijft staan, en niet over wie waarvoor aansprakelijk is.
  *
- * De consignatiegegevens stonden al in het systeem; wat ontbrak waren de afspraken en een
- * document. Dat document komt uit dezelfde koker als de factuur die dezelfde klant later
+ * DE OPZET IS DIE VAN DE FACTURENPAGINA
+ * Eén lijst met inklapbare rijen: bovenaan de auto, de eigenaar en de vraagprijs, en pas
+ * als je een rij openklapt zie je links de details en rechts de afspraken en de knoppen.
+ * Het document zelf komt uit dezelfde koker als de factuur die dezelfde klant later
  * krijgt — zelfde balk, zelfde logo, zelfde adresblok.
  */
 
@@ -114,8 +116,8 @@ export default function ContractenContent() {
   const [lijst, setLijst] = useState<Cosignatie[] | null>(null);
   const [fout, setFout] = useState("");
   const [zoek, setZoek] = useState("");
-  const [gekozenId, setGekozenId] = useState<string | null>(null);
-  const [bezig, setBezig] = useState(false);
+  const [openRij, setOpenRij] = useState<string | null>(null);
+  const [bezig, setBezig] = useState<Record<string, "print" | "pdf">>({});
   const { vraag, melden } = useDialoog();
 
   useEffect(() => {
@@ -145,14 +147,8 @@ export default function ContractenContent() {
       );
   }, [lijst, zoek]);
 
-  const gekozen = useMemo(
-    () => zichtbaar.find((c) => c.id === gekozenId) ?? zichtbaar[0] ?? null,
-    [zichtbaar, gekozenId]
-  );
-
-  const patch = async (velden: Record<string, unknown>) => {
-    if (!gekozen) return false;
-    const res = await fetch(`/api/admin/cosignaties/${gekozen.id}`, {
+  const patch = async (c: Cosignatie, velden: Record<string, unknown>) => {
+    const res = await fetch(`/api/admin/cosignaties/${c.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(velden),
@@ -213,9 +209,9 @@ export default function ContractenContent() {
       getal(c.fee_percentage) <= 0 && getal(c.fee_vast) <= 0 ? "de vergoeding" : "",
     ].filter(Boolean);
 
-  const doe = async (soort: "print" | "pdf") => {
-    if (!gekozen || bezig) return;
-    const mist = ontbreekt(gekozen);
+  const doe = async (c: Cosignatie, soort: "print" | "pdf") => {
+    if (bezig[c.id]) return;
+    const mist = ontbreekt(c);
     if (mist.length) {
       const door = await vraag({
         titel: "Er ontbreekt nog iets op dit contract",
@@ -225,13 +221,13 @@ export default function ContractenContent() {
       });
       if (!door) return;
     }
-    setBezig(true);
+    setBezig((p) => ({ ...p, [c.id]: soort }));
     try {
-      const html = await maakDocument(gekozen);
+      const html = await maakDocument(c);
       if (!html) return;
       if (soort === "print") drukAf(html);
       else {
-        await downloadPdf(html, `Consignatieovereenkomst ${gekozen.contract_nr || ""} ${gekozen.merk} ${gekozen.model}.pdf`.replace(/\s+/g, " ").trim());
+        await downloadPdf(html, `Consignatieovereenkomst ${c.contract_nr || ""} ${c.merk} ${c.model}.pdf`.replace(/\s+/g, " ").trim());
       }
     } catch (e) {
       await melden({
@@ -239,180 +235,261 @@ export default function ContractenContent() {
         tekst: e instanceof Error ? e.message : "Onbekende fout. Probeer het nog een keer.",
       });
     } finally {
-      setBezig(false);
+      setBezig((p) => { const n = { ...p }; delete n[c.id]; return n; });
     }
   };
 
   return (
-    <div className="px-4 md:px-6 py-4 md:py-5 w-full">
-      {fout && <div className="mb-4"><Foutmelding>{fout}</Foutmelding></div>}
-
-      <div
-        className="flex flex-wrap items-center gap-2 px-3 py-2.5 mb-4"
-        style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
+    <div style={{ backgroundColor: T.wash, minHeight: "100%" }}>
+      {/* Vaste kop, zelfde vorm als de andere documentpagina's */}
+      <header
+        className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-6 xl:px-8"
+        style={{ height: 56, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
       >
-        <div className="relative flex-1" style={{ minWidth: 200 }}>
-          <Search
-            size={13}
-            color={T.ink(0.3)}
-            style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
-          />
-          <input
-            value={zoek}
-            onChange={(e) => setZoek(e.target.value)}
-            placeholder="Zoek op naam, auto, kenteken of contractnummer…"
-            style={{ ...inputStijl, padding: "7px 10px 7px 28px", fontSize: 12.5 }}
-          />
+        <FileSignature size={15} style={{ color: T.ink(0.35), flexShrink: 0 }} />
+        <h2
+          className="min-w-0 truncate text-[17px] sm:text-[19px]"
+          style={{ fontFamily: T.play, fontWeight: 700, color: T.navy }}
+        >
+          Consignatiecontract
+        </h2>
+        <span className="hidden md:block flex-shrink-0" style={{ width: 1, height: 16, backgroundColor: T.line2 }} />
+        <p className="hidden md:block min-w-0 truncate" style={micro(T.ink(0.35))}>
+          De afspraken op papier voor auto&apos;s die je voor een ander verkoopt
+        </p>
+        <div className="ml-auto">
+          <span style={klein()}>{zichtbaar.length} consignatie{zichtbaar.length === 1 ? "" : "s"}</span>
         </div>
-        <span style={klein()}>{zichtbaar.length} consignatie{zichtbaar.length === 1 ? "" : "s"}</span>
-      </div>
+      </header>
 
-      {lijst === null ? (
-        <div className="flex justify-center py-16"><Spinner size={22} /></div>
-      ) : zichtbaar.length === 0 ? (
-        <Empty
-          icon={<FileSignature size={30} color={T.ink(0.2)} />}
-          title="Nog geen consignaties"
-          body="Zodra er een auto in consignatie staat, kun je hier het contract opmaken."
-        />
-      ) : (
-        <div className="flex flex-col xl:flex-row gap-4 items-start">
-          <div className="w-full xl:w-[320px] xl:flex-none xl:sticky" style={{ top: 16 }}>
-            <Panel title="Consignaties" meta={`${zichtbaar.length}`}>
-              <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
-                {zichtbaar.map((c) => {
-                  const actief = c.id === gekozen?.id;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setGekozenId(c.id)}
-                      className="text-left transition-all hover:opacity-85"
-                      style={{
-                        padding: "9px 11px",
-                        backgroundColor: actief ? T.navy : T.paper,
-                        border: `1px solid ${actief ? T.navy : T.line}`,
-                        borderLeft: `3px solid ${c.contract_nr ? T.groen : T.amber}`,
-                      }}
-                    >
-                      <div className="flex items-baseline gap-2">
-                        <span
-                          className="flex-1 min-w-0 truncate"
-                          style={{ fontFamily: T.play, fontSize: 13, fontWeight: 700, color: actief ? "#ffffff" : T.navy }}
-                        >
-                          {`${c.merk} ${c.model}`.trim() || "Auto"}
-                        </span>
-                        <span style={{ ...klein(actief ? "rgba(255,255,255,0.5)" : c.contract_nr ? T.groen : T.amber), flexShrink: 0 }}>
-                          {c.contract_nr || "geen contract"}
-                        </span>
-                      </div>
-                      <div className="truncate mt-0.5" style={body(11.5, actief ? "rgba(255,255,255,0.6)" : T.ink(0.5))}>
-                        {[c.naam, c.kenteken].filter(Boolean).join(" · ") || "—"}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </Panel>
+      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1240, margin: "0 auto" }}>
+        {fout && <div className="mb-4"><Foutmelding>{fout}</Foutmelding></div>}
+
+        {/* Zoekbalk */}
+        {(lijst?.length ?? 0) > 0 && (
+          <div className="relative mb-4" style={{ maxWidth: 360 }}>
+            <Search
+              size={13}
+              color={T.ink(0.3)}
+              style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+            />
+            <input
+              value={zoek}
+              onChange={(e) => setZoek(e.target.value)}
+              placeholder="Zoek op naam, auto, kenteken of contractnummer…"
+              style={{ ...inputStijl, padding: "8px 10px 8px 28px", fontSize: 12.5, backgroundColor: T.paper }}
+            />
           </div>
+        )}
 
-          {gekozen && (
-            <div className="w-full xl:flex-1 xl:min-w-0 grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <Panel
-                title="De afspraken"
-                actions={
-                  gekozen.contract_nr ? (
-                    <Pill color={T.groen}>{gekozen.contract_nr}</Pill>
-                  ) : (
-                    <span style={{ ...micro(T.amber), fontSize: 9 }}>nog geen nummer</span>
-                  )
-                }
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <Veld label="Vergoeding in %" waarde={gekozen.fee_percentage ?? STANDAARD.fee} veld="fee_percentage"
-                    patch={patch} plaats="10" achtervoegsel="%" />
-                  <Veld label="Of een vast bedrag" waarde={gekozen.fee_vast} veld="fee_vast"
-                    patch={patch} plaats="0" achtervoegsel="€" />
-                  <Veld label="Vraagprijs" waarde={gekozen.vraagprijs} veld="vraagprijs"
-                    patch={patch} plaats="18500" achtervoegsel="€" />
-                  <Veld label="Niet verkopen onder" waarde={gekozen.bodemprijs} veld="bodemprijs"
-                    patch={patch} plaats="17000" achtervoegsel="€" />
-                  <Veld label="Looptijd in maanden" waarde={gekozen.looptijd_maanden ?? STANDAARD.looptijd} veld="looptijd_maanden"
-                    patch={patch} plaats="6" />
-                  <Veld label="Uitbetalen na (werkdagen, 0 = dezelfde dag)"
-                    waarde={gekozen.uitbetaling_dagen ?? STANDAARD.uitbetaling} veld="uitbetaling_dagen"
-                    patch={patch} plaats="0" />
-                  <Veld label="Bij terugnemen: advertentiekosten"
-                    waarde={gekozen.terugname_kosten ?? STANDAARD.terugname} veld="terugname_kosten"
-                    patch={patch} plaats="50" achtervoegsel="€" />
-                </div>
-                <div className="mt-2">
-                  <Field label="Bijzondere afspraken (komt onder de voorwaarden)">
-                    <textarea
-                      key={gekozen.id + (gekozen.bijzondere_afspraken ?? "")}
-                      defaultValue={gekozen.bijzondere_afspraken ?? ""}
-                      onBlur={(e) =>
-                        e.target.value !== (gekozen.bijzondere_afspraken ?? "") &&
-                        patch({ bijzondere_afspraken: e.target.value })
-                      }
-                      placeholder="Bijvoorbeeld: winterbanden gaan mee, of de auto mag niet buiten staan."
-                      style={{ ...inputStijl, minHeight: 64, resize: "vertical", lineHeight: 1.55 }}
-                    />
-                  </Field>
-                </div>
-              </Panel>
-
-              <div className="flex flex-col gap-3">
-                <Panel title="Eigenaar en voertuig">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <Veld label="Adres" waarde={gekozen.klant_adres} veld="klant_adres" patch={patch} tekst plaats="Straat 1" />
-                    <Veld label="Postcode" waarde={gekozen.klant_postcode} veld="klant_postcode" patch={patch} tekst plaats="1234 AB" />
-                    <Veld label="Plaats" waarde={gekozen.klant_stad} veld="klant_stad" patch={patch} tekst plaats="Barendrecht" />
-                    <Veld label="Kenteken" waarde={gekozen.kenteken} veld="kenteken" patch={patch} tekst plaats="AB-123-C" />
-                    <Veld label="Chassisnummer" waarde={gekozen.vin} veld="vin" patch={patch} tekst plaats="WVW…" />
-                  </div>
-                  <p className="mt-2" style={klein()}>
-                    Naam, e-mail, telefoon en de autogegevens komen uit de consignatie zelf; die pas
-                    je aan op het tabblad Cosignatie.
-                  </p>
-                </Panel>
-
-                <Panel title="Contract">
-                  {ontbreekt(gekozen).length > 0 && (
-                    <div
-                      className="flex items-start gap-2 px-3 py-2.5 mb-3"
-                      style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}
-                    >
-                      <AlertTriangle size={13} color={T.amber} style={{ flexShrink: 0, marginTop: 1 }} />
-                      <p style={body(11.5, T.ink(0.7))}>
-                        Nog niet ingevuld: {ontbreekt(gekozen).join(", ")}. Die blijven leeg op papier.
+        {lijst === null ? (
+          <div className="flex justify-center py-24"><Spinner size={22} /></div>
+        ) : zichtbaar.length === 0 ? (
+          <Empty
+            icon={<FileSignature size={30} color={T.ink(0.2)} />}
+            title={lijst.length === 0 ? "Nog geen consignaties" : "Niets gevonden"}
+            body={
+              lijst.length === 0
+                ? "Zodra er een auto in consignatie staat, kun je hier het contract opmaken."
+                : "Probeer een andere zoekterm."
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {zichtbaar.map((c) => {
+              const isOpen = openRij === c.id;
+              const auto = [c.merk, c.model].filter(Boolean).join(" ") || "Auto";
+              const prijs = getal(c.vraagprijs);
+              const feeTekst = getal(c.fee_vast) > 0
+                ? `€ ${getal(c.fee_vast).toLocaleString("nl-NL")} vast`
+                : `${getal(c.fee_percentage) || STANDAARD.fee}% fee`;
+              const mist = ontbreekt(c);
+              return (
+                <div key={c.id} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+                  {/* Rijkop: auto · eigenaar + contractbadge, vraagprijs rechts. Klik = open/dicht. */}
+                  <button
+                    onClick={() => setOpenRij(isOpen ? null : c.id)}
+                    className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gray-50"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <p className="text-sm font-bold" style={{ color: T.navy, fontFamily: T.play }}>
+                          {auto} · {c.naam || "Naamloos"}
+                        </p>
+                        <span
+                          className="text-[10px] px-2 py-0.5 font-semibold"
+                          style={{
+                            backgroundColor: c.contract_nr ? "#dcfce7" : "#fef3c7",
+                            color: c.contract_nr ? "#15803d" : "#b45309",
+                            fontFamily: T.inter,
+                          }}
+                        >
+                          {c.contract_nr || "Geen contract"}
+                        </span>
+                      </div>
+                      <p className="text-xs" style={{ color: T.ink(0.45), fontFamily: T.inter }}>
+                        {[c.bouwjaar, c.kenteken?.toUpperCase(), c.km ? `${getal(c.km).toLocaleString("nl-NL")} km` : ""].filter(Boolean).join(" · ") || "—"}
                       </p>
                     </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold" style={{ fontFamily: T.play, color: T.navy }}>
+                        {prijs > 0 ? `€${prijs.toLocaleString("nl-NL")}` : "—"}
+                      </p>
+                      <p className="text-[10px]" style={{ color: T.ink(0.35), fontFamily: T.inter }}>
+                        {feeTekst}
+                      </p>
+                    </div>
+                    <span className="text-xs ml-2 flex-shrink-0" style={{ color: T.ink(0.3) }}>
+                      {isOpen ? "▲" : "▼"}
+                    </span>
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-5 pb-5" style={{ borderTop: `1px solid ${T.line2}` }}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
+                        {/* Links: details + de gegevens die je hier nog kunt aanvullen */}
+                        <div>
+                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
+                            Details
+                          </p>
+                          <table className="w-full text-xs" style={{ fontFamily: T.inter }}>
+                            <tbody>
+                              {([
+                                ["Eigenaar", c.naam],
+                                ["E-mail", c.email],
+                                ["Telefoon", c.telefoon],
+                                ["Voertuig", [c.merk, c.model, c.bouwjaar].filter(Boolean).join(" ")],
+                                ["KM-stand", c.km ? `${getal(c.km).toLocaleString("nl-NL")} km` : ""],
+                                ["Aangemeld", c.datum],
+                                c.contract_op
+                                  ? ["Contractnr. op", new Date(c.contract_op).toLocaleDateString("nl-NL")]
+                                  : ["", ""],
+                              ] as [string, string][])
+                                .filter(([, w]) => w)
+                                .map(([label, waarde]) => (
+                                  <tr key={label}>
+                                    <td className="py-1 pr-3 align-top" style={{ color: T.ink(0.45), width: "100px" }}>{label}</td>
+                                    <td className="py-1 font-semibold" style={{ color: T.navy }}>{waarde}</td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+
+                          {/* Adres, kenteken en VIN horen op het contract maar komen niet
+                              altijd mee met de aanmelding — hier vul je ze aan. */}
+                          <p className="text-xs font-bold mt-4 mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
+                            Aanvullen voor het contract
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <Veld label="Adres" waarde={c.klant_adres} veld="klant_adres" patch={(v) => patch(c, v)} tekst plaats="Straat 1" />
+                            <Veld label="Postcode" waarde={c.klant_postcode} veld="klant_postcode" patch={(v) => patch(c, v)} tekst plaats="1234 AB" />
+                            <Veld label="Plaats" waarde={c.klant_stad} veld="klant_stad" patch={(v) => patch(c, v)} tekst plaats="Barendrecht" />
+                            <Veld label="Kenteken" waarde={c.kenteken} veld="kenteken" patch={(v) => patch(c, v)} tekst plaats="AB-123-C" />
+                            <Veld label="Chassisnummer" waarde={c.vin} veld="vin" patch={(v) => patch(c, v)} tekst plaats="WVW…" />
+                          </div>
+                          <p className="mt-2" style={klein()}>
+                            Naam, e-mail, telefoon en de autogegevens komen uit de consignatie zelf; die
+                            pas je aan op het tabblad Cosignatie.
+                          </p>
+                        </div>
+
+                        {/* Rechts: de afspraken en de contractknoppen */}
+                        <div>
+                          <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
+                            De afspraken
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <Veld label="Vergoeding in %" waarde={c.fee_percentage ?? STANDAARD.fee} veld="fee_percentage"
+                              patch={(v) => patch(c, v)} plaats="10" achtervoegsel="%" />
+                            <Veld label="Of een vast bedrag" waarde={c.fee_vast} veld="fee_vast"
+                              patch={(v) => patch(c, v)} plaats="0" achtervoegsel="€" />
+                            <Veld label="Vraagprijs" waarde={c.vraagprijs} veld="vraagprijs"
+                              patch={(v) => patch(c, v)} plaats="18500" achtervoegsel="€" />
+                            <Veld label="Niet verkopen onder" waarde={c.bodemprijs} veld="bodemprijs"
+                              patch={(v) => patch(c, v)} plaats="17000" achtervoegsel="€" />
+                            <Veld label="Looptijd in maanden" waarde={c.looptijd_maanden ?? STANDAARD.looptijd} veld="looptijd_maanden"
+                              patch={(v) => patch(c, v)} plaats="6" />
+                            <Veld label="Uitbetalen na (werkdagen)" waarde={c.uitbetaling_dagen ?? STANDAARD.uitbetaling} veld="uitbetaling_dagen"
+                              patch={(v) => patch(c, v)} plaats="0" />
+                            <Veld label="Bij terugnemen: advertentiekosten" waarde={c.terugname_kosten ?? STANDAARD.terugname} veld="terugname_kosten"
+                              patch={(v) => patch(c, v)} plaats="50" achtervoegsel="€" />
+                          </div>
+                          <div className="mt-2 mb-4">
+                            <Field label="Bijzondere afspraken (komt onder de voorwaarden)">
+                              <textarea
+                                key={c.id + (c.bijzondere_afspraken ?? "")}
+                                defaultValue={c.bijzondere_afspraken ?? ""}
+                                onBlur={(e) =>
+                                  e.target.value !== (c.bijzondere_afspraken ?? "") &&
+                                  patch(c, { bijzondere_afspraken: e.target.value })
+                                }
+                                placeholder="Bijvoorbeeld: winterbanden gaan mee, of de auto mag niet buiten staan."
+                                style={{ ...inputStijl, minHeight: 56, resize: "vertical", lineHeight: 1.55 }}
+                              />
+                            </Field>
+                          </div>
+
+                          {mist.length > 0 && (
+                            <div
+                              className="flex items-start gap-2 px-3 py-2.5 mb-3"
+                              style={{ backgroundColor: T.tintAmber, borderLeft: `3px solid ${T.amber}` }}
+                            >
+                              <AlertTriangle size={13} color={T.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+                              <p className="text-xs" style={{ color: T.ink(0.7), fontFamily: T.inter, lineHeight: 1.5 }}>
+                                Nog niet ingevuld: {mist.join(", ")}. Die blijven leeg op papier.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Zelfde knoppenrij als bij een factuur: donkere hoofdactie + PDF ernaast */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={() => doe(c, "print")}
+                              disabled={!!bezig[c.id]}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{ backgroundColor: T.navy, fontFamily: T.inter, borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
+                              title="Print het contract om te laten ondertekenen"
+                            >
+                              <Printer size={14} />
+                              {bezig[c.id] === "print" ? "Voorbereiden..." : "Afdrukken"}
+                            </button>
+                            <button
+                              onClick={() => doe(c, "pdf")}
+                              disabled={!!bezig[c.id]}
+                              className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{
+                                backgroundColor: T.paper,
+                                color: "#334155",
+                                border: `1px solid ${T.line}`,
+                                fontFamily: T.inter,
+                                borderRadius: "var(--radius-control)",
+                              }}
+                            >
+                              <Download size={14} />
+                              {bezig[c.id] === "pdf" ? "PDF maken..." : "PDF"}
+                            </button>
+                          </div>
+                          <p className="mt-2.5" style={klein()}>
+                            Het contractnummer wordt bij de eerste keer aangemaakt en verandert daarna
+                            niet meer — een klant hoort niet twee verschillende nummers op hetzelfde
+                            stuk te zien.
+                          </p>
+                          {c.contract_op && (
+                            <p className="mt-1" style={klein(T.groen)}>
+                              <Check size={10} style={{ display: "inline", marginRight: 4 }} />
+                              Nummer toegekend op {new Date(c.contract_op).toLocaleDateString("nl-NL")}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )}
-                  <div className="flex flex-col gap-2">
-                    <Btn full onClick={() => doe("print")} disabled={bezig}>
-                      {bezig ? <Spinner size={12} /> : <Printer size={12} />} Afdrukken of opslaan als PDF
-                    </Btn>
-                    <Btn variant="ghost" full onClick={() => doe("pdf")} disabled={bezig}>
-                      <Download size={12} /> PDF downloaden
-                    </Btn>
-                  </div>
-                  <p className="mt-2.5" style={klein()}>
-                    Het contractnummer wordt bij de eerste keer aangemaakt en verandert daarna niet
-                    meer — een klant hoort niet twee verschillende nummers op hetzelfde stuk te zien.
-                  </p>
-                  {gekozen.contract_op && (
-                    <p className="mt-1" style={klein(T.groen)}>
-                      <Check size={10} style={{ display: "inline", marginRight: 4 }} />
-                      Nummer toegekend op {new Date(gekozen.contract_op).toLocaleDateString("nl-NL")}
-                    </p>
-                  )}
-                </Panel>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

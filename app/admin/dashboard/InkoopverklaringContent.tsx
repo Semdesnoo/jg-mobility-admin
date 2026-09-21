@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Spline } from "lucide-react";
+import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil } from "lucide-react";
 import {
   T, micro, body, klein, fmt, Panel, Btn, Field, inputStijl, Chip, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -17,9 +17,11 @@ import { useDialoog } from "./Dialoog";
  * niet te zien is van wie hij kwam en wat ervoor betaald is, en dat is precies wat je bij
  * de margeregeling moet kunnen laten zien.
  *
- * Het werd tot nu toe met de hand gedaan. Hier vul je het één keer in, komt het er in
- * dezelfde opmaak uit als de facturen, en blijft het bewaard met een eigen nummer zodat je
- * er over twee jaar nog bij kunt.
+ * DE OPZET IS DIE VAN DE FACTURENPAGINA
+ * Eén lijst met inklapbare rijen: bovenaan het nummer, de verkoper en het bedrag, en pas
+ * als je een rij openklapt zie je de details en de knoppen (afdrukken, PDF, bewerken,
+ * verwijderen). Een nieuwe verklaring maak je via de knop rechtsboven, in een apart
+ * formulierscherm — precies zoals een nieuwe factuur.
  *
  * HET KENTEKEN DOET HET WERK
  * Merk, model, bouwjaar, kleur, brandstof en APK komen uit het RDW-register, net als bij
@@ -174,23 +176,30 @@ async function downloadPdf(html: string, naam: string) {
   frame.remove();
 }
 
+/** Nummer, verkoper en auto in de bestandsnaam — daar zoek je op in een downloadmap. */
+const bestandsnaamVoor = (nummer: string, naam: string, merk: string, model: string) => {
+  const delen = ["Inkoopverklaring", nummer || "concept", naam.trim(), [merk, model].filter(Boolean).join(" ").trim()].filter(Boolean);
+  return `${delen.join(" ").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim()}.pdf`;
+};
+
 export default function InkoopverklaringContent() {
   const { vraag } = useDialoog();
   const [lijst, setLijst] = useState<Verklaring[] | null>(null);
+  const [view, setView] = useState<"lijst" | "form">("lijst");
+  const [openRij, setOpenRij] = useState<string | null>(null);
   const [gekozenId, setGekozenId] = useState<string | null>(null);
   const [f, setF] = useState<Formulier>(leegFormulier);
   const [zoek, setZoek] = useState("");
   const [fout, setFout] = useState("");
   const [bezig, setBezig] = useState(false);
+  const [rijBezig, setRijBezig] = useState<Record<string, "print" | "pdf">>({});
   const [rdwBezig, setRdwBezig] = useState(false);
   const [adresStatus, setAdresStatus] = useState<"stil" | "bezig" | "gevonden" | "onbekend" | "mislukt">("stil");
-  const [bewaardOp, setBewaardOp] = useState<string | null>(null);
   /** Welk kenteken al is opgezocht, zodat uit het veld klikken niet elke keer opnieuw vraagt. */
   const laatstOpgezocht = useRef("");
 
   const zet = <K extends keyof Formulier>(veld: K, waarde: Formulier[K]) => {
     setF((huidig) => ({ ...huidig, [veld]: waarde }));
-    setBewaardOp(null);
   };
 
   const laad = async () => {
@@ -225,19 +234,19 @@ export default function InkoopverklaringContent() {
     laatstOpgezocht.current = "";
     setAdresStatus("stil");
     setF(leegFormulier());
-    setBewaardOp(null);
     setFout("");
+    setView("form");
   };
 
   const openen = (v: Verklaring) => {
     setGekozenId(v.id);
-    setBewaardOp(null);
     setFout("");
     const { id: _id, nummer: _nummer, aangemaakt: _aangemaakt, bedrag, ...rest } = v;
     void _id; void _nummer; void _aangemaakt;
     laatstOpgezocht.current = (v.kenteken ?? "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
     setAdresStatus("stil");
     setF({ ...rest, bedrag: bedrag ? String(bedrag) : "", meegeleverd: v.meegeleverd ?? [] });
+    setView("form");
   };
 
   /**
@@ -248,9 +257,6 @@ export default function InkoopverklaringContent() {
    * boekhouding is dat geen schoonheidsfoutje, want daar hoort het adres van de verkoper
    * op te kloppen. Zelfde dienst als bij de facturen: PDOK, de open adressendienst van
    * de overheid.
-   *
-   * Het huisnummer komt uit wat er al in het adresveld staat, want daar typ je het toch
-   * in. Levert het niets op, dan gebeurt er niets en typ je het zelf.
    */
   const zoekAdres = async () => {
     const pc = f.verkoper_postcode.replace(/\s+/g, "").toUpperCase();
@@ -273,7 +279,6 @@ export default function InkoopverklaringContent() {
         verkoper_stad: d.stad || huidig.verkoper_stad,
       }));
       setAdresStatus("gevonden");
-      setBewaardOp(null);
     } catch {
       setAdresStatus("mislukt");
     }
@@ -304,7 +309,6 @@ export default function InkoopverklaringContent() {
         eerste_toelating: d.datumEersteToelatingNL || huidig.eerste_toelating,
         type: huidig.type || [d.vermogen, d.cilinderinhoud ? `${d.cilinderinhoud}L` : ""].filter(Boolean).join(" · "),
       }));
-      setBewaardOp(null);
     } catch {
       setFout("Het RDW-register is niet bereikbaar.");
     } finally {
@@ -338,8 +342,12 @@ export default function InkoopverklaringContent() {
         return;
       }
       await laad();
-      setGekozenId(d.id ?? gekozen?.id ?? null);
-      setBewaardOp(new Date().toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }));
+      // Terug naar de lijst met de zojuist bewaarde rij opengeklapt — dan zie je
+      // meteen het resultaat en staan de afdrukknoppen voor je neus.
+      const id = d.id ?? gekozen?.id ?? null;
+      setGekozenId(null);
+      setOpenRij(id);
+      setView("lijst");
     } catch (e) {
       setFout(e instanceof Error ? e.message : String(e));
     } finally {
@@ -347,23 +355,40 @@ export default function InkoopverklaringContent() {
     }
   };
 
-  const verwijder = async () => {
-    if (!gekozen) return;
+  const verwijderRij = async (v: Verklaring) => {
     const akkoord = await vraag({
-      titel: `Inkoopverklaring ${gekozen.nummer} verwijderen?`,
+      titel: `Inkoopverklaring ${v.nummer} verwijderen?`,
       tekst:
-        `${gekozen.verkoper_naam} · ${[gekozen.merk, gekozen.model].filter(Boolean).join(" ")}\n\n` +
+        `${v.verkoper_naam} · ${[v.merk, v.model].filter(Boolean).join(" ")}\n\n` +
         "Dit is een bewijsstuk voor je boekhouding. Weg is weg, en het nummer komt niet terug.",
       bevestig: "Verwijderen",
       gevaar: true,
     });
     if (!akkoord) return;
-    await fetch(`/api/admin/inkoopverklaringen/${gekozen.id}`, { method: "DELETE" });
+    await fetch(`/api/admin/inkoopverklaringen/${v.id}`, { method: "DELETE" });
+    if (openRij === v.id) setOpenRij(null);
     await laad();
-    nieuw();
   };
 
-  /** Het document zoals het er nu uitziet — ook voor een verklaring die nog niet bewaard is. */
+  /** Het document van een bewaarde rij — origineel + kopie in één printtaak. */
+  const htmlVanRij = async (v: Verklaring) => {
+    const logo = await haalLogo();
+    return genereerInkoopverklaringHTML({ ...v }, logo);
+  };
+
+  const afdrukkenRij = async (v: Verklaring) => {
+    setRijBezig((p) => ({ ...p, [v.id]: "print" }));
+    try { drukAf(await htmlVanRij(v)); }
+    finally { setTimeout(() => setRijBezig((p) => { const n = { ...p }; delete n[v.id]; return n; }), 1200); }
+  };
+
+  const pdfRij = async (v: Verklaring) => {
+    setRijBezig((p) => ({ ...p, [v.id]: "pdf" }));
+    try { await downloadPdf(await htmlVanRij(v), bestandsnaamVoor(v.nummer, v.verkoper_naam, v.merk, v.model)); }
+    finally { setRijBezig((p) => { const n = { ...p }; delete n[v.id]; return n; }); }
+  };
+
+  /** Het document zoals het formulier er nu bij staat — ook vóór het bewaren. */
   const maakHtml = async () => {
     const logo = await haalLogo();
     return genereerInkoopverklaringHTML(
@@ -373,30 +398,8 @@ export default function InkoopverklaringContent() {
   };
 
   const afdrukken = async () => drukAf(await maakHtml());
-
-  /**
-   * De naam van het bestand.
-   *
-   * Nummer, verkoper en auto, in die volgorde. In een map met downloads zoek je op de
-   * naam van de persoon — niet op INK-2026-007 — en dan wil je hem in de bestandsnaam
-   * zien staan zonder het document te hoeven openen. Dezelfde vorm als het
-   * consignatiecontract: spaties, geen streepjes.
-   *
-   * Tekens die een bestandsnaam niet mag bevatten gaan eruit; een naam als "J. de
-   * Vries/Jansen" zou anders een map aanmaken of de download laten mislukken.
-   */
-  const bestandsnaam = () => {
-    const delen = [
-      "Inkoopverklaring",
-      gekozen?.nummer ?? "concept",
-      f.verkoper_naam.trim(),
-      [f.merk, f.model].filter(Boolean).join(" ").trim(),
-    ].filter(Boolean);
-    return `${delen.join(" ").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim()}.pdf`;
-  };
-
   const pdf = async () => {
-    await downloadPdf(await maakHtml(), bestandsnaam());
+    await downloadPdf(await maakHtml(), bestandsnaamVoor(gekozen?.nummer ?? "concept", f.verkoper_naam, f.merk, f.model));
   };
 
   const bedrag = getalUit(f.bedrag);
@@ -420,418 +423,535 @@ export default function InkoopverklaringContent() {
     </div>
   );
 
+  // ── De vaste kop: titel links, de hoofdknop rechts (zelfde plek als bij Facturen) ──
+  const kop = (
+    <header
+      className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-6 xl:px-8"
+      style={{ height: 56, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
+    >
+      <Receipt size={15} style={{ color: T.ink(0.35), flexShrink: 0 }} />
+      <h2
+        className="min-w-0 truncate text-[17px] sm:text-[19px]"
+        style={{ fontFamily: T.play, fontWeight: 700, color: T.navy }}
+      >
+        Inkoopverklaring
+      </h2>
+      <span className="hidden md:block flex-shrink-0" style={{ width: 1, height: 16, backgroundColor: T.line2 }} />
+      <p className="hidden md:block min-w-0 truncate" style={micro(T.ink(0.35))}>
+        {view === "form"
+          ? (gekozen ? `Bewerken: ${gekozen.nummer}` : "Nieuwe verklaring")
+          : "Bewijsstuk bij inkoop van een particulier"}
+      </p>
+      <div className="ml-auto flex items-center gap-2">
+        {view === "form" ? (
+          <Btn variant="ghost" size="sm" onClick={() => { setView("lijst"); setGekozenId(null); setFout(""); }}>
+            ← Overzicht
+          </Btn>
+        ) : (
+          <button
+            type="button"
+            onClick={nieuw}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold transition-all hover:opacity-90"
+            style={{ backgroundColor: T.navy, color: "#ffffff", fontFamily: T.inter }}
+          >
+            <Plus size={12} /> Nieuwe verklaring
+          </button>
+        )}
+      </div>
+    </header>
+  );
+
+  // ── Lijstweergave: inklapbare rijen, zoals de facturenpagina ──
+  if (view === "lijst") {
+    return (
+      <div style={{ backgroundColor: T.wash, minHeight: "100%" }}>
+        {kop}
+        <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1240, margin: "0 auto" }}>
+          {fout && <div className="mb-4"><Foutmelding>{fout}</Foutmelding></div>}
+
+          {/* Zoekbalk */}
+          {(lijst?.length ?? 0) > 0 && (
+            <div className="relative mb-4" style={{ maxWidth: 360 }}>
+              <Search
+                size={13}
+                color={T.ink(0.3)}
+                style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+              />
+              <input
+                value={zoek}
+                onChange={(e) => setZoek(e.target.value)}
+                placeholder="Zoek op nummer, naam of kenteken…"
+                style={{ ...inputStijl, padding: "8px 10px 8px 28px", fontSize: 12.5, backgroundColor: T.paper }}
+              />
+            </div>
+          )}
+
+          {lijst === null ? (
+            <div className="flex justify-center py-24"><Spinner size={22} /></div>
+          ) : lijst.length === 0 ? (
+            <Empty
+              icon={<Receipt size={30} style={{ color: T.ink(0.2) }} />}
+              title="Nog geen inkoopverklaringen"
+              body="Maak de eerste aan via de knop rechtsboven. Je krijgt een nummer (INK-2026-001) en kunt het document afdrukken of als PDF opslaan om te laten ondertekenen."
+            />
+          ) : zichtbaar.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+              <p className="text-sm font-semibold" style={{ color: T.navy, fontFamily: T.play }}>Niets gevonden</p>
+              <p className="text-xs mt-1" style={{ color: T.ink(0.4), fontFamily: T.inter }}>Probeer een andere zoekterm.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {zichtbaar.map((v) => {
+                const isOpen = openRij === v.id;
+                const voertuig = [v.merk, v.model, v.bouwjaar].filter(Boolean).join(" ");
+                return (
+                  <div key={v.id} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+                    {/* Rijkop: nummer · verkoper + badge, bedrag rechts. Klik = open/dicht. */}
+                    <button
+                      onClick={() => setOpenRij(isOpen ? null : v.id)}
+                      className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gray-50"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <p className="text-sm font-bold" style={{ color: T.navy, fontFamily: T.play }}>
+                            {v.nummer} · {v.verkoper_naam || "Naamloos"}
+                          </p>
+                          <span
+                            className="text-[10px] px-2 py-0.5 font-semibold"
+                            style={{
+                              backgroundColor: v.particulier ? "#f1f5f9" : "#dbeafe",
+                              color: v.particulier ? "#64748b" : "#1d4ed8",
+                              fontFamily: T.inter,
+                            }}
+                          >
+                            {v.particulier ? "Particulier" : "Bedrijf"}
+                          </span>
+                        </div>
+                        <p className="text-xs" style={{ color: T.ink(0.45), fontFamily: T.inter }}>
+                          {voertuig}
+                          {v.kenteken ? ` · ${v.kenteken.toUpperCase()}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold" style={{ fontFamily: T.play, color: T.navy }}>
+                          {v.bedrag ? fmt(v.bedrag) : "—"}
+                        </p>
+                        <p className="text-[10px]" style={{ color: T.ink(0.35), fontFamily: T.inter }}>
+                          {v.datum} · {v.betaalwijze === "contant" ? "Contant" : v.betaalwijze === "inruil" ? "Inruil" : "Bank"}
+                        </p>
+                      </div>
+                      <span className="text-xs ml-2 flex-shrink-0" style={{ color: T.ink(0.3) }}>
+                        {isOpen ? "▲" : "▼"}
+                      </span>
+                    </button>
+
+                    {isOpen && (
+                      <div className="px-5 pb-5" style={{ borderTop: `1px solid ${T.line2}` }}>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
+                          {/* Links: de details, zelfde tabelvorm als bij een factuur */}
+                          <div>
+                            <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
+                              Details
+                            </p>
+                            <table className="w-full text-xs" style={{ fontFamily: T.inter }}>
+                              <tbody>
+                                {([
+                                  ["Verkoper", v.verkoper_naam],
+                                  ["Adres", [v.verkoper_adres, v.verkoper_postcode, v.verkoper_stad].filter(Boolean).join(", ")],
+                                  ["E-mail", v.verkoper_email],
+                                  ["Telefoon", v.verkoper_telefoon],
+                                  ["Legitimatie", [v.legitimatie_soort, v.legitimatie_nummer].filter(Boolean).join(" · ")],
+                                  ["Voertuig", voertuig],
+                                  ["Kenteken", v.kenteken?.toUpperCase()],
+                                  ["Chassisnummer", v.vin],
+                                  ["KM-stand", v.km ? `${parseInt(v.km).toLocaleString("nl-NL")} km` : ""],
+                                  ["Overdracht", v.datum_overdracht],
+                                  ["Vrijwaring", v.vrijwaringsnummer],
+                                  ["Meegeleverd", (v.meegeleverd ?? []).join(", ")],
+                                ] as [string, string][])
+                                  .filter(([, w]) => w)
+                                  .map(([label, waarde]) => (
+                                    <tr key={label}>
+                                      <td className="py-1 pr-3 align-top" style={{ color: T.ink(0.45), width: "110px" }}>{label}</td>
+                                      <td className="py-1 font-semibold" style={{ color: T.navy }}>{waarde}</td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                            {v.bijzonderheden && (
+                              <div className="mt-3 p-3 text-xs" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}`, color: T.ink(0.65), fontFamily: T.inter, lineHeight: 1.6 }}>
+                                {v.bijzonderheden}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Rechts: het document en de acties, zelfde knoppenrij als bij een factuur */}
+                          <div>
+                            <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
+                              Document
+                            </p>
+                            <p className="text-xs mb-4" style={{ color: T.ink(0.55), fontFamily: T.inter, lineHeight: 1.6 }}>
+                              Afdrukken levert twee vellen in één printtaak: een origineel voor de
+                              verkoper en een kopie met watermerk voor je eigen administratie. Het
+                              bedrag staat er in cijfers én voluit op, met de handtekeningvelden.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* Hoofdactie: afdrukken levert origineel + kopie */}
+                              <button
+                                onClick={() => afdrukkenRij(v)}
+                                disabled={!!rijBezig[v.id]}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                                style={{ backgroundColor: T.navy, fontFamily: T.inter, borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
+                                title="Print een origineel (voor de verkoper) én een kopie (voor onze administratie)"
+                              >
+                                <Printer size={14} />
+                                {rijBezig[v.id] === "print" ? "Voorbereiden..." : "Afdrukken"}
+                                <span className="hidden sm:inline opacity-60 font-normal">· origineel + kopie</span>
+                              </button>
+
+                              <button
+                                onClick={() => pdfRij(v)}
+                                disabled={!!rijBezig[v.id]}
+                                className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                                style={{
+                                  backgroundColor: T.paper,
+                                  color: "#334155",
+                                  border: `1px solid ${T.line}`,
+                                  fontFamily: T.inter,
+                                  borderRadius: "var(--radius-control)",
+                                }}
+                              >
+                                <Download size={14} />
+                                {rijBezig[v.id] === "pdf" ? "PDF maken..." : "PDF"}
+                              </button>
+
+                              {/* Rechts, apart: bewerken (potlood) en verwijderen (prullenbak) */}
+                              <div className="flex items-center gap-1.5 ml-auto">
+                                <button
+                                  onClick={() => openen(v)}
+                                  aria-label="Verklaring bewerken"
+                                  title="Bewerken"
+                                  className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
+                                  style={{ width: 38, height: 38, color: T.navy, backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control)" }}
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                                <button
+                                  onClick={() => verwijderRij(v)}
+                                  aria-label="Verklaring verwijderen"
+                                  title="Verwijderen"
+                                  className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
+                                  style={{ width: 38, height: 38, color: T.rood, backgroundColor: T.paper, border: "1px solid #fecaca", borderRadius: "var(--radius-control)" }}
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Formulier: nieuwe verklaring of bewerken (apart scherm, zoals "Nieuwe factuur") ──
   return (
     <div style={{ backgroundColor: T.wash, minHeight: "100%" }}>
-      <header
-        className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-6 xl:px-8"
-        style={{ height: 56, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
-      >
-        <Receipt size={15} style={{ color: T.ink(0.35), flexShrink: 0 }} />
-        <h2
-          className="min-w-0 truncate text-[17px] sm:text-[19px]"
-          style={{ fontFamily: T.play, fontWeight: 700, color: T.navy }}
-        >
-          Inkoopverklaring
-        </h2>
-        <span className="hidden md:block flex-shrink-0" style={{ width: 1, height: 16, backgroundColor: T.line2 }} />
-        <p className="hidden md:block min-w-0 truncate" style={micro(T.ink(0.35))}>
-          Bewijsstuk bij inkoop van een particulier
-        </p>
-        <div className="ml-auto flex items-center gap-2">
-          <Btn variant="ghost" size="sm" onClick={nieuw}>
-            <Plus size={12} /> Nieuwe verklaring
-          </Btn>
-        </div>
-      </header>
+      {kop}
+      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 920, margin: "0 auto" }}>
+        <div className="flex flex-col gap-4">
+          {fout && <Foutmelding>{fout}</Foutmelding>}
 
-      {/* Begrensde breedte: op een breed scherm werden korte velden als postcode
-          balken van een halve meter, en dan zie je niet meer welk vak bij welk label
-          hoort. */}
-      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1240, margin: "0 auto" }}>
-        <div className="flex flex-col xl:flex-row gap-4 items-start">
-          {/* ── Bewaarde verklaringen ── */}
-          <div className="w-full xl:w-[300px] xl:flex-none xl:sticky" style={{ top: 72 }}>
-            <Panel title="Bewaard" meta={lijst ? `${lijst.length}` : undefined}>
-              <div className="relative mb-3">
-                <Search
-                  size={13}
-                  color={T.ink(0.3)}
-                  style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
-                />
-                <input
-                  value={zoek}
-                  onChange={(e) => setZoek(e.target.value)}
-                  placeholder="Zoek op naam of kenteken…"
-                  style={{ ...inputStijl, padding: "7px 10px 7px 28px", fontSize: 12.5 }}
-                />
+          <Panel
+            title={gekozen ? `Verklaring ${gekozen.nummer}` : "Nieuwe inkoopverklaring"}
+            icon={<Receipt size={13} style={{ color: T.ink(0.35) }} />}
+            meta={gekozen ? undefined : "nog niet bewaard"}
+            actions={
+              <div className="flex items-center gap-2">
+                <Btn size="sm" onClick={opslaan} disabled={bezig}>
+                  {bezig ? <Spinner size={11} tone="donker" /> : <Check size={11} />}
+                  {gekozen ? "Bijwerken" : "Opslaan"}
+                </Btn>
+                <Btn variant="ghost" size="sm" onClick={pdf}>
+                  <Download size={11} /> PDF
+                </Btn>
+                <Btn variant="ghost" size="sm" onClick={afdrukken}>
+                  <Printer size={11} /> Afdrukken
+                </Btn>
               </div>
+            }
+          >
+            {/* ── De verkoper ── */}
+            <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De verkoper</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {invoer("Naam", "verkoper_naam", { plaats: "Voor- en achternaam", breed: true })}
+              {invoer("Telefoon", "verkoper_telefoon", { plaats: "+31 6 …" })}
 
-              {lijst === null ? (
-                <div className="flex justify-center py-8"><Spinner size={18} /></div>
-              ) : zichtbaar.length === 0 ? (
-                <p style={klein()}>
-                  {lijst.length === 0
-                    ? "Nog geen verklaringen. Vul rechts de gegevens in en druk op Opslaan."
-                    : "Niets gevonden."}
-                </p>
-              ) : (
-                <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
-                  {zichtbaar.map((v) => {
-                    const actief = v.id === gekozenId;
-                    return (
-                      <button
-                        key={v.id}
-                        type="button"
-                        onClick={() => openen(v)}
-                        className="text-left transition-all hover:opacity-85"
-                        style={{
-                          padding: "9px 11px",
-                          backgroundColor: actief ? T.navy : T.paper,
-                          border: `1px solid ${actief ? T.navy : T.line}`,
-                        }}
-                      >
-                        <span
-                          className="block truncate"
-                          style={{
-                            fontFamily: T.inter,
-                            fontSize: 12.5,
-                            fontWeight: 700,
-                            color: actief ? "#ffffff" : T.navy,
-                          }}
-                        >
-                          {[v.merk, v.model].filter(Boolean).join(" ") || "Zonder auto"}
-                        </span>
-                        <span
-                          className="block truncate"
-                          style={{ fontFamily: T.inter, fontSize: 10.5, color: actief ? "rgba(255,255,255,0.6)" : T.ink(0.45) }}
-                        >
-                          {v.nummer} · {v.verkoper_naam || "—"}
-                        </span>
-                        <span
-                          className="block truncate"
-                          style={{ fontFamily: T.inter, fontSize: 10.5, color: actief ? "rgba(255,255,255,0.45)" : T.ink(0.35) }}
-                        >
-                          {[v.kenteken, v.bedrag ? fmt(v.bedrag) : "", v.datum].filter(Boolean).join(" · ")}
-                        </span>
-                      </button>
-                    );
-                  })}
+              {/* Adres, postcode en plaats op één regel: zo typ je een adres ook. */}
+              <div>
+                <Field label="Adres" hint="Huisnummer is genoeg">
+                  <input
+                    type="text"
+                    value={f.verkoper_adres}
+                    onChange={(e) => zet("verkoper_adres", e.target.value)}
+                    // Staat er alleen een huisnummer, dan haalt hij de straat erbij.
+                    // Staat er al een straatnaam, dan blijft die staan: dan weet jij het beter.
+                    onBlur={() => { if (!/[a-zA-Z]{3}/.test(f.verkoper_adres)) zoekAdres(); }}
+                    placeholder="Straat en huisnummer"
+                    style={inputStijl}
+                  />
+                </Field>
+              </div>
+              <div>
+                <Field
+                  label="Postcode"
+                  hint={
+                    adresStatus === "bezig"
+                      ? "Adres opzoeken…"
+                      : adresStatus === "gevonden"
+                        ? "Straat en plaats opgehaald"
+                        : adresStatus === "onbekend"
+                          ? "Staat niet in het register — vul zelf in"
+                          : adresStatus === "mislukt"
+                            ? "Adressendienst onbereikbaar — vul zelf in"
+                            : "Vult straat en plaats in"
+                  }
+                  hintColor={
+                    adresStatus === "gevonden"
+                      ? T.groen
+                      : adresStatus === "mislukt" || adresStatus === "onbekend"
+                        ? T.amber
+                        : undefined
+                  }
+                >
+                  <input
+                    type="text"
+                    value={f.verkoper_postcode}
+                    onChange={(e) => { zet("verkoper_postcode", e.target.value.toUpperCase()); setAdresStatus("stil"); }}
+                    onBlur={zoekAdres}
+                    onKeyDown={(e) => e.key === "Enter" && zoekAdres()}
+                    placeholder="1234 AB"
+                    style={inputStijl}
+                  />
+                </Field>
+              </div>
+              {invoer("Plaats", "verkoper_stad")}
+
+              {invoer("E-mail", "verkoper_email", { breed: true })}
+              {invoer("Geboortedatum", "verkoper_geboortedatum", { plaats: "01-01-1980" })}
+
+              <div>
+                <p className="mb-1.5" style={micro()}>Legitimatie</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {["Rijbewijs", "Paspoort", "ID-kaart"].map((soort) => (
+                    <Chip key={soort} active={f.legitimatie_soort === soort} onClick={() => zet("legitimatie_soort", soort)}>
+                      {soort}
+                    </Chip>
+                  ))}
                 </div>
-              )}
-            </Panel>
-          </div>
+              </div>
+              {invoer("Documentnummer", "legitimatie_nummer", {
+                breed: true,
+                hint: "Alleen dit nummer komt op het document — de soort zonder nummer zegt niets",
+              })}
+            </div>
 
-          {/* ── Het formulier ── */}
-          <div className="flex-1 min-w-0 w-full flex flex-col gap-4">
-            {fout && <Foutmelding>{fout}</Foutmelding>}
-
-            <Panel
-              title={gekozen ? `Verklaring ${gekozen.nummer}` : "Nieuwe inkoopverklaring"}
-              icon={<Receipt size={13} style={{ color: T.ink(0.35) }} />}
-              meta={bewaardOp ? `bewaard om ${bewaardOp}` : gekozen ? undefined : "nog niet bewaard"}
-              actions={
-                <div className="flex items-center gap-2">
-                  <Btn size="sm" onClick={opslaan} disabled={bezig}>
-                    {bezig ? <Spinner size={11} tone="donker" /> : <Check size={11} />}
-                    {gekozen ? "Bijwerken" : "Opslaan"}
-                  </Btn>
-                  <Btn variant="ghost" size="sm" onClick={pdf}>
-                    <Download size={11} /> PDF
-                  </Btn>
-                  <Btn variant="ghost" size="sm" onClick={afdrukken}>
-                    <Printer size={11} /> Afdrukken
-                  </Btn>
-                  {gekozen && (
-                    <button
-                      type="button"
-                      onClick={verwijder}
-                      aria-label="Verwijderen"
-                      className="px-2 py-1.5 transition-all hover:opacity-70"
-                      style={{ border: "1px solid rgba(185,28,28,0.25)", color: T.rood }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              }
-            >
-              {/* De verkoper */}
-              {/* ── De verkoper ── */}
-              <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De verkoper</p>
+            {/* ── Het voertuig ── */}
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
+              <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+                <p style={{ ...micro(), fontSize: 9 }}>Het voertuig</p>
+                <span style={klein()}>vult zichzelf zodra je het kenteken invult</span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {invoer("Naam", "verkoper_naam", { plaats: "Voor- en achternaam", breed: true })}
-                {invoer("Telefoon", "verkoper_telefoon", { plaats: "+31 6 …" })}
-
-                {/* Adres, postcode en plaats op één regel: zo typ je een adres ook. */}
                 <div>
-                  <Field label="Adres" hint="Huisnummer is genoeg">
+                  <Field label="Kenteken">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={f.kenteken}
+                        onChange={(e) => zet("kenteken", e.target.value.toUpperCase())}
+                        onKeyDown={(e) => e.key === "Enter" && rdwOpzoeken()}
+                        // Uit het veld klikken is genoeg: een kenteken tik je in een keer
+                        // in, en dan hoort de rest er te staan zonder dat je nog ergens op
+                        // moet drukken. Alleen bij een ander kenteken dan wat er al
+                        // opgezocht is, anders vraagt elke muisklik het opnieuw.
+                        onBlur={(e) => {
+                          const kaal = e.target.value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+                          if (kaal.length >= 6 && kaal !== laatstOpgezocht.current) rdwOpzoeken();
+                        }}
+                        placeholder="AB-123-C"
+                        style={{
+                          ...inputStijl,
+                          fontFamily: T.play,
+                          fontSize: 16,
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          textAlign: "center",
+                        }}
+                      />
+                      <Btn variant="ghost" size="sm" onClick={rdwOpzoeken} disabled={rdwBezig || !f.kenteken.trim()}>
+                        {rdwBezig ? <Spinner size={11} /> : <Car size={11} />} RDW
+                      </Btn>
+                    </div>
+                  </Field>
+                </div>
+                {invoer("Chassisnummer (VIN)", "vin", { plaats: "17 tekens", breed: true })}
+
+                {invoer("Merk", "merk")}
+                {invoer("Model", "model")}
+                {invoer("Type / uitvoering", "type", { plaats: "150 pk · 2.0L" })}
+
+                {invoer("Bouwjaar", "bouwjaar")}
+                {invoer("1e toelating", "eerste_toelating")}
+                {invoer("Kilometerstand", "km", { plaats: "145000" })}
+
+                {invoer("Brandstof", "brandstof")}
+                {invoer("Kleur", "kleur")}
+                {invoer("APK tot", "apk")}
+              </div>
+            </div>
+
+            {/* ── De koop ── */}
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
+              <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De koop</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div>
+                  <Field label="Inkoopbedrag" suffix="€" hint={woorden ? `zegge: ${woorden}` : "Wat je werkelijk betaalt"}>
                     <input
                       type="text"
-                      value={f.verkoper_adres}
-                      onChange={(e) => zet("verkoper_adres", e.target.value)}
-                      // Staat er alleen een huisnummer, dan haalt hij de straat erbij.
-                      // Staat er al een straatnaam, dan blijft die staan: dan weet jij het beter.
-                      onBlur={() => { if (!/[a-zA-Z]{3}/.test(f.verkoper_adres)) zoekAdres(); }}
-                      placeholder="Straat en huisnummer"
-                      style={inputStijl}
+                      inputMode="numeric"
+                      value={f.bedrag}
+                      onChange={(e) => zet("bedrag", e.target.value)}
+                      placeholder="0"
+                      style={{
+                        ...inputStijl,
+                        height: 46,
+                        paddingRight: 34,
+                        fontFamily: T.play,
+                        fontSize: 20,
+                        fontWeight: 700,
+                        color: T.navy,
+                      }}
                     />
                   </Field>
                 </div>
-                <div>
-                  <Field
-                    label="Postcode"
-                    hint={
-                      adresStatus === "bezig"
-                        ? "Adres opzoeken…"
-                        : adresStatus === "gevonden"
-                          ? "Straat en plaats opgehaald"
-                          : adresStatus === "onbekend"
-                            ? "Staat niet in het register — vul zelf in"
-                            : adresStatus === "mislukt"
-                              ? "Adressendienst onbereikbaar — vul zelf in"
-                              : "Vult straat en plaats in"
-                    }
-                    hintColor={
-                      adresStatus === "gevonden"
-                        ? T.groen
-                        : adresStatus === "mislukt" || adresStatus === "onbekend"
-                          ? T.amber
-                          : undefined
-                    }
-                  >
-                    <input
-                      type="text"
-                      value={f.verkoper_postcode}
-                      onChange={(e) => { zet("verkoper_postcode", e.target.value.toUpperCase()); setAdresStatus("stil"); }}
-                      onBlur={zoekAdres}
-                      onKeyDown={(e) => e.key === "Enter" && zoekAdres()}
-                      placeholder="1234 AB"
-                      style={inputStijl}
-                    />
-                  </Field>
-                </div>
-                {invoer("Plaats", "verkoper_stad")}
-
-                {invoer("E-mail", "verkoper_email", { breed: true })}
-                {invoer("Geboortedatum", "verkoper_geboortedatum", { plaats: "01-01-1980" })}
-
-                <div>
-                  <p className="mb-1.5" style={micro()}>Legitimatie</p>
+                <div className="sm:col-span-2">
+                  <p className="mb-1.5" style={micro()}>Betaalwijze</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {["Rijbewijs", "Paspoort", "ID-kaart"].map((soort) => (
-                      <Chip key={soort} active={f.legitimatie_soort === soort} onClick={() => zet("legitimatie_soort", soort)}>
-                        {soort}
+                    {[
+                      { id: "bank", label: "Bankoverschrijving" },
+                      { id: "contant", label: "Contant" },
+                      { id: "inruil", label: "Verrekend met inruil" },
+                    ].map((keuze) => (
+                      <Chip key={keuze.id} active={f.betaalwijze === keuze.id} onClick={() => zet("betaalwijze", keuze.id)}>
+                        {keuze.label}
                       </Chip>
                     ))}
                   </div>
+                  <p className="mt-2" style={klein()}>
+                    Contant boven de € 3.000 valt op bij een controle; een overschrijving is altijd het
+                    makkelijkst te verantwoorden.
+                  </p>
                 </div>
-                {invoer("Documentnummer", "legitimatie_nummer", {
-                  breed: true,
-                  hint: "Alleen dit nummer komt op het document — de soort zonder nummer zegt niets",
+
+                {invoer("Datum overeenkomst", "datum")}
+                {invoer("Datum overdracht", "datum_overdracht")}
+                {invoer("Vrijwaringsbewijs", "vrijwaringsnummer", { plaats: "Nummer op het bewijs" })}
+
+                {invoer("Aantal sleutels", "aantal_sleutels")}
+                <div className="sm:col-span-2">
+                  <p className="mb-1.5" style={micro()}>Van wie koop je</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Chip active={f.particulier} onClick={() => zet("particulier", true)}>
+                      Particulier (margeregeling)
+                    </Chip>
+                    <Chip active={!f.particulier} onClick={() => zet("particulier", false)}>
+                      Bedrijf (met btw-factuur)
+                    </Chip>
+                  </div>
+                  <p className="mt-2" style={klein()}>
+                    {f.particulier
+                      ? "De verkoper verklaart mee dat hij geen btw in aftrek heeft gebracht — precies de zin die je nodig hebt voor de margeregeling."
+                      : "Bij een ondernemer is diens factuur je bewijsstuk voor de btw; deze verklaring legt dan alleen de koop en de overdracht vast."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Meegeleverd en bijzonderheden ── */}
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
+              <p className="mb-1.5" style={micro()}>Meegeleverd</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {MEEGELEVERD.map((m) => {
+                  const aan = f.meegeleverd.includes(m);
+                  return (
+                    <Chip
+                      key={m}
+                      active={aan}
+                      onClick={() =>
+                        zet("meegeleverd", aan ? f.meegeleverd.filter((x) => x !== m) : [...f.meegeleverd, m])
+                      }
+                    >
+                      {m}
+                    </Chip>
+                  );
                 })}
               </div>
 
-              {/* ── Het voertuig ── */}
-              <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
-                <div className="flex items-baseline gap-2 mb-2 flex-wrap">
-                  <p style={{ ...micro(), fontSize: 9 }}>Het voertuig</p>
-                  <span style={klein()}>vult zichzelf zodra je het kenteken invult</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                  <div>
-                    <Field label="Kenteken">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={f.kenteken}
-                          onChange={(e) => zet("kenteken", e.target.value.toUpperCase())}
-                          onKeyDown={(e) => e.key === "Enter" && rdwOpzoeken()}
-                          // Uit het veld klikken is genoeg: een kenteken tik je in een keer
-                          // in, en dan hoort de rest er te staan zonder dat je nog ergens op
-                          // moet drukken. Alleen bij een ander kenteken dan wat er al
-                          // opgezocht is, anders vraagt elke muisklik het opnieuw.
-                          onBlur={(e) => {
-                            const kaal = e.target.value.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-                            if (kaal.length >= 6 && kaal !== laatstOpgezocht.current) rdwOpzoeken();
-                          }}
-                          placeholder="AB-123-C"
-                          style={{
-                            ...inputStijl,
-                            fontFamily: T.play,
-                            fontSize: 16,
-                            fontWeight: 700,
-                            letterSpacing: "0.08em",
-                            textAlign: "center",
-                          }}
-                        />
-                        <Btn variant="ghost" size="sm" onClick={rdwOpzoeken} disabled={rdwBezig || !f.kenteken.trim()}>
-                          {rdwBezig ? <Spinner size={11} /> : <Car size={11} />} RDW
-                        </Btn>
-                      </div>
-                    </Field>
-                  </div>
-                  {invoer("Chassisnummer (VIN)", "vin", { plaats: "17 tekens", breed: true })}
-
-                  {invoer("Merk", "merk")}
-                  {invoer("Model", "model")}
-                  {invoer("Type / uitvoering", "type", { plaats: "150 pk · 2.0L" })}
-
-                  {invoer("Bouwjaar", "bouwjaar")}
-                  {invoer("1e toelating", "eerste_toelating")}
-                  {invoer("Kilometerstand", "km", { plaats: "145000" })}
-
-                  {invoer("Brandstof", "brandstof")}
-                  {invoer("Kleur", "kleur")}
-                  {invoer("APK tot", "apk")}
-                </div>
+              <div className="mt-4">
+                <Field
+                  label="Bijzonderheden"
+                  hint="Bekende schade, gebreken of afspraken. Wat hier staat, staat ook op het document."
+                >
+                  <textarea
+                    value={f.bijzonderheden}
+                    onChange={(e) => zet("bijzonderheden", e.target.value)}
+                    placeholder="Bijvoorbeeld: kras op achterbumper, distributieriem vervangen op 120.000 km"
+                    style={{ ...inputStijl, minHeight: 80, resize: "vertical", lineHeight: 1.6 }}
+                  />
+                </Field>
               </div>
+            </div>
+          </Panel>
 
-              {/* ── De koop ── */}
-              <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
-                <p className="mb-2" style={{ ...micro(), fontSize: 9 }}>De koop</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                  <div>
-                    <Field label="Inkoopbedrag" suffix="€" hint={woorden ? `zegge: ${woorden}` : "Wat je werkelijk betaalt"}>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={f.bedrag}
-                        onChange={(e) => zet("bedrag", e.target.value)}
-                        placeholder="0"
-                        style={{
-                          ...inputStijl,
-                          height: 46,
-                          paddingRight: 34,
-                          fontFamily: T.play,
-                          fontSize: 20,
-                          fontWeight: 700,
-                          color: T.navy,
-                        }}
-                      />
-                    </Field>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <p className="mb-1.5" style={micro()}>Betaalwijze</p>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {[
-                        { id: "bank", label: "Bankoverschrijving" },
-                        { id: "contant", label: "Contant" },
-                        { id: "inruil", label: "Verrekend met inruil" },
-                      ].map((keuze) => (
-                        <Chip key={keuze.id} active={f.betaalwijze === keuze.id} onClick={() => zet("betaalwijze", keuze.id)}>
-                          {keuze.label}
-                        </Chip>
-                      ))}
-                    </div>
-                    <p className="mt-2" style={klein()}>
-                      Contant boven de € 3.000 valt op bij een controle; een overschrijving is altijd het
-                      makkelijkst te verantwoorden.
-                    </p>
-                  </div>
-
-                  {invoer("Datum overeenkomst", "datum")}
-                  {invoer("Datum overdracht", "datum_overdracht")}
-                  {invoer("Vrijwaringsbewijs", "vrijwaringsnummer", { plaats: "Nummer op het bewijs" })}
-
-                  {invoer("Aantal sleutels", "aantal_sleutels")}
-                  <div className="sm:col-span-2">
-                    <p className="mb-1.5" style={micro()}>Van wie koop je</p>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Chip active={f.particulier} onClick={() => zet("particulier", true)}>
-                        Particulier (margeregeling)
-                      </Chip>
-                      <Chip active={!f.particulier} onClick={() => zet("particulier", false)}>
-                        Bedrijf (met btw-factuur)
-                      </Chip>
-                    </div>
-                    <p className="mt-2" style={klein()}>
-                      {f.particulier
-                        ? "De verkoper verklaart mee dat hij geen btw in aftrek heeft gebracht — precies de zin die je nodig hebt voor de margeregeling."
-                        : "Bij een ondernemer is diens factuur je bewijsstuk voor de btw; deze verklaring legt dan alleen de koop en de overdracht vast."}
-                    </p>
-                  </div>
+          {/* Samenvatting van wat er op papier komt */}
+          <Panel title="Wat er op het document komt">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(
+                [
+                  ["Verkoper", f.verkoper_naam || "—"],
+                  ["Auto", [f.merk, f.model].filter(Boolean).join(" ") || "—"],
+                  ["Kenteken", f.kenteken || "—"],
+                  ["Bedrag", bedrag > 0 ? fmt(bedrag) : "—"],
+                ] as [string, string][]
+              ).map(([l, w]) => (
+                <div key={l} className="p-2.5" style={{ backgroundColor: "rgba(0,19,55,0.02)", border: `1px solid ${T.line}` }}>
+                  <p className="truncate" style={{ ...micro(), fontSize: 8.5 }}>{l}</p>
+                  <p className="mt-1 truncate" style={{ fontFamily: T.inter, fontSize: 12.5, fontWeight: 700, color: T.navy }}>
+                    {w}
+                  </p>
                 </div>
-              </div>
-
-              {/* ── Meegeleverd en bijzonderheden ── */}
-              <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.line2}` }}>
-                <p className="mb-1.5" style={micro()}>Meegeleverd</p>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {MEEGELEVERD.map((m) => {
-                    const aan = f.meegeleverd.includes(m);
-                    return (
-                      <Chip
-                        key={m}
-                        active={aan}
-                        onClick={() =>
-                          zet("meegeleverd", aan ? f.meegeleverd.filter((x) => x !== m) : [...f.meegeleverd, m])
-                        }
-                      >
-                        {m}
-                      </Chip>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4">
-                  <Field
-                    label="Bijzonderheden"
-                    hint="Bekende schade, gebreken of afspraken. Wat hier staat, staat ook op het document."
-                  >
-                    <textarea
-                      value={f.bijzonderheden}
-                      onChange={(e) => zet("bijzonderheden", e.target.value)}
-                      placeholder="Bijvoorbeeld: kras op achterbumper, distributieriem vervangen op 120.000 km"
-                      style={{ ...inputStijl, minHeight: 80, resize: "vertical", lineHeight: 1.6 }}
-                    />
-                  </Field>
-                </div>
-              </div>
-            </Panel>
-
-            {/* Samenvatting van wat er op papier komt */}
-            <Panel title="Wat er op het document komt" icon={<Spline size={13} style={{ color: T.ink(0.35) }} />}>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {(
-                  [
-                    ["Verkoper", f.verkoper_naam || "—"],
-                    ["Auto", [f.merk, f.model].filter(Boolean).join(" ") || "—"],
-                    ["Kenteken", f.kenteken || "—"],
-                    ["Bedrag", bedrag > 0 ? fmt(bedrag) : "—"],
-                  ] as [string, string][]
-                ).map(([l, w]) => (
-                  <div key={l} className="p-2.5" style={{ backgroundColor: "rgba(0,19,55,0.02)", border: `1px solid ${T.line}` }}>
-                    <p className="truncate" style={{ ...micro(), fontSize: 8.5 }}>{l}</p>
-                    <p className="mt-1 truncate" style={{ fontFamily: T.inter, fontSize: 12.5, fontWeight: 700, color: T.navy }}>
-                      {w}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3" style={body(12, T.ink(0.6))}>
-                Op het document staan verder de verklaringen die de verkoper ondertekent: dat hij eigenaar
-                is en de auto vrij is van financiering of beslag, dat de kilometerstand klopt, wat er wordt
-                meegeleverd, en — bij een particulier — dat er geen btw in aftrek is gebracht. Plus twee
-                handtekeningvelden en het bedrag voluit geschreven.
-              </p>
-              <p className="mt-2" style={klein()}>
-                De tekst is met zorg opgesteld maar niet fiscaal getoetst. Laat hem één keer nakijken door
-                je boekhouder voordat je hem structureel gebruikt.
-              </p>
-            </Panel>
-          </div>
+              ))}
+            </div>
+            <p className="mt-3" style={body(12, T.ink(0.6))}>
+              Op het document staan verder de verklaringen die de verkoper ondertekent: dat hij eigenaar
+              is en de auto vrij is van financiering of beslag, dat de kilometerstand klopt, wat er wordt
+              meegeleverd, en — bij een particulier — dat er geen btw in aftrek is gebracht. Plus twee
+              handtekeningvelden en het bedrag voluit geschreven.
+            </p>
+            <p className="mt-2" style={klein()}>
+              De tekst is met zorg opgesteld maar niet fiscaal getoetst. Laat hem één keer nakijken door
+              je boekhouder voordat je hem structureel gebruikt.
+            </p>
+          </Panel>
         </div>
-
-        {lijst !== null && lijst.length === 0 && !gekozen && (
-          <div className="mt-4">
-            <Empty
-              compact
-              icon={<Receipt size={26} style={{ color: T.ink(0.2) }} />}
-              title="Nog geen inkoopverklaringen"
-              body="Vul het formulier in en druk op Opslaan. Je krijgt dan een nummer (INK-2026-001) en kunt het document als PDF opslaan of meteen afdrukken om te laten ondertekenen."
-            />
-          </div>
-        )}
       </div>
     </div>
   );
