@@ -1261,7 +1261,7 @@ function VoorraadTabel({
                     aria-label="Bewerken"
                     title="Bewerken"
                     className="inline-flex items-center justify-center transition-all hover:-translate-y-0.5"
-                    style={{ width: 38, height: 38, backgroundColor: "#001337", color: "#ffffff" }}
+                    style={{ width: 38, height: 38, backgroundColor: "#001337", color: "#ffffff", borderRadius: "var(--radius-control)" }}
                   >
                     <Pencil size={15} />
                   </Link>
