@@ -42,7 +42,7 @@ export default function MoliboxPage() {
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 w-full max-w-xs px-7 py-3 text-sm font-semibold transition-all hover:opacity-90"
-            style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+            style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control, 8px)" }}
           >
             Open Molibox <ExternalLink size={15} />
           </a>
