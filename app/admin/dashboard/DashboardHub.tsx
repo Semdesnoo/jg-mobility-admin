@@ -768,17 +768,11 @@ function DashboardContent({
           />
         </div>
 
-        {/* Snelle acties */}
-        <SnelleActies onTab={onTab} />
-
         {/* Omzet & marge (links) + aandachtspunten (rechts) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-7 items-start">
           <MaandWidget />
           <AandachtWidget beschikbaar={beschikbaar} />
         </div>
-
-        {/* Claude Code verbruik */}
-        <ClaudeVerbruikWidget />
 
         {/* Kenteken check */}
         <KentekenWidget />
