@@ -224,9 +224,14 @@ export default function CosignatieContent() {
 
   /** Zet de status en, bij accepteren, meteen geaccepteerd_op via de server. */
   const zetStatus = async (id: string, status: string) => {
-    await fetch(`/api/admin/cosignaties/${id}`, {
+    const res = await fetch(`/api/admin/cosignaties/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      await melden({ titel: "Status niet gewijzigd", tekst: d.error || "Er ging iets mis bij het bijwerken. Probeer het nog een keer." });
+      return;
+    }
     await laad();
     setFilterStatus(status);
   };

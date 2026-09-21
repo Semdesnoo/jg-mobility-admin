@@ -22,7 +22,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const geaccepteerd_op =
     status === "geaccepteerd" ? new Date().toISOString().slice(0, 10) : undefined;
 
-  await sql`
+  try {
+    await sql`
     UPDATE cosignaties SET
       status = COALESCE(${status ?? null}, status),
       notitie = COALESCE(${notitie ?? null}, notitie),
@@ -56,26 +57,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       contract_nr = COALESCE(${contract_nr ?? null}, contract_nr),
       contract_op = COALESCE(${contract_op ?? null}, contract_op),
       contract_gemaild_op = CASE
-        WHEN ${contract_gemaild_op ?? null} IS NOT NULL THEN ${contract_gemaild_op ?? null}::date
+        WHEN ${contract_gemaild_op ?? null}::text IS NOT NULL THEN (${contract_gemaild_op ?? null}::text)::date
         ELSE contract_gemaild_op
       END,
       laatste_update_op = CASE
-        WHEN ${laatste_update_op ?? null} IS NOT NULL THEN ${laatste_update_op ?? null}::date
+        WHEN ${laatste_update_op ?? null}::text IS NOT NULL THEN (${laatste_update_op ?? null}::text)::date
         ELSE laatste_update_op
       END,
-      auto_updates = COALESCE(${typeof auto_updates === "boolean" ? auto_updates : null}, auto_updates),
+      auto_updates = COALESCE(${typeof auto_updates === "boolean" ? auto_updates : null}::boolean, auto_updates),
       platform_prijzen = CASE
         WHEN ${platform_prijzen ? JSON.stringify(platform_prijzen) : null}::jsonb IS NOT NULL
         THEN ${platform_prijzen ? JSON.stringify(platform_prijzen) : null}::jsonb
         ELSE platform_prijzen
       END,
       geaccepteerd_op = CASE
-        WHEN ${geaccepteerd_op ?? null} IS NOT NULL THEN ${geaccepteerd_op ?? null}::date
+        WHEN ${geaccepteerd_op ?? null}::text IS NOT NULL THEN (${geaccepteerd_op ?? null}::text)::date
         ELSE geaccepteerd_op
       END
     WHERE id = ${id}
   `;
-  return Response.json({ ok: true });
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json({ error: String(e instanceof Error ? e.message : e) }, { status: 500 });
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
