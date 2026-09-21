@@ -2737,7 +2737,9 @@ function FacturenContent() {
     setMailStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
-      const html = genereerFactuurHTML(f, logoSrc);
+      // De bijlage is de KOPIE-versie ("Kopie · klant"): het origineel blijft bij ons
+      // in de administratie, de klant krijgt zijn eigen exemplaar.
+      const html = genereerFactuurHTML(f, logoSrc, { stempel: "kopie" });
       const pdfBase64 = await factuurNaarPdfBase64(html, `Factuur-${f.factuur_nr}.pdf`);
 
       const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
@@ -2792,7 +2794,8 @@ function FacturenContent() {
     setBedankStatus((prev) => ({ ...prev, [f.id]: "laden" }));
     try {
       const logoSrc = await haalLogoSrc();
-      const html = genereerFactuurHTML(f, logoSrc, { betaald: true });
+      // Ook hier de kopie-versie mee: betaald-stempel plus "Kopie · klant".
+      const html = genereerFactuurHTML(f, logoSrc, { betaald: true, stempel: "kopie" });
       const pdfBase64 = await factuurNaarPdfBase64(html, `Factuur-${f.factuur_nr}-betaald.pdf`);
 
       const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {

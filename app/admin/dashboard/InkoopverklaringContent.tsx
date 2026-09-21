@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil } from "lucide-react";
+import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send } from "lucide-react";
 import {
   T, micro, body, klein, fmt, Panel, Btn, Field, inputStijl, Chip, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -62,6 +62,8 @@ type Verklaring = {
   meegeleverd: string[];
   bijzonderheden: string;
   aangemaakt: string;
+  /** ISO-moment waarop de kopie naar de verkoper is gemaild; leeg = nog niet. */
+  gemaild_op?: string;
 };
 
 type Formulier = Omit<Verklaring, "id" | "nummer" | "aangemaakt" | "bedrag"> & { bedrag: string };
@@ -176,6 +178,34 @@ async function downloadPdf(html: string, naam: string) {
   frame.remove();
 }
 
+/** Rendert het document naar een base64-PDF — dat wordt de mailbijlage. */
+async function pdfBase64Van(html: string): Promise<string> {
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px";
+  document.body.appendChild(frame);
+  const doc = frame.contentWindow?.document;
+  if (!doc) { frame.remove(); throw new Error("Render mislukt"); }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  await new Promise((k) => setTimeout(k, 400));
+  try {
+    const html2pdf = (await import("html2pdf.js")).default;
+    const dataUri = await html2pdf()
+      .set({
+        margin: 0,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(doc.body)
+      .output("datauristring");
+    return (dataUri as string).split(",")[1];
+  } finally {
+    frame.remove();
+  }
+}
+
 /** Nummer, verkoper en auto in de bestandsnaam — daar zoek je op in een downloadmap. */
 const bestandsnaamVoor = (nummer: string, naam: string, merk: string, model: string) => {
   const delen = ["Inkoopverklaring", nummer || "concept", naam.trim(), [merk, model].filter(Boolean).join(" ").trim()].filter(Boolean);
@@ -192,7 +222,7 @@ export default function InkoopverklaringContent() {
   const [zoek, setZoek] = useState("");
   const [fout, setFout] = useState("");
   const [bezig, setBezig] = useState(false);
-  const [rijBezig, setRijBezig] = useState<Record<string, "print" | "pdf">>({});
+  const [rijBezig, setRijBezig] = useState<Record<string, "print" | "pdf" | "mail">>({});
   const [rdwBezig, setRdwBezig] = useState(false);
   const [adresStatus, setAdresStatus] = useState<"stil" | "bezig" | "gevonden" | "onbekend" | "mislukt">("stil");
   /** Welk kenteken al is opgezocht, zodat uit het veld klikken niet elke keer opnieuw vraagt. */
@@ -386,6 +416,58 @@ export default function InkoopverklaringContent() {
     setRijBezig((p) => ({ ...p, [v.id]: "pdf" }));
     try { await downloadPdf(await htmlVanRij(v), bestandsnaamVoor(v.nummer, v.verkoper_naam, v.merk, v.model)); }
     finally { setRijBezig((p) => { const n = { ...p }; delete n[v.id]; return n; }); }
+  };
+
+  /**
+   * Mailt de verklaring (kopie-exemplaar) met een automatisch begeleidend bericht
+   * naar de verkoper. De kopie met watermerk is de bijlage: het origineel blijft
+   * bij JG voor de administratie.
+   */
+  const mailRij = async (v: Verklaring) => {
+    if (rijBezig[v.id]) return;
+    if (!v.verkoper_email) {
+      await vraag({
+        titel: "Geen e-mailadres",
+        tekst: "Deze verkoper heeft geen e-mailadres. Vul dat eerst in via Bewerken (potlood).",
+        bevestig: "Begrepen",
+      });
+      return;
+    }
+    if (v.gemaild_op) {
+      const wanneer = new Date(v.gemaild_op).toLocaleString("nl-NL");
+      const opnieuw = await vraag({
+        titel: "Al gemaild",
+        tekst: `Deze inkoopverklaring is al op ${wanneer} naar ${v.verkoper_email} gemaild. Wil je hem echt nóg een keer versturen?`,
+        bevestig: "Ja, verstuur opnieuw",
+      });
+      if (!opnieuw) return;
+      await fetch(`/api/admin/inkoopverklaringen/${v.id}/mail`, { method: "DELETE" }).catch(() => null);
+    }
+    const door = await vraag({
+      titel: "Inkoopverklaring mailen naar de verkoper?",
+      tekst: `Het kopie-exemplaar van ${v.nummer} wordt met een begeleidend bericht als PDF naar ${v.verkoper_email} gestuurd.`,
+      bevestig: "Ja, verstuur",
+    });
+    if (!door) return;
+    setRijBezig((p) => ({ ...p, [v.id]: "mail" }));
+    try {
+      const logo = await haalLogo();
+      // De bijlage is de KOPIE met watermerk: het origineel blijft bij JG.
+      const html = genereerInkoopverklaringHTML({ ...v }, logo, { alleen: "kopie" });
+      const pdfBase64 = await pdfBase64Van(html);
+      const res = await fetch(`/api/admin/inkoopverklaringen/${v.id}/mail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfBase64 }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Versturen mislukt");
+      await laad();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRijBezig((p) => { const n = { ...p }; delete n[v.id]; return n; });
+    }
   };
 
   /** Het document zoals het formulier er nu bij staat — ook vóór het bewaren. */
@@ -625,6 +707,17 @@ export default function InkoopverklaringContent() {
                                 {rijBezig[v.id] === "pdf" ? "PDF maken..." : "PDF"}
                               </button>
 
+                              <button
+                                onClick={() => mailRij(v)}
+                                disabled={!!rijBezig[v.id]}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                                style={{ backgroundColor: v.gemaild_op ? "#15803d" : "#1d4ed8", fontFamily: T.inter, borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(29,78,216,0.5)" }}
+                                title="Mail het kopie-exemplaar met een begeleidend bericht naar de verkoper"
+                              >
+                                <Send size={14} />
+                                {rijBezig[v.id] === "mail" ? "Versturen..." : v.gemaild_op ? "Verstuurd" : "Verstuur verklaring"}
+                              </button>
+
                               {/* Rechts, apart: bewerken (potlood) en verwijderen (prullenbak) */}
                               <div className="flex items-center gap-1.5 ml-auto">
                                 <button
@@ -647,6 +740,11 @@ export default function InkoopverklaringContent() {
                                 </button>
                               </div>
                             </div>
+                            {v.gemaild_op && (
+                              <p className="mt-2.5 text-[11px] font-medium" style={{ color: "#15803d", fontFamily: T.inter }}>
+                                ✓ Gemaild op {new Date(v.gemaild_op).toLocaleString("nl-NL", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} naar {v.verkoper_email}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>

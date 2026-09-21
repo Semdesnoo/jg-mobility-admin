@@ -186,7 +186,11 @@ function verklaringen(v: InkoopverklaringGegevens): string[] {
  *
  * BIJ AFDRUKKEN: pagina 1 = origineel, pagina 2 = kopie met KOPIE-watermerk.
  */
-export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSrc: string): string {
+export function genereerInkoopverklaringHTML(
+  v: InkoopverklaringGegevens,
+  logoSrc: string,
+  opties: { alleen?: "kopie" } = {}
+): string {
   const auto = [v.merk, v.model].filter(Boolean).join(" ").trim();
 
   const adresregels = [
@@ -411,6 +415,15 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
     <div style="position:relative;z-index:1">${navyHeader}${documentBody}${pageFooter}</div>
   </div>`;
 
+  // Alleen de kopie (zonder pagina-einde ervoor): dat is wat er als PDF-bijlage in de
+  // mail naar de verkoper gaat. Het origineel blijft bij JG voor de administratie.
+  const kopieAlleen = `<div style="position:relative">
+    ${kopieWatermerk}
+    <div style="position:relative;z-index:1">${navyHeader}${documentBody}${pageFooter}</div>
+  </div>`;
+
+  const inhoud = opties.alleen === "kopie" ? kopieAlleen : `${origineel}${kopie}`;
+
   return `<!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -424,8 +437,7 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 </style>
 </head>
 <body>
-${origineel}
-${kopie}
+${inhoud}
 </body>
 </html>`;
 }

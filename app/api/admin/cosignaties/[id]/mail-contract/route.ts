@@ -5,13 +5,32 @@ import sql from "@/lib/db";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+/** Onzichtbare tekens die bij het plakken van instellingen meekomen (zie factuurmail). */
+const ONZICHTBAAR = new RegExp(
+  "[" + String.fromCharCode(0x200b, 0x200c, 0x200d, 0xfeff, 0x00a0) + "]",
+  "g"
+);
+
+const STANDAARD_AFZENDER = "JG Mobility <info@jgmobility.nl>";
+const TEST_ONTVANGER = (process.env.FACTUUR_TEST_ONTVANGER ?? "").trim();
+
+function maakAfzender(waarde: string | undefined): string {
+  const schoon = (waarde ?? "").replace(ONZICHTBAAR, "").replace(/^["']|["']$/g, "").trim();
+  if (!schoon) return STANDAARD_AFZENDER;
+  const metNaam = schoon.match(/^(.+?)\s*<([^<>@\s]+@[^<>@\s]+\.[a-z]{2,})>$/i);
+  if (metNaam) return `${metNaam[1].trim()} <${metNaam[2].trim()}>`;
+  if (/^[^<>@\s]+@[^<>@\s]+\.[a-z]{2,}$/i.test(schoon)) return `JG Mobility <${schoon}>`;
+  return STANDAARD_AFZENDER;
+}
+
 /**
  * Mailt het consignatiecontract als PDF-bijlage naar de eigenaar.
  *
  * De PDF wordt in de browser gemaakt (dezelfde html2pdf-aanpak als bij de facturen,
- * zodat de opmaak exact klopt) en als base64 meegestuurd. Deze route hangt de mail
- * eromheen, verstuurt hem, en legt vast dat het contract gemaild is — vanaf dat
- * moment loopt de verkoopperiode en gaan de tweewekelijkse updates lopen.
+ * zodat de opmaak exact klopt) en als base64 meegestuurd — het is de KOPIE-versie
+ * met watermerk: het origineel blijft bij JG voor de administratie. Deze route hangt
+ * de mail eromheen, verstuurt hem, en legt vast dat het contract gemaild is — vanaf
+ * dat moment loopt de verkoopperiode en gaan de tweewekelijkse updates lopen.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!pdfBase64) return Response.json({ error: "De PDF ontbreekt. Probeer het opnieuw." }, { status: 400 });
 
-  const apiKey = (process.env.RESEND_API_KEY ?? "").trim();
+  const apiKey = (process.env.RESEND_API_KEY ?? "").replace(ONZICHTBAAR, "").trim();
   if (!apiKey) return Response.json({ error: "RESEND_API_KEY ontbreekt in de instellingen." }, { status: 500 });
 
   const rows = await sql`SELECT * FROM cosignaties WHERE id = ${id}`;
@@ -65,11 +84,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const resend = new Resend(apiKey);
+    const ontvanger = TEST_ONTVANGER || (c.email as string);
+    const onderwerp = `Consignatieovereenkomst${contractNr ? ` ${contractNr}` : ""} — uw ${auto}`;
     const { data, error } = await resend.emails.send({
-      from: "JG Mobility <noreply@jgmobility.nl>",
-      to: c.email as string,
+      from: maakAfzender(process.env.RESEND_FROM_EMAIL),
+      to: ontvanger,
       replyTo: "info@jgmobility.nl",
-      subject: `Consignatieovereenkomst${contractNr ? ` ${contractNr}` : ""} — uw ${auto}`,
+      subject: TEST_ONTVANGER ? `[TEST → ${c.email}] ${onderwerp}` : onderwerp,
       html,
       attachments: [
         {
@@ -103,4 +124,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { status: 502 }
     );
   }
+}
+
+/** Verzending terugdraaien: wist de registratie zodat het contract opnieuw gemaild kan worden. */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  await sql`UPDATE cosignaties SET contract_gemaild_op = NULL WHERE id = ${id}`.catch(() => null);
+  return Response.json({ ok: true });
 }

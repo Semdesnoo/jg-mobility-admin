@@ -54,6 +54,8 @@ export type Inkoopverklaring = {
   meegeleverd: string[];
   bijzonderheden: string;
   aangemaakt: string;
+  /** ISO-moment waarop de kopie naar de verkoper is gemaild; leeg = nog niet. */
+  gemaild_op: string;
 };
 
 let gereed = false;
@@ -98,6 +100,9 @@ async function init() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS inkoopverklaringen_nummer ON inkoopverklaringen (nummer DESC)`.catch(() => null);
   await sql`CREATE INDEX IF NOT EXISTS inkoopverklaringen_kenteken ON inkoopverklaringen (kenteken)`.catch(() => null);
+  // Wanneer de kopie naar de verkoper is gemaild. Zelfde grendel-gedachte als bij de
+  // facturen: één keer versturen, en zichtbaar wanneer dat gebeurd is.
+  await sql`ALTER TABLE inkoopverklaringen ADD COLUMN IF NOT EXISTS gemaild_op TEXT NOT NULL DEFAULT ''`.catch(() => null);
   gereed = true;
 }
 
@@ -142,10 +147,11 @@ function mapRow(r: Record<string, unknown>): Inkoopverklaring {
     meegeleverd: Array.isArray(mee) ? (mee as string[]) : [],
     bijzonderheden: tekst(r.bijzonderheden),
     aangemaakt: r.aangemaakt as string,
+    gemaild_op: tekst(r.gemaild_op),
   };
 }
 
-export type NieuweInkoopverklaring = Partial<Omit<Inkoopverklaring, "id" | "nummer" | "aangemaakt">>;
+export type NieuweInkoopverklaring = Partial<Omit<Inkoopverklaring, "id" | "nummer" | "aangemaakt" | "gemaild_op">>;
 
 /** Alle velden die vanaf het scherm gezet mogen worden, in de volgorde van de tabel. */
 function velden(d: NieuweInkoopverklaring) {

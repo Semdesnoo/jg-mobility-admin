@@ -185,7 +185,11 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
   ];
 }
 
-export function genereerContractHTML(c: ContractGegevens, logoSrc: string): string {
+export function genereerContractHTML(
+  c: ContractGegevens,
+  logoSrc: string,
+  opties: { alleen?: "kopie" } = {}
+): string {
   const auto = `${c.merk} ${c.model}`.trim();
 
   // ── Helpers ────────────────────────────────────────────────────
@@ -454,6 +458,23 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
     ${kopiePagina(`${ondertekeningBody}${pageFooter}`)}
   `;
 
+  // Alleen de kopie, zonder pagina-einde vooraf: dat is de PDF-bijlage in de mail naar
+  // de eigenaar. Het origineel blijft bij JG voor de administratie.
+  const kopieAlleen = `
+    ${kopiePagina(`${navyHeader}${coverBody}${pageFooter}`)}
+
+    ${PB}
+    ${kopiePagina(`<div style="padding:44px 52px 36px">${voorwaardenKop}${artikelen15.map(bouwArtikel).join("")}</div>`)}
+
+    ${PB}
+    ${kopiePagina(`<div style="padding:44px 52px 36px">${artikelen69.map(bouwArtikel).join("")}${bijzondereAfspraken}</div>${pageFooter}`)}
+
+    ${PB}
+    ${kopiePagina(`${ondertekeningBody}${pageFooter}`)}
+  `;
+
+  const inhoud = opties.alleen === "kopie" ? kopieAlleen : `${origineel}${kopie}`;
+
   return `<!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -467,8 +488,7 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
 </style>
 </head>
 <body>
-${origineel}
-${kopie}
+${inhoud}
 </body>
 </html>`;
 }

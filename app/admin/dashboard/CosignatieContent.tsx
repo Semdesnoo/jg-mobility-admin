@@ -276,8 +276,9 @@ export default function CosignatieContent() {
     setUpdateLaden((p) => ({ ...p, [id]: false }));
   };
 
-  /** Zorgt voor een contractnummer en levert het contract-HTML. */
-  const bouwContract = async (c: Cosignatie): Promise<{ html: string; nummer: string } | null> => {
+  /** Zorgt voor een contractnummer en levert het contract-HTML.
+   *  `alleen: "kopie"` geeft alleen het kopie-exemplaar — dat is de mailbijlage. */
+  const bouwContract = async (c: Cosignatie, opties: { alleen?: "kopie" } = {}): Promise<{ html: string; nummer: string } | null> => {
     let nummer = c.contract_nr ?? "";
     if (!nummer) {
       const res = await fetch(`/api/admin/cosignaties/${c.id}/contractnummer`, { method: "POST" });
@@ -290,7 +291,7 @@ export default function CosignatieContent() {
       await laad();
     }
     const logo = await haalLogo();
-    return { html: genereerContractHTML(contractGegevens(c, nummer), logo), nummer };
+    return { html: genereerContractHTML(contractGegevens(c, nummer), logo, opties), nummer };
   };
 
   const ontbreekt = (c: Cosignatie): string[] => [
@@ -318,7 +319,8 @@ export default function CosignatieContent() {
     if (!bevestig) return;
     setContractLaden((p) => ({ ...p, [c.id]: true }));
     try {
-      const r = await bouwContract(c);
+      // De bijlage is de KOPIE met watermerk: het origineel blijft bij JG.
+      const r = await bouwContract(c, { alleen: "kopie" });
       if (!r) return;
       const pdfBase64 = await contractNaarPdf(r.html);
       const res = await fetch(`/api/admin/cosignaties/${c.id}/mail-contract`, {

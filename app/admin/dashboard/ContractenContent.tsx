@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { FileSignature, Printer, Download, Search, Check, AlertTriangle } from "lucide-react";
+import { FileSignature, Printer, Download, Search, Check, AlertTriangle, Send } from "lucide-react";
 import {
   T, micro, klein, Field, inputStijl, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -39,6 +39,7 @@ type Cosignatie = {
   terugname_kosten?: number;
   bijzondere_afspraken?: string;
   contract_nr?: string; contract_op?: string;
+  contract_gemaild_op?: string | null;
 };
 
 /**
@@ -112,12 +113,40 @@ async function downloadPdf(html: string, naam: string) {
   frame.remove();
 }
 
+/** Rendert het document naar een base64-PDF — dat wordt de mailbijlage. */
+async function pdfBase64Van(html: string): Promise<string> {
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px";
+  document.body.appendChild(frame);
+  const doc = frame.contentWindow?.document;
+  if (!doc) { frame.remove(); throw new Error("Render mislukt"); }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  await new Promise((k) => setTimeout(k, 400));
+  try {
+    const html2pdf = (await import("html2pdf.js")).default;
+    const dataUri = await html2pdf()
+      .set({
+        margin: 0,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(doc.body)
+      .output("datauristring");
+    return (dataUri as string).split(",")[1];
+  } finally {
+    frame.remove();
+  }
+}
+
 export default function ContractenContent() {
   const [lijst, setLijst] = useState<Cosignatie[] | null>(null);
   const [fout, setFout] = useState("");
   const [zoek, setZoek] = useState("");
   const [openRij, setOpenRij] = useState<string | null>(null);
-  const [bezig, setBezig] = useState<Record<string, "print" | "pdf">>({});
+  const [bezig, setBezig] = useState<Record<string, "print" | "pdf" | "mail">>({});
   const { vraag, melden } = useDialoog();
 
   useEffect(() => {
@@ -158,8 +187,9 @@ export default function ContractenContent() {
     return true;
   };
 
-  /** Bouwt het document. Zonder nummer geen contract — dat wordt hier zo nodig gemaakt. */
-  const maakDocument = async (c: Cosignatie): Promise<string | null> => {
+  /** Bouwt het document. Zonder nummer geen contract — dat wordt hier zo nodig gemaakt.
+   *  `alleen: "kopie"` levert alleen het kopie-exemplaar: dat is de mailbijlage. */
+  const maakDocument = async (c: Cosignatie, opties: { alleen?: "kopie" } = {}): Promise<string | null> => {
     setFout("");
     let nummer = c.contract_nr ?? "";
     if (!nummer) {
@@ -196,7 +226,7 @@ export default function ContractenContent() {
       terugname_kosten: c.terugname_kosten == null ? STANDAARD.terugname : getal(c.terugname_kosten),
       bijzondere_afspraken: c.bijzondere_afspraken,
     };
-    return genereerContractHTML(gegevens, logo);
+    return genereerContractHTML(gegevens, logo, opties);
   };
 
   /** Ontbreekt er iets dat op het contract hoort te staan? Dan eerst waarschuwen. */
@@ -234,6 +264,58 @@ export default function ContractenContent() {
         titel: "Het contract kon niet worden gemaakt",
         tekst: e instanceof Error ? e.message : "Onbekende fout. Probeer het nog een keer.",
       });
+    } finally {
+      setBezig((p) => { const n = { ...p }; delete n[c.id]; return n; });
+    }
+  };
+
+  /**
+   * Mailt het contract (kopie-exemplaar) naar de eigenaar, met het automatische
+   * begeleidende bericht. Zelfde route als op het Cosignatie-tabblad: na het versturen
+   * gaat de aanvraag naar "lopend" en beginnen de tweewekelijkse updates.
+   */
+  const mailContract = async (c: Cosignatie) => {
+    if (bezig[c.id]) return;
+    if (!c.email) {
+      await melden({ titel: "Geen e-mailadres", tekst: "Deze eigenaar heeft geen e-mailadres. Vul dat eerst in op het tabblad Cosignatie." });
+      return;
+    }
+    if (c.contract_gemaild_op) {
+      const wanneer = new Date(c.contract_gemaild_op).toLocaleDateString("nl-NL");
+      const opnieuw = await vraag({
+        titel: "Contract al gemaild",
+        tekst: `Dit contract is al op ${wanneer} naar ${c.email} gemaild. Wil je het echt nóg een keer versturen?`,
+        bevestig: "Ja, verstuur opnieuw",
+        annuleer: "Annuleer",
+      });
+      if (!opnieuw) return;
+      // Registratie eerst wissen, anders blijft de oude datum staan.
+      await fetch(`/api/admin/cosignaties/${c.id}/mail-contract`, { method: "DELETE" }).catch(() => null);
+    }
+    const mist = ontbreekt(c);
+    const door = await vraag({
+      titel: "Contract mailen naar de eigenaar?",
+      tekst: `${mist.length ? `Let op: nog niet ingevuld — ${mist.join(", ")}. Die blijven leeg op het contract.\n\n` : ""}Het kopie-exemplaar van het consignatiecontract wordt met een begeleidend bericht als PDF naar ${c.email} gestuurd. De consignatie gaat daarna naar "In verkoop" en de eigenaar krijgt om de week automatisch een update-mail.`,
+      bevestig: "Ja, verstuur het contract",
+      annuleer: mist.length ? "Eerst invullen" : "Annuleer",
+    });
+    if (!door) return;
+    setBezig((p) => ({ ...p, [c.id]: "mail" }));
+    try {
+      // De bijlage is de KOPIE met watermerk: het origineel blijft bij JG.
+      const html = await maakDocument(c, { alleen: "kopie" });
+      if (!html) return;
+      const pdfBase64 = await pdfBase64Van(html);
+      const res = await fetch(`/api/admin/cosignaties/${c.id}/mail-contract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfBase64 }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Versturen mislukt");
+      await herlaad();
+    } catch (e) {
+      await melden({ titel: "Contract niet verstuurd", tekst: e instanceof Error ? e.message : "Onbekende fout." });
     } finally {
       setBezig((p) => { const n = { ...p }; delete n[c.id]; return n; });
     }
@@ -441,7 +523,7 @@ export default function ContractenContent() {
                             </div>
                           )}
 
-                          {/* Zelfde knoppenrij als bij een factuur: donkere hoofdactie + PDF ernaast */}
+                          {/* Zelfde knoppenrij als bij een factuur: donkere hoofdactie + PDF + blauwe mailknop */}
                           <div className="flex flex-wrap items-center gap-2">
                             <button
                               onClick={() => doe(c, "print")}
@@ -468,7 +550,22 @@ export default function ContractenContent() {
                               <Download size={14} />
                               {bezig[c.id] === "pdf" ? "PDF maken..." : "PDF"}
                             </button>
+                            <button
+                              onClick={() => mailContract(c)}
+                              disabled={!!bezig[c.id]}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{ backgroundColor: c.contract_gemaild_op ? "#15803d" : "#1d4ed8", fontFamily: T.inter, borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(29,78,216,0.5)" }}
+                              title="Mail het kopie-exemplaar met een begeleidend bericht naar de eigenaar"
+                            >
+                              <Send size={14} />
+                              {bezig[c.id] === "mail" ? "Versturen..." : c.contract_gemaild_op ? "Verstuurd" : "Verstuur contract"}
+                            </button>
                           </div>
+                          {c.contract_gemaild_op && (
+                            <p className="mt-2.5 text-[11px] font-medium" style={{ color: "#15803d", fontFamily: T.inter }}>
+                              ✓ Contract gemaild op {new Date(c.contract_gemaild_op).toLocaleDateString("nl-NL")} naar {c.email}
+                            </p>
+                          )}
                           <p className="mt-2.5" style={klein()}>
                             Het contractnummer wordt bij de eerste keer aangemaakt en verandert daarna
                             niet meer — een klant hoort niet twee verschillende nummers op hetzelfde
