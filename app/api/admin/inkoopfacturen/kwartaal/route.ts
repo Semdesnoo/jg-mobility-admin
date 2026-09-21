@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { google } from "googleapis";
+import sql from "@/lib/db";
 import { getInkoopFacturen, type InkoopFactuur } from "@/lib/inkoopfacturen-db";
 import { getAuthedClient } from "@/lib/gmail-client";
 import { verzamelBijlagen, pdfEerst, type Bijlage } from "@/lib/gmail-bijlagen";
@@ -160,5 +161,28 @@ export async function POST() {
     (a, b) => b.jaar - a.jaar || b.kwartaal - a.kwartaal
   );
   const zonderDatum = alle.filter((f) => boekDatum(f) === null).length;
-  return Response.json({ periodes, zonderDatum });
+  // Welke pakketten al gedownload zijn — het scherm toont dat bij de Q-knoppen.
+  const exports = await sql`SELECT sleutel, gedownload_op FROM kwartaal_exports`.catch(() => []);
+  return Response.json({
+    periodes,
+    zonderDatum,
+    gedownload: exports.map((r) => ({ sleutel: r.sleutel as string, op: r.gedownload_op as string })),
+  });
+}
+
+/**
+ * Legt vast dat het kwartaalpakket gedownload is. Idempotent: nogmaals
+ * downloaden vernieuwt alleen het tijdstip. De meldingenbel gebruikt dit om te
+ * weten dat een afgesloten kwartaal al bij de boekhouder ligt.
+ */
+export async function PUT(req: NextRequest) {
+  const { jaar, kwartaal } = await req.json().catch(() => ({}));
+  if (!Number.isInteger(jaar) || !Number.isInteger(kwartaal) || kwartaal < 1 || kwartaal > 4) {
+    return Response.json({ error: "Ongeldig jaar of kwartaal" }, { status: 400 });
+  }
+  await sql`
+    INSERT INTO kwartaal_exports (sleutel) VALUES (${`${jaar}-Q${kwartaal}`})
+    ON CONFLICT (sleutel) DO UPDATE SET gedownload_op = NOW()
+  `;
+  return Response.json({ ok: true });
 }

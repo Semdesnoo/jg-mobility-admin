@@ -101,6 +101,7 @@ function naarCsv(facturen: FactuurMetBijlagen[]): string {
 
 export default function InkoopFacturenOverzicht({ facturen }: { facturen: InkoopFactuur[] }) {
   const [periodes, setPeriodes] = useState<{ jaar: number; kwartaal: number; aantal: number }[]>([]);
+  const [gedownload, setGedownload] = useState<Record<string, string>>({});
   const [gekozen, setGekozen] = useState<{ jaar: number; kwartaal: number } | null>(null);
   const [data, setData] = useState<KwartaalData | null>(null);
   const [laden, setLaden] = useState(false);
@@ -114,6 +115,9 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
       .then((r) => (r.ok ? r.json() : { periodes: [] }))
       .then((d) => {
         setPeriodes(d.periodes ?? []);
+        const kaart: Record<string, string> = {};
+        for (const g of d.gedownload ?? []) kaart[g.sleutel] = g.op;
+        setGedownload(kaart);
         if (d.periodes?.length) setGekozen({ jaar: d.periodes[0].jaar, kwartaal: d.periodes[0].kwartaal });
       })
       .catch(() => {});
@@ -177,6 +181,20 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
   }, [facturen]);
 
   const zonderDatum = useMemo(() => facturen.filter((f) => boekDatum(f) === null).length, [facturen]);
+
+  // Jaren waarin facturen zitten (nieuwste eerst) — voor de Q1–Q4 knoppenbalk.
+  const jaren = useMemo(
+    () => [...new Set(perKwartaal.map((k) => k.jaar))].sort((a, b) => b - a),
+    [perKwartaal]
+  );
+  const [jaarKeuze, setJaarKeuze] = useState<number | null>(null);
+  const actiefJaar = jaarKeuze ?? gekozen?.jaar ?? jaren[0] ?? new Date().getFullYear();
+
+  // Waar staan we nu? Alles vóór het lopende kwartaal is afgesloten en kan naar
+  // de boekhouder; het lopende kwartaal loopt nog en toekomstige zijn er nog niet.
+  const nu = new Date();
+  const huidigJaar = nu.getFullYear();
+  const huidigKwartaal = kwartaalVan(nu);
 
   /**
    * Bouwt de zip in de browser.
@@ -263,6 +281,18 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
       // Even wachten voor de browser het bestand heeft opgepakt, dan pas opruimen.
       setTimeout(() => URL.revokeObjectURL(a.href), 30000);
       setKlaar(true);
+      // Registreer de download: de meldingenbel weet dan dat dit kwartaal bij de
+      // boekhouder ligt, en de Q-knop toont "gedownload". Mislukt dit stilletjes,
+      // dan blijft hooguit de melding staan — de zip zelf is al binnen.
+      fetch("/api/admin/inkoopfacturen/kwartaal", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jaar: data.jaar, kwartaal: data.kwartaal }),
+      })
+        .then((r) => {
+          if (r.ok) setGedownload((prev) => ({ ...prev, [`${data.jaar}-Q${data.kwartaal}`]: new Date().toISOString() }));
+        })
+        .catch(() => {});
     } catch (e) {
       setFout(`Zip maken mislukt: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -290,6 +320,80 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
           </p>
         </div>
       )}
+
+      {/* Kwartaalpakket: jaar kiezen + Q1–Q4 knoppen. Eén klik zet het kwartaal klaar,
+          daaronder verschijnt het overzicht met de downloadknop. */}
+      <div style={paneel}>
+        <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <FileArchive size={15} style={{ color: NAVY }} />
+            <h3 style={{ ...kop, fontSize: 14 }}>Kwartaalpakket voor de boekhouder</h3>
+          </div>
+          {jaren.length > 1 && (
+            <select
+              value={actiefJaar}
+              onChange={(e) => setJaarKeuze(Number(e.target.value))}
+              className="text-sm font-semibold px-3 py-2"
+              style={{ fontFamily: "var(--font-inter)", color: NAVY, border: "1px solid rgba(0,19,55,0.15)", backgroundColor: "#ffffff" }}
+              aria-label="Jaar kiezen"
+            >
+              {jaren.map((j) => (
+                <option key={j} value={j}>{j}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex flex-wrap gap-2 ml-auto">
+            {[1, 2, 3, 4].map((q) => {
+              const info = perKwartaal.find((k) => k.jaar === actiefJaar && k.kwartaal === q);
+              const aantal = info?.aantal ?? 0;
+              const actief = gekozen?.jaar === actiefJaar && gekozen?.kwartaal === q;
+              const afgesloten =
+                actiefJaar < huidigJaar || (actiefJaar === huidigJaar && q < huidigKwartaal);
+              const loopt = actiefJaar === huidigJaar && q === huidigKwartaal;
+              const toekomst = !afgesloten && !loopt;
+              const isGedownload = Boolean(gedownload[`${actiefJaar}-Q${q}`]);
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => { setJaarKeuze(actiefJaar); setGekozen({ jaar: actiefJaar, kwartaal: q }); }}
+                  disabled={toekomst || aantal === 0}
+                  className="flex flex-col items-center px-5 py-2.5 transition-all hover:-translate-y-0.5 disabled:opacity-35 disabled:translate-y-0 disabled:cursor-not-allowed"
+                  style={{
+                    minWidth: 96,
+                    backgroundColor: actief ? NAVY : "#ffffff",
+                    color: actief ? "#ffffff" : isGedownload ? GROEN : NAVY,
+                    border: `1.5px solid ${actief ? NAVY : isGedownload ? "rgba(21,128,61,0.4)" : "rgba(0,19,55,0.18)"}`,
+                    borderRadius: "var(--radius-control, 8px)",
+                    fontFamily: "var(--font-inter)",
+                    boxShadow: actief ? "0 6px 16px -8px rgba(0,19,55,0.5)" : "none",
+                  }}
+                  title={
+                    toekomst ? "Dit kwartaal moet nog beginnen"
+                    : aantal === 0 ? "Geen facturen in dit kwartaal"
+                    : isGedownload ? "Al gedownload en dus bij de boekhouder — opnieuw downloaden kan altijd"
+                    : loopt ? "Dit kwartaal loopt nog — de zip kan al wel, maar is pas compleet na afloop"
+                    : "Afgesloten kwartaal — klaar om te downloaden"
+                  }
+                >
+                  <span className="text-sm font-bold">Q{q}</span>
+                  <span className="text-[10px] font-semibold" style={{ opacity: 0.75 }}>
+                    {toekomst ? "—"
+                      : loopt ? `loopt · ${aantal}`
+                      : aantal === 0 ? "leeg"
+                      : isGedownload ? "✓ gedownload"
+                      : `${aantal} fact. klaar`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <p className="px-5 pb-3" style={{ ...tekst, fontSize: 11 }}>
+          Een kwartaal met ✓ is afgesloten en compleet. Kies het kwartaal en klik daaronder op
+          &ldquo;Download als zip&rdquo; — dat bestand stuur je door naar de boekhouder.
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         {/* Per maand betalen */}

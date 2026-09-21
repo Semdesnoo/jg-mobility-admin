@@ -1459,7 +1459,7 @@ function MaandWidget() {
 // ── Meldingen ───────────────────────────────────────────────────
 type Melding = {
   id: string;
-  soort: "afspraak" | "auto" | "cosignatie" | "factuur";
+  soort: "afspraak" | "auto" | "cosignatie" | "factuur" | "kwartaal";
   titel: string;
   detail: string;
   urgent: boolean;
@@ -1471,6 +1471,8 @@ const MELDING_ICOON: Record<Melding["soort"], React.ComponentType<IconProps>> = 
   auto: Car,
   cosignatie: Handshake,
   factuur: FileText,
+  // Kwartaal afgesloten → zip voor de boekhouder downloaden.
+  kwartaal: Wallet,
 };
 
 /** Belletje rechtsboven in de hub. Toont afspraken die eraan komen, auto's die

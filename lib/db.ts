@@ -62,6 +62,15 @@ export async function initDB() {
   await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS factuurmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
   await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS bedankmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
   await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS reviewmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
+  // Welke kwartaalpakketten (inkoopfacturen-zip) al gedownload zijn. Zo weet de
+  // meldingenbel of een afgesloten kwartaal nog aandacht vraagt of al bij de
+  // boekhouder ligt.
+  await sql`
+    CREATE TABLE IF NOT EXISTS kwartaal_exports (
+      sleutel TEXT PRIMARY KEY,
+      gedownload_op TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `.catch(() => null);
   await sql`
     CREATE TABLE IF NOT EXISTS cosignaties (
       id TEXT PRIMARY KEY,

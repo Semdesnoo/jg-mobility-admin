@@ -1,5 +1,6 @@
 import sql from "@/lib/db";
 import { getAutos } from "@/lib/autos-db";
+import { boekDatum, kwartaalVan, kwartaalGrenzen } from "@/lib/factuur-periode";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,7 @@ const MS_PER_DAG = 86_400_000;
 
 export type Melding = {
   id: string;
-  soort: "afspraak" | "auto" | "cosignatie" | "factuur";
+  soort: "afspraak" | "auto" | "cosignatie" | "factuur" | "kwartaal";
   titel: string;
   detail: string;
   urgent: boolean;
@@ -50,11 +51,13 @@ export async function GET() {
   const meldingen: Melding[] = [];
 
   // Elke bron apart afgevangen: één ontbrekende tabel mag het belletje niet slopen.
-  const [autos, afspraken, cosignaties, facturen] = await Promise.all([
+  const [autos, afspraken, cosignaties, facturen, inkoop, exports] = await Promise.all([
     getAutos().catch(() => []),
     sql`SELECT id, datum, tijd, type, klant_naam, auto_naam, status FROM afspraken`.catch(() => []),
     sql`SELECT id, merk, model, status, aangemaakt FROM cosignaties`.catch(() => []),
     sql`SELECT id, factuur_nr, klant_naam, datum, vervaldatum, status FROM facturen`.catch(() => []),
+    sql`SELECT datum, vervaldatum FROM inkoop_facturen`.catch(() => []),
+    sql`SELECT sleutel FROM kwartaal_exports`.catch(() => []),
   ]);
 
   // ── Afspraken vandaag en morgen ──
@@ -126,6 +129,51 @@ export async function GET() {
       urgent: teLaat,
       tab: "facturen",
     });
+  }
+
+  // ── Afgesloten kwartaal met inkoopfacturen dat nog niet naar de boekhouder is ──
+  //
+  // Zodra een kwartaal voorbij is en het zip-pakket nog niet gedownload werd,
+  // verschijnt hier een melding: "Q3 is klaar, we zitten nu in Q4". Downloaden
+  // registreert het pakket (kwartaal_exports) en de melding verdwijnt. Alleen de
+  // twee meest recente afgesloten kwartalen — een gemiste periode van een jaar
+  // geleden hoeft niet eeuwig te blijven jengelen.
+  {
+    const alGedaan = new Set(exports.map((r) => String(r.sleutel)));
+    const perKw = new Map<string, number>();
+    for (const f of inkoop) {
+      const d = boekDatum({ datum: String(f.datum ?? ""), vervaldatum: String(f.vervaldatum ?? "") });
+      if (!d) continue;
+      const s = `${d.getFullYear()}-Q${kwartaalVan(d)}`;
+      perKw.set(s, (perKw.get(s) ?? 0) + 1);
+    }
+    const huidigJaar = nu.getFullYear();
+    const huidigKw = kwartaalVan(nu);
+    // De twee laatst afgesloten kwartalen, nieuwste eerst.
+    const afgesloten: { jaar: number; kw: number }[] = [];
+    let j = huidigJaar, k = huidigKw;
+    for (let i = 0; i < 2; i++) {
+      k--;
+      if (k === 0) { k = 4; j--; }
+      afgesloten.push({ jaar: j, kw: k });
+    }
+    for (const { jaar, kw } of afgesloten) {
+      const sleutel = `${jaar}-Q${kw}`;
+      const aantal = perKw.get(sleutel) ?? 0;
+      if (aantal === 0 || alGedaan.has(sleutel)) continue;
+      const { tot } = kwartaalGrenzen(jaar, kw);
+      const dagenGeleden = Math.round((vandaag.getTime() - tot.getTime()) / MS_PER_DAG);
+      meldingen.push({
+        id: `kwartaal-${sleutel}`,
+        soort: "kwartaal",
+        titel: `Q${kw} ${jaar} is afgesloten — we zitten nu in Q${huidigKw}`,
+        detail: `${aantal} inkoopfactu${aantal === 1 ? "ur" : "ren"} klaar voor de boekhouder. Download het zip-pakket bij Inkoopfacturen → Maand & kwartaal.`,
+        // Na een maand wordt het dringend: de BTW-aangifte moet doorgaans binnen
+        // een maand na afloop van het kwartaal de deur uit.
+        urgent: dagenGeleden > 30,
+        tab: "inkoopfacturen",
+      });
+    }
   }
 
   // Urgent eerst, daarbinnen op soort gegroepeerd.
