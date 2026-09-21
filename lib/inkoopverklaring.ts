@@ -201,8 +201,8 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
   const rij = (label: string, waarde: unknown) =>
     waarde
       ? `<tr>
-           <td style="padding:4px 0;font-size:8.5pt;color:#64748b;width:110px;vertical-align:top;white-space:nowrap">${veilig(label as string)}</td>
-           <td style="padding:4px 0;font-size:8.5pt;color:#001337;font-weight:600;vertical-align:top">${veilig(waarde as string)}</td>
+           <td style="padding:3px 0;font-size:8.5pt;color:#64748b;width:110px;vertical-align:top;white-space:nowrap">${veilig(label as string)}</td>
+           <td style="padding:3px 0;font-size:8.5pt;color:#001337;font-weight:600;vertical-align:top">${veilig(waarde as string)}</td>
          </tr>`
       : "";
 
@@ -272,9 +272,9 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 
   const verklaringLijst = verklaringen(v)
     .map(
-      (t, i) => `<div style="display:flex;margin-bottom:4px">
+      (t, i) => `<div style="display:flex;margin-bottom:3px">
         <span style="font-size:8pt;color:#94a3b8;font-weight:700;margin-right:6px;flex-shrink:0;width:12px;text-align:right">${i + 1}</span>
-        <span style="font-size:8pt;color:#334155;line-height:1.5">${veilig(t)}</span>
+        <span style="font-size:8pt;color:#334155;line-height:1.4">${veilig(t)}</span>
       </div>`
     )
     .join("");
@@ -284,18 +284,20 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
   const kopieWatermerk = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:120pt;font-weight:900;color:rgba(0,19,55,0.055);letter-spacing:0.5em;white-space:nowrap;pointer-events:none;z-index:0;font-family:'Helvetica Neue',Arial,sans-serif">KOPIE</div>`;
 
   // ── Pagina-inhoud (gedeeld tussen origineel en kopie) ──────────
-  const navyHeader = `<div style="width:100%;background-color:#001337;text-align:center;padding:12px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact">
-    <img src="${logoSrc}" alt="JG Mobility" style="height:50px;object-fit:contain;display:inline-block">
+  // Compact gehouden: het geheel moet op ÉÉN A4 (1123px bij 96dpi) passen,
+  // anders rolt er een tweede, vrijwel leeg vel uit de printer.
+  const navyHeader = `<div style="width:100%;background-color:#001337;text-align:center;padding:8px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <img src="${logoSrc}" alt="JG Mobility" style="height:40px;object-fit:contain;display:inline-block">
   </div>`;
 
-  const documentBody = `<div style="padding:28px 48px 18px">
+  const documentBody = `<div style="padding:18px 48px 10px">
 
     <!-- Koptabel: bedrijf links, titel rechts -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
       <tr>
         <td style="vertical-align:top;width:52%">
-          <div style="font-size:10.5pt;font-weight:700;color:#001337;margin-bottom:4px">${BEDRIJF.naam}</div>
-          <div style="font-size:8.5pt;color:#64748b;line-height:1.7">
+          <div style="font-size:10.5pt;font-weight:700;color:#001337;margin-bottom:3px">${BEDRIJF.naam}</div>
+          <div style="font-size:8pt;color:#64748b;line-height:1.55">
             <div>${BEDRIJF.adres} · ${BEDRIJF.postcode}</div>
             <div>${BEDRIJF.email} · ${BEDRIJF.telefoon}</div>
             <div>KvK ${BEDRIJF.kvk} · BTW ${BEDRIJF.btw}</div>
@@ -309,10 +311,10 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
       </tr>
     </table>
 
-    <div style="border-top:2px solid #001337;margin-bottom:16px"></div>
+    <div style="border-top:2px solid #001337;margin-bottom:12px"></div>
 
     <!-- Verkoper + inleidende tekst -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
       <tr>
         <td style="vertical-align:top;width:52%;padding-right:24px">
           ${kop("De verkoper")}
@@ -321,7 +323,7 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
           ${legitimatie ? `<div style="font-size:8pt;color:#64748b;margin-top:3px">${legitimatie}</div>` : ""}
         </td>
         <td style="vertical-align:top">
-          <div style="font-size:8.5pt;color:#334155;line-height:1.65;padding-top:22px">
+          <div style="font-size:8.5pt;color:#334155;line-height:1.55;padding-top:20px">
             Ondergetekende verkoopt en levert de hieronder omschreven auto aan ${BEDRIJF.naam},
             dat deze koopt voor het genoemde bedrag. Deze verklaring geldt als
             koopovereenkomst én als inkoopbewijs voor de administratie.
@@ -332,7 +334,7 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 
     ${voertuigLinks || voertuigRechts ? `
     <!-- Voertuig in twee kolommen -->
-    <div style="margin-bottom:14px">
+    <div style="margin-bottom:10px">
       ${kop("Het voertuig")}
       <table style="width:100%;border-collapse:collapse">
         <tr>
@@ -347,16 +349,16 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
     </div>` : ""}
 
     <!-- Inkoopbedrag + koopdetails in één balk -->
-    <div style="margin-bottom:14px;background:#f8fafc;border-left:3px solid #001337">
+    <div style="margin-bottom:10px;background:#f8fafc;border-left:3px solid #001337">
       <table style="width:100%;border-collapse:collapse">
         <tr>
-          <td style="vertical-align:top;padding:12px 0 12px 16px;width:50%">
-            <div style="font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:5px">Inkoopbedrag</div>
-            <div style="font-size:22pt;font-weight:700;color:#001337;line-height:1;margin-bottom:3px">${euro(v.bedrag)}</div>
-            ${woorden ? `<div style="font-size:8.5pt;color:#475569;font-style:italic;margin-bottom:5px">zegge: ${veilig(woorden)}</div>` : ""}
-            <div style="font-size:7.5pt;color:#64748b;line-height:1.5">${margeRegel}</div>
+          <td style="vertical-align:top;padding:9px 0 9px 16px;width:50%">
+            <div style="font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:4px">Inkoopbedrag</div>
+            <div style="font-size:19pt;font-weight:700;color:#001337;line-height:1;margin-bottom:3px">${euro(v.bedrag)}</div>
+            ${woorden ? `<div style="font-size:8pt;color:#475569;font-style:italic;margin-bottom:4px">zegge: ${veilig(woorden)}</div>` : ""}
+            <div style="font-size:7.5pt;color:#64748b;line-height:1.45">${margeRegel}</div>
           </td>
-          <td style="vertical-align:top;padding:12px 16px;border-left:1px solid #e2e8f0">
+          <td style="vertical-align:top;padding:9px 16px;border-left:1px solid #e2e8f0">
             <table style="border-collapse:collapse">${koopDetails}</table>
           </td>
         </tr>
@@ -367,36 +369,36 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
     ${bijzonderheden}
 
     <!-- Verklaringen -->
-    <div style="margin-bottom:18px">
+    <div style="margin-bottom:12px">
       ${kop("Verklaring van de verkoper")}
       ${verklaringLijst}
     </div>
 
     <!-- Handtekeningen -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
       <tr>
         <td style="vertical-align:bottom;width:46%;padding-right:20px">
-          <div style="font-size:8.5pt;color:#64748b;margin-bottom:6px">De verkoper</div>
-          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:60px">${veilig(v.verkoper_naam)}</div>
-          <div style="border-top:1px solid #94a3b8;padding-top:5px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
+          <div style="font-size:8.5pt;color:#64748b;margin-bottom:4px">De verkoper</div>
+          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:42px">${veilig(v.verkoper_naam)}</div>
+          <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
         </td>
         <td style="width:8%"></td>
         <td style="vertical-align:bottom;width:46%">
-          <div style="font-size:8.5pt;color:#64748b;margin-bottom:6px">Namens ${BEDRIJF.naam}</div>
-          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:60px">Jimi Gaillard</div>
-          <div style="border-top:1px solid #94a3b8;padding-top:5px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
+          <div style="font-size:8.5pt;color:#64748b;margin-bottom:4px">Namens ${BEDRIJF.naam}</div>
+          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:42px">Jimi Gaillard</div>
+          <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
         </td>
       </tr>
     </table>
 
-    <div style="font-size:7.5pt;color:#94a3b8;line-height:1.55">
+    <div style="font-size:7.5pt;color:#94a3b8;line-height:1.5">
       Door te ondertekenen verklaart de verkoper het bovenstaande naar waarheid te hebben opgegeven en het
       genoemde bedrag te hebben ontvangen. Beide partijen ontvangen een ondertekend exemplaar.
     </div>
 
   </div>`;
 
-  const pageFooter = `<div style="text-align:center;padding:8px 48px 18px">
+  const pageFooter = `<div style="text-align:center;padding:5px 48px 10px">
     <div style="font-size:7.5pt;letter-spacing:2.5px;text-transform:uppercase;color:rgba(0,19,55,0.35)">
       ${BEDRIJF.naam} &nbsp;·&nbsp; ${BEDRIJF.website}
     </div>
