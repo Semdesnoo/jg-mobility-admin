@@ -12,7 +12,8 @@ const INTRO_MAX = 130;
 
 const CONTACTBLOK = `JG Mobility
 \u{1F4CD} Arnhemseweg 10a 2994 LA Barendrecht
-\u{1F4DE} Telefoon: +31 6 21331374 \u{1F4E7} E-mail: info@jgmobility.nl
+\u{1F4DE} Telefoon: +31 6 21331374
+\u{1F4E7} E-mail: info@jgmobility.nl
 
 Wij werken graag op afspraak, zodat we alle tijd voor u kunnen nemen. Tot snel!`;
 
@@ -134,7 +135,7 @@ function invoerHash(a: AutoInvoer): string {
     opties: (a.opties ?? []).map((o) => `${o.categorie ?? ""}:${(o.items ?? []).join(",")}`).sort(),
     extra: (a.extra ?? "").trim(),
     // Meeversioneren: na een promptwijziging horen oude teksten niet meer geldig te zijn.
-    promptversie: `intro${INTRO_MAX}-tiktok2`,
+    promptversie: `intro${INTRO_MAX}-tiktok2-contact2`,
   };
   return createHash("sha256").update(JSON.stringify(relevant)).digest("hex").slice(0, 32);
 }
