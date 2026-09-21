@@ -46,6 +46,7 @@ import {
   Download,
   Send,
   MailCheck,
+  Star,
   StickyNote,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
@@ -2027,6 +2028,7 @@ type Factuur = {
   regels: string;
   factuurmail_verstuurd_op?: string;
   bedankmail_verstuurd_op?: string;
+  reviewmail_verstuurd_op?: string;
 };
 
 const FACTUUR_STATUS: Record<string, { label: string; color: string; bg: string }> = {
@@ -2333,6 +2335,7 @@ function FacturenContent() {
   const [periode, setPeriode] = useState<"alles" | "week" | "maand" | "kwartaal" | "jaar">("alles");
   const [mailStatus, setMailStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   const [bedankStatus, setBedankStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
+  const [reviewStatus, setReviewStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   const [downloadStatus, setDownloadStatus] = useState<Record<string, "laden" | "ok" | "fout">>({});
   // Voorraad voor de autokiezer + welke auto gekozen is + de zoekterm daarin.
   const [autos, setAutos] = useState<VerkoopAuto[]>([]);
@@ -2516,7 +2519,7 @@ function FacturenContent() {
   // Zet het verzendmoment direct in beeld (lijst + "nieuwste factuur"-banner) zonder refresh
   const markVerstuurd = (
     id: string,
-    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
+    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op" | "reviewmail_verstuurd_op",
     iso: string,
   ) => {
     setFacturen((prev) => prev.map((f) => (f.id === id ? { ...f, [veld]: iso } : f)));
@@ -2528,9 +2531,11 @@ function FacturenContent() {
    *  als een mail echt niet is aangekomen. */
   const draaiVerzendingTerug = (
     f: Factuur,
-    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
+    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op" | "reviewmail_verstuurd_op",
   ) => {
-    const wat = veld === "factuurmail_verstuurd_op" ? "factuurmail" : "bedankmail";
+    const wat =
+      veld === "factuurmail_verstuurd_op" ? "factuurmail" :
+      veld === "bedankmail_verstuurd_op" ? "bedankmail" : "reviewmail";
     setBevestig({
       titel: `Verzending van de ${wat} terugdraaien?`,
       tekst: `De registratie wordt gewist zodat je hem opnieuw kunt versturen. De klant heeft de eerder verstuurde mail nog steeds ontvangen.`,
@@ -2542,7 +2547,7 @@ function FacturenContent() {
 
   const doeDraaiVerzendingTerug = async (
     f: Factuur,
-    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op",
+    veld: "factuurmail_verstuurd_op" | "bedankmail_verstuurd_op" | "reviewmail_verstuurd_op",
   ) => {
     await fetch(`/api/admin/facturen/${f.id}`, {
       method: "PATCH",
@@ -2808,6 +2813,56 @@ function FacturenContent() {
       setBedankStatus((prev) => ({ ...prev, [f.id]: "fout" }));
       setMelding({ titel: "Versturen mislukt", tekst: `De bedankmail kon niet worden verstuurd: ${String(err)}`, toon: "fout" });
       setTimeout(() => setBedankStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
+    }
+  };
+
+  // Reviewmail: los reviewverzoek (sterren-opmaak) voor klanten die al langer geleden
+  // kochten. Geen PDF-bijlage en raakt de factuurstatus niet — het is geen boekhoudstuk
+  // maar een vriendelijke vraag. Zelfde dubbel-verstuur-grendel als de andere mails.
+  const verstuurReviewmail = (f: Factuur) => {
+    if (!f.klant_email) {
+      setMelding({ titel: "Geen e-mailadres", tekst: "Deze factuur heeft geen e-mailadres voor de klant. Vul dit eerst in via Bewerken.", toon: "waarschuwing" });
+      return;
+    }
+    if (f.reviewmail_verstuurd_op) {
+      setMelding({
+        titel: "Reviewmail al verstuurd",
+        tekst: `Deze reviewmail is al verstuurd op ${formatVerstuurd(f.reviewmail_verstuurd_op)}. Opnieuw versturen is geblokkeerd. Gebruik "Verzending terugdraaien" als je zeker weet dat de klant hem niet heeft ontvangen.`,
+        toon: "waarschuwing",
+      });
+      return;
+    }
+    setBevestig({
+      titel: "Reviewverzoek versturen?",
+      tekst: `${f.klant_naam || "De klant"} krijgt een vriendelijke mail met de vraag om een Google-review, over de ${[f.auto_merk, f.auto_model].filter(Boolean).join(" ") || "auto"}. Er gaat geen factuur mee.`,
+      bevestigLabel: "Ja, vraag om een review",
+      kleur: "#001337",
+      actie: () => doeVerstuurReviewmail(f),
+    });
+  };
+
+  const doeVerstuurReviewmail = async (f: Factuur) => {
+    setReviewStatus((prev) => ({ ...prev, [f.id]: "laden" }));
+    try {
+      const res = await fetch(`/api/admin/facturen/${f.id}/mail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "review" }),
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setReviewStatus((prev) => ({ ...prev, [f.id]: "ok" }));
+        markVerstuurd(f.id, "reviewmail_verstuurd_op", data.verstuurd_op ?? new Date().toISOString());
+        setTimeout(() => setReviewStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 4000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Onbekende fout");
+      }
+    } catch (err) {
+      setReviewStatus((prev) => ({ ...prev, [f.id]: "fout" }));
+      setMelding({ titel: "Versturen mislukt", tekst: `De reviewmail kon niet worden verstuurd: ${String(err)}`, toon: "fout" });
+      setTimeout(() => setReviewStatus((prev) => { const n = { ...prev }; delete n[f.id]; return n; }), 3000);
     }
   };
 
@@ -3916,6 +3971,19 @@ function FacturenContent() {
                               {bedankStatus[f.id] === "laden" ? "PDF maken..." : (bedankStatus[f.id] === "ok" || f.bedankmail_verstuurd_op) ? "Bedankt verstuurd" : "Bedankmail"}
                             </button>
 
+                            {/* Reviewverzoek (sterren-mail): voor klanten die al langer geleden
+                                kochten. Geen bijlage, raakt de factuurstatus niet. */}
+                            <button
+                              onClick={() => verstuurReviewmail(f)}
+                              disabled={reviewStatus[f.id] === "laden"}
+                              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                              style={{ backgroundColor: (reviewStatus[f.id] === "ok" || f.reviewmail_verstuurd_op) ? "#8a6a0e" : "#b8860b", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(184,134,11,0.5)" }}
+                              title="Vraag de klant vriendelijk om een Google-review (sterren-mail, zonder factuur)"
+                            >
+                              <Star size={14} />
+                              {reviewStatus[f.id] === "laden" ? "Versturen..." : (reviewStatus[f.id] === "ok" || f.reviewmail_verstuurd_op) ? "Review gevraagd" : "Vraag review"}
+                            </button>
+
                             {/* Rechts, apart: bewerken (potlood) en verwijderen (prullenbak) */}
                             <div className="flex items-center gap-1.5 ml-auto">
                               <button
@@ -3940,11 +4008,12 @@ function FacturenContent() {
                               </button>
                             </div>
                           </div>
-                          {(f.factuurmail_verstuurd_op || f.bedankmail_verstuurd_op) && (
+                          {(f.factuurmail_verstuurd_op || f.bedankmail_verstuurd_op || f.reviewmail_verstuurd_op) && (
                             <div className="mt-3 flex flex-col gap-1">
                               {([
                                 { veld: "factuurmail_verstuurd_op", label: "Factuurmail" },
                                 { veld: "bedankmail_verstuurd_op", label: "Bedankmail" },
+                                { veld: "reviewmail_verstuurd_op", label: "Reviewmail" },
                               ] as const).map(({ veld, label }) =>
                                 f[veld] ? (
                                   <p key={veld} className="text-[11px] font-medium flex items-center gap-2 flex-wrap" style={{ color: "#15803d", fontFamily: "var(--font-inter)" }}>

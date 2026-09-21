@@ -27,6 +27,8 @@ const KLEUR = {
   vlak: "#f8fafc",
   groen: "#15803d",
   groenVlak: "#dcfce7",
+  // Goud voor de sterren in de reviewmail — warm accent op de navy balk.
+  goud: "#d4a017",
 } as const;
 
 const BEDRIJF = {
@@ -57,6 +59,8 @@ function romp(opts: {
   voorvertoning: string;
   badge?: { tekst: string; kleur: string; vlak: string };
   titel: string;
+  /** Extra HTML in de navy kop, tussen de bedrijfsnaam en de titelregel (bv. de sterrenrij). */
+  kopExtra?: string;
   aanhef: string;
   alineas: string[];
   gegevens: string;
@@ -83,6 +87,7 @@ function romp(opts: {
         <tr>
           <td align="center" style="background-color:${KLEUR.navy};padding:26px 30px;">
             <div style="font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:bold;color:#ffffff;letter-spacing:1px;">${BEDRIJF.naam}</div>
+            ${opts.kopExtra ?? ""}
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);padding-top:5px;">${veilig(opts.titel)}</div>
           </td>
         </tr>
@@ -301,6 +306,69 @@ export function bedankMail(g: MailGegevens): { onderwerp: string; html: string; 
                </td></tr>
              </table>`,
       afsluiting: `Komt u er onverhoopt achter dat er iets niet klopt, laat het ons dan gerust weten — daar komen we samen uit.<br /><br />Met vriendelijke groet,<br /><strong>Jimi Gaillard</strong><br /><span style="color:${KLEUR.grijs};">${BEDRIJF.naam}</span>`,
+    }),
+  };
+}
+
+/**
+ * De reviewmail voor klanten die al langer geleden een auto kochten.
+ *
+ * WAAROM EEN EIGEN MAIL
+ * De bedankmail hoort bij de betaling en gaat maar één keer uit. Maar een klant die
+ * maanden geleden kocht en tevreden rondrijdt is juist degene die een goede review
+ * schrijft — die bereik je met deze mail. Sterren-thema (door de gebruiker gekozen uit
+ * twee voorstellen): gouden sterrenrij in de navy kop, serif-vraag als kop, en een
+ * goud-geaccentueerd blok met de reviewknop. De "iets niet tevreden? bel ons eerst"-regel
+ * onderaan vangt ontevreden klanten af vóór ze hun onvrede in een publieke review zetten.
+ */
+export function reviewMail(g: MailGegevens): { onderwerp: string; html: string; tekst: string } {
+  const voornaam = (g.klant_naam || "").trim().split(" ")[0] || "";
+  const aanhefNaam = voornaam || "beste klant";
+
+  // Vijf gouden sterren in de navy kop. HTML-entiteit &#9733; rendert overal, ook in
+  // Outlook — een emoji-ster wordt daar soms zwart-wit of verspringt van maat.
+  const ster = `<span style="font-size:26px;color:${KLEUR.goud};">&#9733;</span>`;
+  const sterrenrij = `<div style="padding-top:14px;padding-bottom:5px;letter-spacing:6px;">${ster}${ster}${ster}${ster}${ster}</div>`;
+
+  return {
+    onderwerp: `Hoe bevalt uw ${g.voertuig}? Wij zijn benieuwd — ${BEDRIJF.naam}`,
+    tekst: platteTekst([
+      voornaam ? `Beste ${voornaam},` : "Beste klant,",
+      "",
+      `Het is alweer even geleden dat u uw ${g.voertuig} bij ons ophaalde. Wij hopen dat elke rit nog steeds zo goed voelt als de eerste.`,
+      "",
+      "Zou u ons een minuut willen geven? Uw review op Google is voor ons als klein bedrijf goud waard. Toekomstige klanten lezen graag echte ervaringen — en die van u telt:",
+      BEDRIJF.review,
+      "",
+      "Is er iets waar u niet helemaal tevreden over bent? Bel of mail ons dan gerust — dat lossen wij liever eerst samen op.",
+      "",
+      "Met vriendelijke groet,",
+      "Jimi Gaillard",
+      `${BEDRIJF.naam} · ${BEDRIJF.adres}, ${BEDRIJF.postcode}`,
+      `${BEDRIJF.email} · ${BEDRIJF.telefoon}`,
+    ]),
+    html: romp({
+      voorvertoning: "Een minuut van uw tijd is voor ons goud waard.",
+      titel: "Uw mening telt",
+      kopExtra: sterrenrij,
+      aanhef: "",
+      alineas: [
+        // Gecentreerde serif-kop met de vraag — het gezicht van deze mail.
+        `<div style="font-family:Georgia,'Times New Roman',serif;font-size:21px;color:${KLEUR.navy};text-align:center;padding-top:2px;padding-bottom:14px;">Hoe bevalt uw ${veilig(g.voertuig)}, ${veilig(aanhefNaam)}?</div>
+         <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:${KLEUR.tekst};text-align:center;">Het is alweer even geleden dat u uw auto bij ons ophaalde. Wij hopen dat elke rit nog steeds zo goed voelt als de eerste.</div>`,
+      ],
+      gegevens: "",
+      blok: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${KLEUR.vlak};border-top:3px solid ${KLEUR.goud};">
+               <tr><td align="center" style="padding:24px 24px;">
+                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:${KLEUR.navy};padding-bottom:8px;">Zou u ons een minuut willen geven?</div>
+                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;color:${KLEUR.tekst};padding-bottom:18px;">
+                   Uw review op Google is voor ons als klein bedrijf goud waard. Toekomstige klanten lezen graag echte ervaringen &mdash; en die van u telt.
+                 </div>
+                 <a href="${BEDRIJF.review}" style="display:inline-block;background-color:${KLEUR.navy};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;padding:13px 32px;border-radius:6px;">&#9733; &nbsp;Schrijf een review</a>
+                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${KLEUR.zacht};padding-top:12px;">Duurt minder dan een minuut</div>
+               </td></tr>
+             </table>`,
+      afsluiting: `Is er iets waar u niet helemaal tevreden over bent? Bel of mail ons dan gerust &mdash; dat lossen wij liever eerst samen op.<br /><br />Met vriendelijke groet,<br /><strong>Jimi Gaillard</strong><br /><span style="color:${KLEUR.grijs};">${BEDRIJF.naam}</span>`,
     }),
   };
 }

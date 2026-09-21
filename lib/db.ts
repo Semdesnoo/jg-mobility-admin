@@ -61,6 +61,7 @@ export async function initDB() {
   // Houdt bij wanneer elke mail naar de klant is verstuurd (ISO-tijdstring, leeg = nog niet verstuurd)
   await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS factuurmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
   await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS bedankmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
+  await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS reviewmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
   await sql`
     CREATE TABLE IF NOT EXISTS cosignaties (
       id TEXT PRIMARY KEY,

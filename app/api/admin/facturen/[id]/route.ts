@@ -44,7 +44,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       notitie = COALESCE(${body.notitie ?? null}, notitie),
       factuur_nr = COALESCE(${body.factuur_nr ?? null}, factuur_nr),
       factuurmail_verstuurd_op = COALESCE(${body.factuurmail_verstuurd_op ?? null}, factuurmail_verstuurd_op),
-      bedankmail_verstuurd_op = COALESCE(${body.bedankmail_verstuurd_op ?? null}, bedankmail_verstuurd_op)
+      bedankmail_verstuurd_op = COALESCE(${body.bedankmail_verstuurd_op ?? null}, bedankmail_verstuurd_op),
+      reviewmail_verstuurd_op = COALESCE(${body.reviewmail_verstuurd_op ?? null}, reviewmail_verstuurd_op)
     WHERE id = ${id}
   `;
   return Response.json({ ok: true });

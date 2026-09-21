@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Resend } from "resend";
 import sql from "@/lib/db";
-import { factuurMail, bedankMail, type MailGegevens } from "@/lib/mail-sjabloon";
+import { factuurMail, bedankMail, reviewMail, type MailGegevens } from "@/lib/mail-sjabloon";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -112,7 +112,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const { pdfBase64, type } = await req.json().catch(() => ({}));
   const isBedankt = type === "bedankt";
-  const kolom = isBedankt ? "bedankmail_verstuurd_op" : "factuurmail_verstuurd_op";
+  // De reviewmail heeft geen PDF-bijlage: er hoort geen factuur bij een reviewverzoek.
+  const isReview = type === "review";
+  const kolom = isReview
+    ? "reviewmail_verstuurd_op"
+    : isBedankt
+      ? "bedankmail_verstuurd_op"
+      : "factuurmail_verstuurd_op";
 
   // Dezelfde schoonmaak als bij de afzender: ook in de sleutel sluipt bij het plakken
   // makkelijk een onzichtbaar teken of een spatie mee, en dan weigert de mailserver alles.
@@ -130,7 +136,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // vaste adres ging in plaats van vanaf de instelling.
     console.warn(`[factuurmail] ${melding}. Er wordt verstuurd vanaf ${STANDAARD_AFZENDER}.`);
   }
-  if (!pdfBase64) {
+  if (!pdfBase64 && !isReview) {
     return Response.json({ error: "De PDF ontbreekt. Probeer het opnieuw." }, { status: 400 });
   }
 
@@ -174,15 +180,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const nu = new Date().toISOString();
   let geclaimd;
   try {
-    geclaimd = isBedankt
+    geclaimd = isReview
       ? await sql`
-          UPDATE facturen SET bedankmail_verstuurd_op = ${nu}
-          WHERE id = ${id} AND (bedankmail_verstuurd_op IS NULL OR bedankmail_verstuurd_op = '')
+          UPDATE facturen SET reviewmail_verstuurd_op = ${nu}
+          WHERE id = ${id} AND (reviewmail_verstuurd_op IS NULL OR reviewmail_verstuurd_op = '')
           RETURNING id`
-      : await sql`
-          UPDATE facturen SET factuurmail_verstuurd_op = ${nu}
-          WHERE id = ${id} AND (factuurmail_verstuurd_op IS NULL OR factuurmail_verstuurd_op = '')
-          RETURNING id`;
+      : isBedankt
+        ? await sql`
+            UPDATE facturen SET bedankmail_verstuurd_op = ${nu}
+            WHERE id = ${id} AND (bedankmail_verstuurd_op IS NULL OR bedankmail_verstuurd_op = '')
+            RETURNING id`
+        : await sql`
+            UPDATE facturen SET factuurmail_verstuurd_op = ${nu}
+            WHERE id = ${id} AND (factuurmail_verstuurd_op IS NULL OR factuurmail_verstuurd_op = '')
+            RETURNING id`;
   } catch {
     return Response.json(
       { error: "Kon niet vastleggen dat de mail verstuurd wordt. Probeer het zo nog een keer." },
@@ -205,14 +216,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   /** De claim terugdraaien als het versturen niet lukt — anders blijft hij op "verstuurd" staan. */
   const geefVrij = async () => {
-    if (isBedankt) {
+    if (isReview) {
+      await sql`UPDATE facturen SET reviewmail_verstuurd_op = NULL WHERE id = ${id}`.catch(() => null);
+    } else if (isBedankt) {
       await sql`UPDATE facturen SET bedankmail_verstuurd_op = NULL WHERE id = ${id}`.catch(() => null);
     } else {
       await sql`UPDATE facturen SET factuurmail_verstuurd_op = NULL WHERE id = ${id}`.catch(() => null);
     }
   };
 
-  const { onderwerp, html, tekst } = isBedankt ? bedankMail(gegevens) : factuurMail(gegevens);
+  const { onderwerp, html, tekst } = isReview
+    ? reviewMail(gegevens)
+    : isBedankt
+      ? bedankMail(gegevens)
+      : factuurMail(gegevens);
 
   try {
     const resend = new Resend(apiKey);
@@ -229,14 +246,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // De platte-tekstversie gaat mee. Een mail met alleen HTML is voor spamfilters een
       // signaal op zich: echte post van bedrijven stuurt allebei mee, bulkmail vaak niet.
       text: tekst,
-      attachments: [
-        {
-          filename: isBedankt
-            ? `Factuur-${gegevens.factuur_nr}-betaald.pdf`
-            : `Factuur-${gegevens.factuur_nr}.pdf`,
-          content: pdfBase64,
-        },
-      ],
+      // Reviewmail heeft geen bijlage; de andere twee sturen de factuur-PDF mee.
+      ...(isReview
+        ? {}
+        : {
+            attachments: [
+              {
+                filename: isBedankt
+                  ? `Factuur-${gegevens.factuur_nr}-betaald.pdf`
+                  : `Factuur-${gegevens.factuur_nr}.pdf`,
+                content: pdfBase64,
+              },
+            ],
+          }),
     });
 
     if (error || !data?.id) {
