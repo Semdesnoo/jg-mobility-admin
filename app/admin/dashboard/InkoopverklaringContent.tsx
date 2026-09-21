@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send } from "lucide-react";
+import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send, Archive, Undo2 } from "lucide-react";
 import {
   T, micro, body, klein, fmt, Panel, Btn, Field, inputStijl, Chip, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -64,6 +64,8 @@ type Verklaring = {
   aangemaakt: string;
   /** ISO-moment waarop de kopie naar de verkoper is gemaild; leeg = nog niet. */
   gemaild_op?: string;
+  /** ISO-moment waarop de verklaring is gearchiveerd (betaling overgemaakt); leeg = actueel. */
+  archief_op?: string;
 };
 
 type Formulier = Omit<Verklaring, "id" | "nummer" | "aangemaakt" | "bedrag"> & { bedrag: string };
@@ -220,9 +222,10 @@ export default function InkoopverklaringContent() {
   const [gekozenId, setGekozenId] = useState<string | null>(null);
   const [f, setF] = useState<Formulier>(leegFormulier);
   const [zoek, setZoek] = useState("");
+  const [tab, setTab] = useState<"actueel" | "archief">("actueel");
   const [fout, setFout] = useState("");
   const [bezig, setBezig] = useState(false);
-  const [rijBezig, setRijBezig] = useState<Record<string, "print" | "pdf" | "mail">>({});
+  const [rijBezig, setRijBezig] = useState<Record<string, "print" | "pdf" | "mail" | "archief">>({});
   const [rdwBezig, setRdwBezig] = useState(false);
   const [adresStatus, setAdresStatus] = useState<"stil" | "bezig" | "gevonden" | "onbekend" | "mislukt">("stil");
   /** Welk kenteken al is opgezocht, zodat uit het veld klikken niet elke keer opnieuw vraagt. */
@@ -254,10 +257,42 @@ export default function InkoopverklaringContent() {
     const z = zoek.trim().toLowerCase();
     return (lijst ?? []).filter(
       (v) =>
-        !z ||
-        `${v.nummer} ${v.verkoper_naam} ${v.merk} ${v.model} ${v.kenteken}`.toLowerCase().includes(z)
+        // Tab bepaalt welke helft je ziet: actueel (nog te betalen) of archief (betaald).
+        (tab === "archief" ? !!v.archief_op : !v.archief_op) &&
+        (!z ||
+          `${v.nummer} ${v.verkoper_naam} ${v.merk} ${v.model} ${v.kenteken}`.toLowerCase().includes(z))
     );
-  }, [lijst, zoek]);
+  }, [lijst, zoek, tab]);
+
+  const aantalArchief = useMemo(() => (lijst ?? []).filter((v) => !!v.archief_op).length, [lijst]);
+  const aantalActueel = (lijst?.length ?? 0) - aantalArchief;
+
+  /** Betaling overgemaakt → verklaring het archief in (of weer terug). */
+  const archiveer = async (v: Verklaring, terug = false) => {
+    if (rijBezig[v.id]) return;
+    if (!terug) {
+      const door = await vraag({
+        titel: "Naar het archief?",
+        tekst: `Is de betaling van ${fmt(v.bedrag)} aan ${v.verkoper_naam || "de verkoper"} overgemaakt? De verklaring ${v.nummer} verdwijnt dan uit de actuele lijst, maar blijft in het archief altijd terug te vinden en te printen.`,
+        bevestig: "Ja, betaald — archiveer",
+      });
+      if (!door) return;
+    }
+    setRijBezig((p) => ({ ...p, [v.id]: "archief" }));
+    try {
+      const res = await fetch(`/api/admin/inkoopverklaringen/${v.id}/archief`, { method: terug ? "DELETE" : "POST" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Archiveren mislukt");
+      }
+      setOpenRij(null);
+      await laad();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRijBezig((p) => { const n = { ...p }; delete n[v.id]; return n; });
+    }
+  };
 
   const nieuw = () => {
     setGekozenId(null);
@@ -551,20 +586,43 @@ export default function InkoopverklaringContent() {
         <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1240, margin: "0 auto" }}>
           {fout && <div className="mb-4"><Foutmelding>{fout}</Foutmelding></div>}
 
-          {/* Zoekbalk */}
+          {/* Tabs Actueel / Archief + zoekbalk */}
           {(lijst?.length ?? 0) > 0 && (
-            <div className="relative mb-4" style={{ maxWidth: 360 }}>
-              <Search
-                size={13}
-                color={T.ink(0.3)}
-                style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
-              />
-              <input
-                value={zoek}
-                onChange={(e) => setZoek(e.target.value)}
-                placeholder="Zoek op nummer, naam of kenteken…"
-                style={{ ...inputStijl, padding: "8px 10px 8px 28px", fontSize: 12.5, backgroundColor: T.paper }}
-              />
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="flex items-center gap-1.5">
+                {([
+                  { key: "actueel", label: `Actueel (${aantalActueel})` },
+                  { key: "archief", label: `Archief (${aantalArchief})` },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setTab(key); setOpenRij(null); }}
+                    className="px-3.5 py-1.5 text-xs font-semibold transition-all"
+                    style={{
+                      backgroundColor: tab === key ? T.navy : T.paper,
+                      color: tab === key ? "#ffffff" : T.ink(0.55),
+                      border: `1px solid ${tab === key ? T.navy : T.line}`,
+                      fontFamily: T.inter,
+                      borderRadius: 999,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative flex-1" style={{ maxWidth: 360, minWidth: 220 }}>
+                <Search
+                  size={13}
+                  color={T.ink(0.3)}
+                  style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+                />
+                <input
+                  value={zoek}
+                  onChange={(e) => setZoek(e.target.value)}
+                  placeholder="Zoek op nummer, naam of kenteken…"
+                  style={{ ...inputStijl, padding: "8px 10px 8px 28px", fontSize: 12.5, backgroundColor: T.paper }}
+                />
+              </div>
             </div>
           )}
 
@@ -577,10 +635,18 @@ export default function InkoopverklaringContent() {
               body="Maak de eerste aan via de knop rechtsboven. Je krijgt een nummer (INK-2026-001) en kunt het document afdrukken of als PDF opslaan om te laten ondertekenen."
             />
           ) : zichtbaar.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
-              <p className="text-sm font-semibold" style={{ color: T.navy, fontFamily: T.play }}>Niets gevonden</p>
-              <p className="text-xs mt-1" style={{ color: T.ink(0.4), fontFamily: T.inter }}>Probeer een andere zoekterm.</p>
-            </div>
+            tab === "archief" && !zoek.trim() ? (
+              <Empty
+                icon={<Archive size={30} style={{ color: T.ink(0.2) }} />}
+                title="Het archief is nog leeg"
+                body="Zodra je bij een verklaring op de archief-knop klikt (betaling overgemaakt), komt hij hier te staan. Alles blijft vindbaar en printbaar."
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+                <p className="text-sm font-semibold" style={{ color: T.navy, fontFamily: T.play }}>Niets gevonden</p>
+                <p className="text-xs mt-1" style={{ color: T.ink(0.4), fontFamily: T.inter }}>Probeer een andere zoekterm{tab === "actueel" && aantalArchief > 0 ? " — of kijk in het archief" : ""}.</p>
+              </div>
+            )
           ) : (
             <div className="flex flex-col gap-2">
               {zichtbaar.map((v) => {
@@ -608,6 +674,14 @@ export default function InkoopverklaringContent() {
                           >
                             {v.particulier ? "Particulier" : "Bedrijf"}
                           </span>
+                          {v.archief_op && (
+                            <span
+                              className="text-[10px] px-2 py-0.5 font-semibold inline-flex items-center gap-1"
+                              style={{ backgroundColor: "#dcfce7", color: "#15803d", fontFamily: T.inter }}
+                            >
+                              <Check size={10} /> Betaald · archief
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs" style={{ color: T.ink(0.45), fontFamily: T.inter }}>
                           {voertuig}
@@ -717,6 +791,31 @@ export default function InkoopverklaringContent() {
                                 <Send size={14} />
                                 {rijBezig[v.id] === "mail" ? "Versturen..." : v.gemaild_op ? "Verstuurd" : "Verstuur verklaring"}
                               </button>
+
+                              {/* Betaald? Dan het archief in — of er weer uit als het per ongeluk was. */}
+                              {v.archief_op ? (
+                                <button
+                                  onClick={() => archiveer(v, true)}
+                                  disabled={!!rijBezig[v.id]}
+                                  className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                                  style={{ backgroundColor: T.paper, color: "#334155", border: `1px solid ${T.line}`, fontFamily: T.inter, borderRadius: "var(--radius-control)" }}
+                                  title="Terug naar de actuele lijst"
+                                >
+                                  <Undo2 size={14} />
+                                  {rijBezig[v.id] === "archief" ? "Bezig..." : "Terug naar actueel"}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => archiveer(v)}
+                                  disabled={!!rijBezig[v.id]}
+                                  className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                                  style={{ backgroundColor: "#f0fdf4", color: "#15803d", border: "1px solid rgba(21,128,61,0.3)", fontFamily: T.inter, borderRadius: "var(--radius-control)" }}
+                                  title="Betaling overgemaakt? Dan mag de verklaring het archief in"
+                                >
+                                  <Archive size={14} />
+                                  {rijBezig[v.id] === "archief" ? "Bezig..." : "Betaald → archief"}
+                                </button>
+                              )}
 
                               {/* Rechts, apart: bewerken (potlood) en verwijderen (prullenbak) */}
                               <div className="flex items-center gap-1.5 ml-auto">

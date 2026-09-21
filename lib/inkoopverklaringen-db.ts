@@ -56,6 +56,8 @@ export type Inkoopverklaring = {
   aangemaakt: string;
   /** ISO-moment waarop de kopie naar de verkoper is gemaild; leeg = nog niet. */
   gemaild_op: string;
+  /** ISO-moment waarop de verklaring is gearchiveerd (betaling overgemaakt); leeg = actueel. */
+  archief_op: string;
 };
 
 let gereed = false;
@@ -103,6 +105,9 @@ async function init() {
   // Wanneer de kopie naar de verkoper is gemaild. Zelfde grendel-gedachte als bij de
   // facturen: één keer versturen, en zichtbaar wanneer dat gebeurd is.
   await sql`ALTER TABLE inkoopverklaringen ADD COLUMN IF NOT EXISTS gemaild_op TEXT NOT NULL DEFAULT ''`.catch(() => null);
+  // Archief: als de betaling aan de verkoper is overgemaakt, gaat de verklaring
+  // uit de actuele lijst het archief in. Leeg = actueel.
+  await sql`ALTER TABLE inkoopverklaringen ADD COLUMN IF NOT EXISTS archief_op TEXT NOT NULL DEFAULT ''`.catch(() => null);
   gereed = true;
 }
 
@@ -148,10 +153,11 @@ function mapRow(r: Record<string, unknown>): Inkoopverklaring {
     bijzonderheden: tekst(r.bijzonderheden),
     aangemaakt: r.aangemaakt as string,
     gemaild_op: tekst(r.gemaild_op),
+    archief_op: tekst(r.archief_op),
   };
 }
 
-export type NieuweInkoopverklaring = Partial<Omit<Inkoopverklaring, "id" | "nummer" | "aangemaakt" | "gemaild_op">>;
+export type NieuweInkoopverklaring = Partial<Omit<Inkoopverklaring, "id" | "nummer" | "aangemaakt" | "gemaild_op" | "archief_op">>;
 
 /** Alle velden die vanaf het scherm gezet mogen worden, in de volgorde van de tabel. */
 function velden(d: NieuweInkoopverklaring) {
