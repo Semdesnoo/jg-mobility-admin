@@ -167,7 +167,7 @@ function TakenBalk({ taken, netKlaar }: { taken: Record<string, Taak>; netKlaar:
         <div
           key={t.id}
           className="flex items-center gap-2.5 px-4 py-2.5"
-          style={{ backgroundColor: "#001337", color: "#ffffff", boxShadow: "0 6px 24px rgba(0,19,55,0.28)" }}
+          style={{ backgroundColor: "#001337", color: "#ffffff", boxShadow: "0 6px 24px rgba(0,19,55,0.28)", borderRadius: "var(--radius-control)" }}
         >
           <span
             className="inline-block rounded-full animate-spin flex-shrink-0"
@@ -193,6 +193,7 @@ function TakenBalk({ taken, netKlaar }: { taken: Record<string, Taak>; netKlaar:
               backgroundColor: t.fout ? "#fee2e2" : "#dcfce7",
               color: t.fout ? "#b91c1c" : "#15803d",
               boxShadow: "0 6px 24px rgba(0,19,55,0.18)",
+              borderRadius: "var(--radius-control)",
             }}
           >
             <span style={{ fontFamily: "var(--font-inter)", fontSize: 12.5, fontWeight: 600 }}>

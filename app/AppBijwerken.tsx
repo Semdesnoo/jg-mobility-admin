@@ -95,6 +95,7 @@ export default function AppBijwerken() {
         color: "#ffffff",
         boxShadow: "0 6px 24px rgba(0,19,55,0.28)",
         maxWidth: "calc(100vw - 32px)",
+        borderRadius: "var(--radius-control, 10px)",
       }}
     >
       <span style={{ fontFamily: "var(--font-inter)", fontSize: 12.5, whiteSpace: "nowrap" }}>
@@ -117,6 +118,7 @@ export default function AppBijwerken() {
           backgroundColor: "#ffffff",
           color: "#001337",
           whiteSpace: "nowrap",
+          borderRadius: "var(--radius-control, 10px)",
         }}
       >
         Vernieuwen
