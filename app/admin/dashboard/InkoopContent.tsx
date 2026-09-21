@@ -104,7 +104,7 @@ export default function InkoopContent({
       {/* ── Tabbalk ── */}
       <nav
         className="sticky z-30 flex items-center px-2 md:px-4 xl:px-6 overflow-x-auto"
-        style={{ top: 56, height: 46, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
+        style={{ top: 56, height: 44, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
       >
         {TABS.map(({ id, label, Icon }) => {
           const actief = tab === id;
@@ -113,19 +113,26 @@ export default function InkoopContent({
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className="flex items-center gap-2 px-3 md:px-4 transition-all flex-shrink-0"
+              className="relative flex items-center gap-1.5 px-3 md:px-4 transition-all flex-shrink-0"
               style={{
-                height: 45,
+                height: 43,
                 fontFamily: T.inter,
                 fontSize: 12.5,
-                fontWeight: 600,
+                fontWeight: actief ? 700 : 500,
                 whiteSpace: "nowrap",
-                color: actief ? T.navy : T.ink(0.38),
-                borderBottom: `2px solid ${actief ? T.navy : "transparent"}`,
+                color: actief ? T.navy : T.ink(0.45),
+                background: "none",
+                border: "none",
               }}
             >
-              <Icon size={13} />
+              <Icon size={13} style={{ opacity: actief ? 1 : 0.55 }} />
               {label}
+              {actief && (
+                <span
+                  className="absolute bottom-0 left-0 right-0"
+                  style={{ height: 2, backgroundColor: T.navy, borderRadius: "2px 2px 0 0" }}
+                />
+              )}
             </button>
           );
         })}
