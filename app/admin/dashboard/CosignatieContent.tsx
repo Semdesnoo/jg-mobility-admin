@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Plus, Handshake, ChevronDown, ChevronUp, Trash2, RefreshCw, Send,
-  ExternalLink, FileSignature, Check, X, Mail, Phone, CircleCheck, Clock,
+  ExternalLink, FileSignature, Check, X, Mail, Phone, CircleCheck, Clock, Pencil,
 } from "lucide-react";
 import { useDialoog } from "./Dialoog";
 import { toonBedrag, bedragUit, AUTO_ONDERGRENS } from "@/lib/bedrag";
@@ -309,16 +309,22 @@ export default function CosignatieContent() {
 
   const mailContract = async (c: Cosignatie) => {
     if (!c.email) { await melden({ titel: "Geen e-mailadres", tekst: "Vul eerst het e-mailadres van de klant in." }); return; }
+    const alGemaild = !!c.contract_gemaild_op;
     const mist = ontbreekt(c);
     const bevestig = await vraag({
-      titel: "Contract mailen naar de klant?",
-      tekst: `${mist.length ? `Let op: nog niet ingevuld — ${mist.join(", ")}. Die blijven leeg op het contract.\n\n` : ""}Het consignatiecontract wordt als PDF naar ${c.email} gestuurd. De aanvraag gaat daarna naar "In verkoop" en de auto krijgt om de week automatisch een update-mail.`,
-      bevestig: "Ja, verstuur het contract",
-      annuleer: mist.length ? "Eerst invullen" : "Annuleer",
+      titel: alGemaild ? "Gewijzigd contract opnieuw mailen?" : "Contract mailen naar de klant?",
+      tekst: alGemaild
+        ? `Het contract is al op ${new Date(c.contract_gemaild_op!).toLocaleDateString("nl-NL")} naar ${c.email} gestuurd. De klant krijgt nu de nieuwste versie (met je laatste wijzigingen) opnieuw als PDF toegestuurd.`
+        : `${mist.length ? `Let op: nog niet ingevuld — ${mist.join(", ")}. Die blijven leeg op het contract.\n\n` : ""}Het consignatiecontract wordt als PDF naar ${c.email} gestuurd. De aanvraag gaat daarna naar "In verkoop" en de auto krijgt om de week automatisch een update-mail.`,
+      bevestig: alGemaild ? "Ja, verstuur de nieuwe versie" : "Ja, verstuur het contract",
+      annuleer: !alGemaild && mist.length ? "Eerst invullen" : "Annuleer",
     });
     if (!bevestig) return;
     setContractLaden((p) => ({ ...p, [c.id]: true }));
     try {
+      // Bij opnieuw versturen eerst de verzendregistratie vrijgeven, anders
+      // weigert de dubbel-verstuur-grendel de tweede mail.
+      if (alGemaild) await fetch(`/api/admin/cosignaties/${c.id}/mail-contract`, { method: "DELETE" }).catch(() => null);
       // De bijlage is de KOPIE met watermerk: het origineel blijft bij JG.
       const r = await bouwContract(c, { alleen: "kopie" });
       if (!r) return;
@@ -329,7 +335,7 @@ export default function CosignatieContent() {
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || "Versturen mislukt");
       await laad();
-      setFilterStatus("lopend");
+      if (!alGemaild) setFilterStatus("lopend");
     } catch (e) {
       await melden({ titel: "Contract niet verstuurd", tekst: e instanceof Error ? e.message : "Onbekende fout." });
     } finally {
@@ -702,7 +708,7 @@ function Kaart({
 
               {/* STAP 3 — Lopend: in verkoop, updates */}
               {a.status === "lopend" && (
-                <VerkoopStap a={a} nu={nu} onPatch={onPatch} onUpdate={() => onUpdate(a.id)} updateLaden={updateLaden} updateOk={updateOk} onContractOpnieuw={() => onDrukContract(a)} />
+                <VerkoopStap a={a} nu={nu} onPatch={onPatch} onUpdate={() => onUpdate(a.id)} updateLaden={updateLaden} updateOk={updateOk} onContractOpnieuw={() => onDrukContract(a)} onMail={() => onMailContract(a)} contractLaden={contractLaden} mist={mist} />
               )}
 
               {/* Afgewezen */}
@@ -808,7 +814,7 @@ function ContractStap({
 
 // ── Stap 3: in verkoop, automatische + handmatige updates ──
 function VerkoopStap({
-  a, nu, onPatch, onUpdate, updateLaden, updateOk, onContractOpnieuw,
+  a, nu, onPatch, onUpdate, updateLaden, updateOk, onContractOpnieuw, onMail, contractLaden, mist,
 }: {
   a: Cosignatie;
   nu: number;
@@ -817,7 +823,12 @@ function VerkoopStap({
   updateLaden: boolean;
   updateOk: boolean;
   onContractOpnieuw: () => void;
+  onMail: () => void;
+  contractLaden: boolean;
+  mist: string[];
 }) {
+  /** Contract klopt niet volgens de klant? Dan hier aanpassen en opnieuw mailen. */
+  const [wijzigen, setWijzigen] = useState(false);
   const autoUpdates = a.auto_updates !== false;
   const gemaild = a.contract_gemaild_op ? new Date(a.contract_gemaild_op) : null;
   const laatste = a.laatste_update_op ? new Date(a.laatste_update_op) : null;
@@ -862,6 +873,57 @@ function VerkoopStap({
         <button type="button" onClick={onContractOpnieuw} className="inline-flex items-center justify-center gap-2 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
           <FileSignature size={13} /> Contract opnieuw bekijken
         </button>
+        <button type="button" onClick={() => setWijzigen((w) => !w)} className="inline-flex items-center justify-center gap-2 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5" style={{ border: "1px solid rgba(0,19,55,0.15)", color: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+          <Pencil size={13} /> {wijzigen ? "Wijzigen sluiten" : "Contract wijzigen"}
+        </button>
+
+        {/* Klopt er iets niet volgens de klant? Pas de afspraken hier aan en
+            stuur de nieuwe versie — de klant krijgt dan een verse PDF. */}
+        {wijzigen && (
+          <div className="mt-1 p-3" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.1)", borderRadius: "var(--radius-control)" }}>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              {([
+                { label: "Adres eigenaar", field: "klant_adres", ph: "Straat 1" },
+                { label: "Postcode", field: "klant_postcode", ph: "1234 AB" },
+                { label: "Plaats", field: "klant_stad", ph: "Barendrecht" },
+                { label: "Kenteken", field: "kenteken", ph: "AB-123-C" },
+                { label: "Chassisnr", field: "vin", ph: "WVW…" },
+                { label: "Vraagprijs", field: "vraagprijs", ph: "16000", suffix: "€" },
+                { label: "Vergoeding %", field: "fee_percentage", ph: "10", suffix: "%" },
+                { label: "Of vast bedrag", field: "fee_vast", ph: "0", suffix: "€" },
+                { label: "Niet verkopen onder", field: "bodemprijs", ph: "17000", suffix: "€" },
+                { label: "Looptijd (mnd)", field: "looptijd_maanden", ph: "6" },
+                { label: "Terugname kosten", field: "terugname_kosten", ph: "50", suffix: "€" },
+              ] as { label: string; field: keyof Cosignatie; ph?: string; suffix?: string }[]).map(({ label, field, ph, suffix }) => (
+                <div key={String(field)}>
+                  <label className="block text-[9px] font-semibold uppercase tracking-wider mb-1" style={S.label}>{label}{suffix ? ` (${suffix})` : ""}</label>
+                  <input
+                    type="text" placeholder={ph}
+                    defaultValue={(a as unknown as Record<string, string | number>)[field as string] != null ? String((a as unknown as Record<string, string | number>)[field as string]) : ""}
+                    onBlur={(e) => { const huidig = (a as unknown as Record<string, string | number>)[field as string]; if (e.target.value !== (huidig != null ? String(huidig) : "")) onPatch(a.id, { [field as string]: e.target.value }); }}
+                    className="w-full px-2 py-1.5 text-xs outline-none" style={S.veld}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mb-2">
+              <label className="block text-[9px] font-semibold uppercase tracking-wider mb-1" style={S.label}>Bijzondere afspraken</label>
+              <textarea defaultValue={a.bijzondere_afspraken ?? ""} rows={2} onBlur={(e) => { if (e.target.value !== (a.bijzondere_afspraken ?? "")) onPatch(a.id, { bijzondere_afspraken: e.target.value }); }} placeholder="bijv. winterbanden gaan mee" className="w-full px-2 py-1.5 text-xs outline-none resize-none" style={{ ...S.veld, lineHeight: 1.5 }} />
+            </div>
+            {mist.length > 0 && (
+              <p className="text-[11px] mb-2 px-2.5 py-2" style={{ backgroundColor: "#fef3c7", color: "#b45309", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}>
+                Nog niet ingevuld: {mist.join(", ")}.
+              </p>
+            )}
+            <button type="button" onClick={onMail} disabled={contractLaden} className="inline-flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 disabled:opacity-50" style={{ backgroundColor: "#1d4ed8", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(29,78,216,0.5)" }}>
+              {contractLaden ? <><RefreshCw size={14} className="animate-spin" /> Versturen...</> : <><Send size={14} /> Gewijzigd contract opnieuw mailen</>}
+            </button>
+            <p className="text-[10px] mt-1.5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)", lineHeight: 1.5 }}>
+              Wijzigingen worden direct opgeslagen. De klant krijgt de nieuwste versie als PDF, met hetzelfde contractnummer.
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 mt-1">
           <Clock size={11} style={{ color: "rgba(0,19,55,0.35)" }} />
           <span className="text-[10px]" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>

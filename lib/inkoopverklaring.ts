@@ -80,6 +80,8 @@ export type InkoopverklaringGegevens = {
   bijzonderheden?: string;
 };
 
+import { HANDTEKENING_JIMI } from "./handtekening";
+
 const BEDRIJF = {
   naam: "JG MOBILITY",
   adres: "Arnhemseweg 10a",
@@ -389,7 +391,11 @@ export function genereerInkoopverklaringHTML(
         <td style="width:8%"></td>
         <td style="vertical-align:bottom;width:46%">
           <div style="font-size:8.5pt;color:#64748b;margin-bottom:4px">Namens ${BEDRIJF.naam}</div>
-          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:42px">Jimi Gaillard</div>
+          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:2px">Jimi Gaillard</div>
+          <!-- De handtekening staat er standaard al op: JG tekent altijd. -->
+          <div style="height:40px;position:relative">
+            <img src="${HANDTEKENING_JIMI}" alt="" style="position:absolute;left:0;bottom:-6px;height:44px" />
+          </div>
           <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
         </td>
       </tr>

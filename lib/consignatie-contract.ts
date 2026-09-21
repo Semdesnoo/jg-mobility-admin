@@ -56,6 +56,8 @@ export type ContractGegevens = {
   bijzondere_afspraken?: string;
 };
 
+import { HANDTEKENING_JIMI } from "./handtekening";
+
 const BEDRIJF = {
   naam: "JG MOBILITY",
   adres: "Arnhemseweg 10a",
@@ -399,7 +401,11 @@ export function genereerContractHTML(
         <td style="width:8%"></td>
         <td style="vertical-align:top;width:46%">
           <div style="font-size:9pt;color:#64748b;margin-bottom:8px">Namens JG Mobility</div>
-          <div style="font-size:12.5pt;font-weight:700;color:#001337;margin-bottom:88px">Jimi Gaillard</div>
+          <div style="font-size:12.5pt;font-weight:700;color:#001337;margin-bottom:6px">Jimi Gaillard</div>
+          <!-- De handtekening staat er standaard al op: JG tekent altijd. -->
+          <div style="height:74px;position:relative">
+            <img src="${HANDTEKENING_JIMI}" alt="" style="position:absolute;left:0;bottom:-4px;height:66px" />
+          </div>
           <div style="border-top:1px solid #94a3b8;padding-top:8px;font-size:8pt;color:#94a3b8;letter-spacing:0.5px">Handtekening &nbsp;·&nbsp; datum</div>
         </td>
       </tr>
