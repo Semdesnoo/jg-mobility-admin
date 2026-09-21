@@ -131,6 +131,7 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
     icon: Car,
     items: [
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
+      { id: "calculator", label: "Winst per auto",   icon: Calculator },
       { id: "aanvragen",  label: "Aanvragen",        icon: Inbox },
       { id: "email",      label: "E-mail",           icon: Mail },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
@@ -157,7 +158,6 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "contracten", label: "Consignatiecontract", icon: FileSignature },
       { id: "inkoopverklaring", label: "Inkoopverklaring", icon: Receipt },
       { id: "klanten",    label: "Klanten",          icon: Users },
-      { id: "calculator", label: "Marge Calculator", icon: Calculator },
     ],
   },
 ];
@@ -666,7 +666,7 @@ export default function DashboardHub() {
         {tab === "cosignatie" && <CosignatieContent />}
         {tab === "verkopers" && <VerkopersContent />}
         {tab === "facturen" && <FacturenContent />}
-        {tab === "calculator" && <CalculatorContent focus={navFocus} onFocusGebruikt={() => setNavFocus(null)} />}
+        {tab === "calculator" && <CalculatorContent autos={autos} focus={navFocus} onFocusGebruikt={() => setNavFocus(null)} />}
         {tab === "statistieken" && <StatistiekenContent />}
         {tab === "merkanalyse" && <MerkAnalyseContent />}
         {tab === "boekhouding" && <BoekhoudingContent onNavigeer={gaNaarTab} />}
@@ -1319,7 +1319,7 @@ function SnelleActies({ onTab }: { onTab: (t: Tab) => void }) {
     { label: "Nieuwe taxatie", icon: TrendingDown, actie: () => onTab("inkoop") },
     { label: "Nieuwe klant", icon: Users, actie: () => onTab("klanten") },
     { label: "Nieuwe notitie", icon: StickyNote, actie: () => onTab("afspraken") },
-    { label: "Marge berekenen", icon: Calculator, actie: () => onTab("calculator") },
+    { label: "Winst per auto", icon: Calculator, actie: () => onTab("calculator") },
   ];
 
   const stijl = {
@@ -4032,7 +4032,8 @@ function useCalculatorLogic(inkoopprijs: string, btwType: "marge" | "21", verkoo
 }
 
 // ── Calculator per auto (dossier beheer) ────────────────────────
-function CalculatorContent({ focus, onFocusGebruikt }: {
+function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
+  autos?: Auto[];
   focus?: { dossierId?: number; autoId?: number } | null;
   onFocusGebruikt?: () => void;
 } = {}) {
@@ -4182,6 +4183,19 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
   };
 
   const dossierTerm = dossierZoek.trim().toLowerCase();
+
+  // Foto per dossier vinden: eerst op auto_id, anders op naam-match met de voorraad.
+  // Zo zie je in de lijst meteen om welke auto het gaat, ook bij oudere dossiers zonder id.
+  const fotoVoorDossier = (d: Dossier): string | undefined => {
+    let auto = d.auto_id != null ? autos.find((a) => a.id === d.auto_id) : undefined;
+    if (!auto && d.auto_naam) {
+      const naam = d.auto_naam.toLowerCase();
+      // Naam-match: het dossier bevat zowel merk als model van de voorraadauto.
+      auto = autos.find((a) => naam.includes(a.merk.toLowerCase()) && naam.includes(a.model.toLowerCase()));
+    }
+    return auto?.fotos?.[0];
+  };
+
   const gefilterdeDossiers = dossiers.filter((d) => {
     if (dossierTerm && !d.auto_naam.toLowerCase().includes(dossierTerm)) return false;
     if (dossierWeergave === "lopend" && d.gearchiveerd) return false;
@@ -4220,7 +4234,7 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
     return (
       <div className="flex flex-col h-full">
         <PageHeader
-          title="Marge Calculator"
+          title="Winst per auto"
           subtitle="Per auto bijhouden"
           action={
             <button
@@ -4286,7 +4300,7 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Marge Calculator"
+        title="Winst per auto"
         subtitle={actief ? (autoNaam || actief.auto_naam || "Dossier") : "Per auto bijhouden"}
         action={
           <div className="flex items-center gap-3">
@@ -4437,36 +4451,51 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
               gefilterdeDossiers.map((d) => {
                 const w = calcWinstSnel(d);
                 const isActief = actief?.id === d.id;
+                const foto = fotoVoorDossier(d);
                 return (
                   <div
                     key={d.id}
-                    className="group relative cursor-pointer"
+                    className="group relative cursor-pointer transition-all"
                     style={{
                       borderLeft: `3px solid ${isActief ? "#001337" : "transparent"}`,
                       borderBottom: "1px solid rgba(0,19,55,0.05)",
-                      backgroundColor: isActief ? "#ffffff" : "transparent",
+                      backgroundColor: isActief ? "rgba(0,19,55,0.04)" : "transparent",
                     }}
                     onClick={() => openDossier(d)}
+                    onMouseEnter={(e) => { if (!isActief) e.currentTarget.style.backgroundColor = "rgba(0,19,55,0.02)"; }}
+                    onMouseLeave={(e) => { if (!isActief) e.currentTarget.style.backgroundColor = "transparent"; }}
                   >
-                    <div className="px-4 py-3 pr-8">
-                      <p className="text-sm font-semibold truncate" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
-                        {d.auto_naam || "Naamloos"}
-                      </p>
-                      <p className="text-[10px] mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-                        {d.inkoop > 0 ? ("Inkoop: €" + d.inkoop.toLocaleString("nl-NL")) : "Inkoop: —"}
-                      </p>
+                    <div className="flex items-center gap-3 px-3.5 py-2.5 pr-9">
+                      {/* Thumbnail — zo zie je meteen om welke auto het gaat */}
+                      <div className="relative flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ width: 52, height: 39, backgroundColor: "#001337", borderRadius: 7 }}>
+                        {foto ? (
+                          <Image src={foto} alt="" fill sizes="52px" className="object-cover" />
+                        ) : (
+                          <Car size={15} style={{ color: "rgba(255,255,255,0.25)" }} />
+                        )}
+                      </div>
+                      {/* Naam + inkoop + winst */}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-bold truncate leading-tight" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                          {d.auto_naam || "Naamloos"}
+                        </p>
+                        <p className="text-[10px] mt-0.5 truncate" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                          {d.inkoop > 0 ? ("Inkoop €" + d.inkoop.toLocaleString("nl-NL")) : "Inkoop —"}
+                        </p>
+                      </div>
+                      {/* Winst-badge rechts */}
                       {w !== null ? (
-                        <div className="inline-flex items-center mt-1.5 px-2 py-0.5"
+                        <div className="flex-shrink-0 inline-flex items-center px-2 py-1"
                           style={{
                             backgroundColor: w > 0 ? "rgba(21,128,61,0.1)" : w < 0 ? "rgba(185,28,28,0.08)" : "rgba(0,19,55,0.05)",
-                            borderRadius: "3px",
+                            borderRadius: 999,
                           }}>
-                          <span className="text-[10px] font-bold" style={{ color: w > 0 ? "#15803d" : w < 0 ? "#b91c1c" : "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                          <span className="text-[11px] font-bold" style={{ color: w > 0 ? "#15803d" : w < 0 ? "#b91c1c" : "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
                             {w > 0 ? "+" : w < 0 ? "−" : ""}{"€" + Math.abs(w).toLocaleString("nl-NL", { maximumFractionDigits: 0 })}
                           </span>
                         </div>
                       ) : (
-                        <p className="text-[10px] mt-1" style={{ color: "rgba(0,19,55,0.28)", fontFamily: "var(--font-inter)" }}>Geen verkoop</p>
+                        <span className="flex-shrink-0 text-[10px]" style={{ color: "rgba(0,19,55,0.28)", fontFamily: "var(--font-inter)" }}>Geen verkoop</span>
                       )}
                     </div>
                     <button
@@ -4507,6 +4536,34 @@ function CalculatorContent({ focus, onFocusGebruikt }: {
               >
                 ← Terug naar overzicht
               </button>
+
+              {/* Auto-header met foto: laat zien om welke auto het dossier gaat */}
+              {(() => {
+                const detailFoto = fotoVoorDossier(actief);
+                return (
+                  <div
+                    className="flex items-center gap-4 mb-5 p-4"
+                    style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)" }}
+                  >
+                    <div className="relative flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ width: 96, height: 72, backgroundColor: "#001337", borderRadius: 9 }}>
+                      {detailFoto ? (
+                        <Image src={detailFoto} alt="" fill sizes="96px" className="object-cover" />
+                      ) : (
+                        <Car size={26} style={{ color: "rgba(255,255,255,0.25)" }} />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-lg font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-playfair)" }}>
+                        {autoNaam || actief.auto_naam || "Naamloos dossier"}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.45)", fontFamily: "var(--font-inter)" }}>
+                        {actief.inkoop > 0 ? `Inkoop €${actief.inkoop.toLocaleString("nl-NL")}` : "Nog geen inkoopprijs"}
+                        {!detailFoto ? " · geen foto gekoppeld" : ""}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
                 {/* Invoer */}
