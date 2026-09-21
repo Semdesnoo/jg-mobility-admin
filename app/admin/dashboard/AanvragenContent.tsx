@@ -932,20 +932,21 @@ function Detail({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Twee kolommen in plaats van een stapel. Als alles onder elkaar staat is dit
-          paneel drie schermen hoog en scrol je langs contactgegevens heen op weg naar de
-          deal -- terwijl er ruimte zat naast staat. Onder 1024px valt het vanzelf terug
-          op een stapel, want dan is naast elkaar onleesbaar smal. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
-      <div className="flex flex-col gap-3 h-full">
+      {/* Vaste, gelijke hoogte voor alle kolommen op een breed scherm (2xl, waar ze
+          naast elkaar staan) — net als de lijst ernaast. De inhoud scrolt binnen elke
+          kolom, zodat het format en de uitlijning strak blijven, of de teksten nu kort
+          of lang zijn. Op smallere schermen stapelen de kolommen met natuurlijke hoogte. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 2xl:h-[calc(100vh-210px)]">
+      <div className="flex flex-col gap-3 2xl:min-h-0 2xl:h-full">
       {/* Waar het over gaat. Bovenaan, want dit is waaraan je de aanvraag herkent —
           niet aan de naam. */}
       <Panel
         title="De advertentie"
-        className="flex-1"
+        className="flex-1 2xl:min-h-0"
+        scroll
         actions={<span style={{ ...micro(k.kleur), fontSize: 9 }}>{k.label}</span>}
       >
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col">
         {a.advertentie_url && (
           <a
             href={a.advertentie_url} target="_blank" rel="noopener noreferrer"
@@ -1045,9 +1046,9 @@ function Detail({
       {/* Eigen kolom: op een breed scherm staan advertentie, deal en contact naast
           elkaar. Onder 1536px schuift deze onder de eerste, onder 1024px wordt het
           een stapel. */}
-      <div className="flex flex-col gap-3 h-full">
+      <div className="flex flex-col gap-3 2xl:min-h-0 2xl:h-full">
       {/* De handel: waar het over gaat bij ons, wat hij bood, wat hij inruilt. */}
-      <Panel title="De deal" className="flex-1">
+      <Panel title="De deal" className="flex-1 2xl:min-h-0" scroll>
         <div className="grid grid-cols-1 gap-2">
           <Field label="Onze auto waar hij op reageert">
             {bewerken ? (
@@ -1137,8 +1138,10 @@ function Detail({
       </Panel>
       </div>
 
-      {/* Derde kolom: wie het is, wie er nog meer wacht, en wat je nu doet. */}
-      <div className="flex flex-col gap-3 h-full">
+      {/* Derde kolom: wie het is, wie er nog meer wacht, en wat je nu doet.
+          Meerdere panels onder elkaar; de hele kolom scrolt intern zodat de hoogte
+          gelijk blijft aan de andere kolommen. */}
+      <div className="flex flex-col gap-3 2xl:min-h-0 2xl:h-full 2xl:overflow-y-auto jg-scroll pr-0.5">
       {/* Wie het is. */}
       <Panel title="Contact">
         <div className="flex flex-wrap gap-3 mb-2.5">
@@ -1212,7 +1215,7 @@ function Detail({
       )}
 
       {/* Doorpakken: taxeren of een antwoord laten schrijven. */}
-      <Panel title="Wat nu" className="flex-1">
+      <Panel title="Wat nu" className="flex-shrink-0">
         <div className="flex flex-col gap-2">
           {kenteken && onNaarTaxatie && (
             <Btn variant="ghost" size="sm" full onClick={() => onNaarTaxatie(kenteken)}>

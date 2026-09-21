@@ -710,33 +710,31 @@ export default function TaxatieTab({
                   </span>
                 ))}
               </div>
-            </div>
 
-            {/* Kerncijfers */}
-            {/* Kolomvullend: elke tegel groeit mee, anders schijnt de scheidingskleur
-                van de container boven en onder de tegels door. */}
-            <div
-              className="grid grid-cols-3 xl:flex xl:flex-col gap-px xl:w-52 flex-shrink-0"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.1)" }}
-            >
-              {[
-                { l: "Verwachte verkoop", v: b ? fmt(b.verwachte_verkoop) : "—" },
-                {
-                  l: "Marge na btw",
-                  v: b?.netto_marge != null ? `${b.netto_marge > 0 ? "+" : ""}${fmt(b.netto_marge)}` : "—",
-                  kleur: b?.netto_marge != null ? (b.netto_marge > 0 ? "#4ade80" : "#f87171") : undefined,
-                },
-                {
-                  l: "Gebaseerd op",
-                  v: b ? (b.live ? `${m?.aantal_gevonden ?? 0} advertenties` : "modelkennis") : "—",
-                  kleur: b ? (b.live ? undefined : "#fbbf24") : undefined,
-                },
-              ].map((k) => (
-                <div key={k.l} className="px-4 py-3 flex-1 flex flex-col justify-center" style={{ backgroundColor: T.navy }}>
-                  <p style={{ ...micro("rgba(255,255,255,0.4)"), fontSize: 8.5 }}>{k.l}</p>
-                  <p className="mt-1" style={num(16, k.kleur ?? "#ffffff")}>{k.v}</p>
-                </div>
-              ))}
+              {/* Kerncijfers — compact als rij in het linkerblok zodat de balk minder hoogte inneemt */}
+              <div
+                className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4"
+                style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
+              >
+                {[
+                  { l: "Verwachte verkoop", v: b ? fmt(b.verwachte_verkoop) : "—" },
+                  {
+                    l: "Marge na btw",
+                    v: b?.netto_marge != null ? `${b.netto_marge > 0 ? "+" : ""}${fmt(b.netto_marge)}` : "—",
+                    kleur: b?.netto_marge != null ? (b.netto_marge > 0 ? "#4ade80" : "#f87171") : undefined,
+                  },
+                  {
+                    l: "Gebaseerd op",
+                    v: b ? (b.live ? `${m?.aantal_gevonden ?? 0} advertenties` : "modelkennis") : "—",
+                    kleur: b ? (b.live ? undefined : "#fbbf24") : undefined,
+                  },
+                ].map((k) => (
+                  <div key={k.l} className="flex flex-col">
+                    <p style={{ ...micro("rgba(255,255,255,0.4)"), fontSize: 8.5 }}>{k.l}</p>
+                    <p className="mt-0.5" style={num(14, k.kleur ?? "#ffffff")}>{k.v}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Score en acties */}

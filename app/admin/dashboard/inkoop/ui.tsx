@@ -101,6 +101,7 @@ export function Panel({
   children,
   tone = "licht",
   flush = false,
+  scroll = false,
   className = "",
   style,
 }: {
@@ -112,11 +113,16 @@ export function Panel({
   tone?: "licht" | "donker";
   /** Geen padding op de body — voor tabellen en lijsten. */
   flush?: boolean;
+  /** Body scrolt intern i.p.v. het paneel te laten groeien. Het paneel moet dan
+   *  wel een vaste hoogte krijgen (bijv. via h-full in een rij met vaste hoogte). */
+  scroll?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
   const donker = tone === "donker";
   const rand = donker ? "rgba(255,255,255,0.10)" : T.line;
+  const bodyBasis = flush ? "flex-1 min-w-0" : "flex-1 min-w-0 p-4 md:p-5";
+  const bodyKlasse = scroll ? `${bodyBasis} min-h-0 overflow-y-auto jg-scroll` : bodyBasis;
   return (
     <section
       className={`flex flex-col min-w-0 ${className}`}
@@ -124,7 +130,7 @@ export function Panel({
     >
       {(title || actions) && (
         <header
-          className="flex items-center gap-2.5 px-4 md:px-5"
+          className="flex items-center gap-2.5 px-4 md:px-5 flex-shrink-0"
           style={{
             minHeight: 44,
             borderBottom: `1px solid ${rand}`,
@@ -151,7 +157,7 @@ export function Panel({
           {actions && <div className="ml-auto flex items-center gap-2 flex-shrink-0">{actions}</div>}
         </header>
       )}
-      <div className={flush ? "flex-1 min-w-0" : "flex-1 min-w-0 p-4 md:p-5"}>{children}</div>
+      <div className={bodyKlasse}>{children}</div>
     </section>
   );
 }
