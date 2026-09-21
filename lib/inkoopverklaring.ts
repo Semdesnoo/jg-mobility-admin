@@ -183,6 +183,8 @@ function verklaringen(v: InkoopverklaringGegevens): string[] {
  * nodig was: de voertuiggegevens staan nu in twee kolommen, de koopdetails staan in de
  * balk bij het bedrag, en de verklaringen zijn strakker gezet zonder dat er een woord af
  * is gegaan.
+ *
+ * BIJ AFDRUKKEN: pagina 1 = origineel, pagina 2 = kopie met KOPIE-watermerk.
  */
 export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSrc: string): string {
   const auto = [v.merk, v.model].filter(Boolean).join(" ").trim();
@@ -196,17 +198,14 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
     .map((r) => `<div>${veilig(r)}</div>`)
     .join("");
 
-  /** Eén regel in een gegevenskolom. Leeg blijft leeg: geen streepjes voor wat je niet weet. */
   const rij = (label: string, waarde: unknown) =>
     waarde
       ? `<tr>
-           <td style="padding:2px 0;font-size:8pt;color:#64748b;width:96px;vertical-align:top">${veilig(label)}</td>
-           <td style="padding:2px 0;font-size:8.5pt;color:#1e293b;font-weight:600;vertical-align:top">${veilig(waarde)}</td>
+           <td style="padding:4px 0;font-size:8.5pt;color:#64748b;width:110px;vertical-align:top;white-space:nowrap">${veilig(label as string)}</td>
+           <td style="padding:4px 0;font-size:8.5pt;color:#001337;font-weight:600;vertical-align:top">${veilig(waarde as string)}</td>
          </tr>`
       : "";
 
-  // Twee kolommen naast elkaar in plaats van één lange lijst: dat scheelt de helft van de
-  // hoogte en leest bovendien prettiger, want je oog hoeft niet zo ver naar beneden.
   const voertuigLinks = [
     rij("Merk en model", auto),
     rij("Type", v.type),
@@ -223,8 +222,6 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
     rij("APK tot", v.apk),
   ].join("");
 
-  // De koopdetails horen bij het bedrag, niet in een eigen kolom: samen vormen ze één
-  // gedachte ("wat is er betaald, hoe en wanneer").
   const koopDetails = [
     ["Datum", v.datum],
     ["Overdracht", v.datum_overdracht],
@@ -234,30 +231,19 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
   ]
     .filter(([, w]) => !!w)
     .map(
-      ([l, w]) => `<div style="margin-bottom:3px">
-        <span style="font-size:7.5pt;color:#64748b">${veilig(l)}</span>
-        <span style="font-size:8.5pt;color:#1e293b;font-weight:600;margin-left:5px">${veilig(w)}</span>
-      </div>`
+      ([l, w]) => `<tr>
+        <td style="padding:3px 0;font-size:8pt;color:#64748b;width:80px;vertical-align:top;white-space:nowrap">${veilig(l as string)}</td>
+        <td style="padding:3px 0;font-size:8.5pt;color:#001337;font-weight:600;vertical-align:top">${veilig(w as string)}</td>
+      </tr>`
     )
     .join("");
 
   const woorden = inWoorden(v.bedrag);
 
-  /**
-   * Een sectiekop.
-   *
-   * Met de stijl op het element zelf en niet via een klasse in het stijlblok. Dat blok
-   * overleeft de omzetting naar PDF niet: alles wat via een klasse werd opgemaakt kwam
-   * er groot en in gewone letters uit, terwijl de rest van het document klein en in
-   * hoofdletters stond. In een document dat als HTML wordt gebouwd en als plaatje wordt
-   * afgedrukt hoort elke regel opmaak op het element te staan waar hij bij hoort.
-   */
+  /** Sectiekop: uppercase label + volle lijn eronder, beide op dezelfde padding. */
   const kop = (tekst: string) =>
-    `<div style="font-size:7pt;letter-spacing:1.3px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1px solid #001337;padding-bottom:3px;margin-bottom:6px">${veilig(tekst)}</div>`;
+    `<div style="font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;padding-bottom:6px;border-bottom:1.5px solid #001337;margin-bottom:10px">${veilig(tekst)}</div>`;
 
-  // Alleen tonen als er iets staat dat ergens op slaat. Het soort legitimatie staat in
-  // het scherm standaard op "Rijbewijs"; zonder documentnummer is dat geen gegeven maar
-  // een standaardwaarde, en die hoort niet op een ondertekend stuk.
   const legitimatie = [
     v.verkoper_geboortedatum ? `geb. ${veilig(v.verkoper_geboortedatum)}` : "",
     v.legitimatie_nummer ? [v.legitimatie_soort, v.legitimatie_nummer].filter(Boolean).map(veilig).join(" ") : "",
@@ -267,16 +253,16 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 
   const meegeleverd =
     v.meegeleverd && v.meegeleverd.length > 0
-      ? `<div style="margin-bottom:10px;font-size:8pt;color:#334155;line-height:1.5">
-           <span style="font-size:7pt;letter-spacing:1.2px;text-transform:uppercase;color:#001337;font-weight:700;margin-right:8px">Meegeleverd</span>
-           ${v.meegeleverd.map((m) => `<span style="margin-right:12px;white-space:nowrap">✓ ${veilig(m)}</span>`).join("")}
+      ? `<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+           <span style="font-size:7pt;letter-spacing:1.2px;text-transform:uppercase;color:#001337;font-weight:700;white-space:nowrap">Meegeleverd</span>
+           ${v.meegeleverd.map((m) => `<span style="font-size:8pt;color:#334155;white-space:nowrap">✓ ${veilig(m)}</span>`).join("")}
          </div>`
       : "";
 
   const bijzonderheden = v.bijzonderheden
-    ? `<div style="margin-bottom:10px;padding:7px 10px;background:#f8fafc;border-left:2px solid #001337">
-         <span style="font-size:7pt;letter-spacing:1.2px;text-transform:uppercase;color:#001337;font-weight:700;margin-right:8px">Bijzonderheden</span>
-         <span style="font-size:8pt;color:#334155;line-height:1.5">${veilig(v.bijzonderheden)}</span>
+    ? `<div style="margin-bottom:10px;padding:8px 12px;background:#f8fafc;border-left:2.5px solid #001337">
+         <div style="font-size:7pt;letter-spacing:1.2px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:3px">Bijzonderheden</div>
+         <div style="font-size:8.5pt;color:#334155;line-height:1.55">${veilig(v.bijzonderheden)}</div>
        </div>`
     : "";
 
@@ -286,11 +272,142 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 
   const verklaringLijst = verklaringen(v)
     .map(
-      (t, i) => `<div style="margin-bottom:3px;font-size:7.8pt;color:#334155;line-height:1.42">
-        <span style="color:#94a3b8;font-weight:700;margin-right:4px">${i + 1}</span>${veilig(t)}
+      (t, i) => `<div style="display:flex;margin-bottom:4px">
+        <span style="font-size:8pt;color:#94a3b8;font-weight:700;margin-right:6px;flex-shrink:0;width:12px;text-align:right">${i + 1}</span>
+        <span style="font-size:8pt;color:#334155;line-height:1.5">${veilig(t)}</span>
       </div>`
     )
     .join("");
+
+  const PB = `<div style="page-break-before:always;break-before:page;height:0;overflow:hidden"></div>`;
+
+  const kopieWatermerk = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:120pt;font-weight:900;color:rgba(0,19,55,0.055);letter-spacing:0.5em;white-space:nowrap;pointer-events:none;z-index:0;font-family:'Helvetica Neue',Arial,sans-serif">KOPIE</div>`;
+
+  // ── Pagina-inhoud (gedeeld tussen origineel en kopie) ──────────
+  const navyHeader = `<div style="width:100%;background-color:#001337;text-align:center;padding:12px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <img src="${logoSrc}" alt="JG Mobility" style="height:50px;object-fit:contain;display:inline-block">
+  </div>`;
+
+  const documentBody = `<div style="padding:28px 48px 18px">
+
+    <!-- Koptabel: bedrijf links, titel rechts -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+      <tr>
+        <td style="vertical-align:top;width:52%">
+          <div style="font-size:10.5pt;font-weight:700;color:#001337;margin-bottom:4px">${BEDRIJF.naam}</div>
+          <div style="font-size:8.5pt;color:#64748b;line-height:1.7">
+            <div>${BEDRIJF.adres} · ${BEDRIJF.postcode}</div>
+            <div>${BEDRIJF.email} · ${BEDRIJF.telefoon}</div>
+            <div>KvK ${BEDRIJF.kvk} · BTW ${BEDRIJF.btw}</div>
+            <div>IBAN ${BEDRIJF.iban}</div>
+          </div>
+        </td>
+        <td style="vertical-align:top;text-align:right">
+          <div style="font-size:18pt;font-weight:300;letter-spacing:4px;text-transform:uppercase;color:#001337;line-height:1.1">Inkoopverklaring</div>
+          <div style="font-size:8.5pt;color:#94a3b8;margin-top:5px;letter-spacing:1px">${veilig(v.nummer)} · ${veilig(v.datum)}</div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="border-top:2px solid #001337;margin-bottom:16px"></div>
+
+    <!-- Verkoper + inleidende tekst -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+      <tr>
+        <td style="vertical-align:top;width:52%;padding-right:24px">
+          ${kop("De verkoper")}
+          <div style="font-size:10.5pt;font-weight:700;color:#001337;margin-bottom:3px">${veilig(v.verkoper_naam)}</div>
+          <div style="font-size:8.5pt;color:#64748b;line-height:1.6">${adresregels}</div>
+          ${legitimatie ? `<div style="font-size:8pt;color:#64748b;margin-top:3px">${legitimatie}</div>` : ""}
+        </td>
+        <td style="vertical-align:top">
+          <div style="font-size:8.5pt;color:#334155;line-height:1.65;padding-top:22px">
+            Ondergetekende verkoopt en levert de hieronder omschreven auto aan ${BEDRIJF.naam},
+            dat deze koopt voor het genoemde bedrag. Deze verklaring geldt als
+            koopovereenkomst én als inkoopbewijs voor de administratie.
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    ${voertuigLinks || voertuigRechts ? `
+    <!-- Voertuig in twee kolommen -->
+    <div style="margin-bottom:14px">
+      ${kop("Het voertuig")}
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="vertical-align:top;width:52%;padding-right:24px">
+            <table style="width:100%;border-collapse:collapse">${voertuigLinks}</table>
+          </td>
+          <td style="vertical-align:top">
+            <table style="width:100%;border-collapse:collapse">${voertuigRechts}</table>
+          </td>
+        </tr>
+      </table>
+    </div>` : ""}
+
+    <!-- Inkoopbedrag + koopdetails in één balk -->
+    <div style="margin-bottom:14px;background:#f8fafc;border-left:3px solid #001337">
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="vertical-align:top;padding:12px 0 12px 16px;width:50%">
+            <div style="font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:5px">Inkoopbedrag</div>
+            <div style="font-size:22pt;font-weight:700;color:#001337;line-height:1;margin-bottom:3px">${euro(v.bedrag)}</div>
+            ${woorden ? `<div style="font-size:8.5pt;color:#475569;font-style:italic;margin-bottom:5px">zegge: ${veilig(woorden)}</div>` : ""}
+            <div style="font-size:7.5pt;color:#64748b;line-height:1.5">${margeRegel}</div>
+          </td>
+          <td style="vertical-align:top;padding:12px 16px;border-left:1px solid #e2e8f0">
+            <table style="border-collapse:collapse">${koopDetails}</table>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    ${meegeleverd}
+    ${bijzonderheden}
+
+    <!-- Verklaringen -->
+    <div style="margin-bottom:18px">
+      ${kop("Verklaring van de verkoper")}
+      ${verklaringLijst}
+    </div>
+
+    <!-- Handtekeningen -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+      <tr>
+        <td style="vertical-align:bottom;width:46%;padding-right:20px">
+          <div style="font-size:8.5pt;color:#64748b;margin-bottom:6px">De verkoper</div>
+          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:60px">${veilig(v.verkoper_naam)}</div>
+          <div style="border-top:1px solid #94a3b8;padding-top:5px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
+        </td>
+        <td style="width:8%"></td>
+        <td style="vertical-align:bottom;width:46%">
+          <div style="font-size:8.5pt;color:#64748b;margin-bottom:6px">Namens ${BEDRIJF.naam}</div>
+          <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:60px">Jimi Gaillard</div>
+          <div style="border-top:1px solid #94a3b8;padding-top:5px;font-size:7.5pt;color:#94a3b8;letter-spacing:0.5px">Handtekening · datum</div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="font-size:7.5pt;color:#94a3b8;line-height:1.55">
+      Door te ondertekenen verklaart de verkoper het bovenstaande naar waarheid te hebben opgegeven en het
+      genoemde bedrag te hebben ontvangen. Beide partijen ontvangen een ondertekend exemplaar.
+    </div>
+
+  </div>`;
+
+  const pageFooter = `<div style="text-align:center;padding:8px 48px 18px">
+    <div style="font-size:7.5pt;letter-spacing:2.5px;text-transform:uppercase;color:rgba(0,19,55,0.35)">
+      ${BEDRIJF.naam} &nbsp;·&nbsp; ${BEDRIJF.website}
+    </div>
+  </div>`;
+
+  const origineel = `${navyHeader}${documentBody}${pageFooter}`;
+
+  const kopie = `${PB}<div style="position:relative">
+    ${kopieWatermerk}
+    <div style="position:relative;z-index:1">${navyHeader}${documentBody}${pageFooter}</div>
+  </div>`;
 
   return `<!DOCTYPE html>
 <html lang="nl">
@@ -305,107 +422,8 @@ export function genereerInkoopverklaringHTML(v: InkoopverklaringGegevens, logoSr
 </style>
 </head>
 <body>
-
-<div style="width:100%;background-color:#001337;text-align:center;line-height:0;padding:9px 0">
-  <img src="${logoSrc}" alt="JG Mobility" style="height:46px;object-fit:contain;display:inline-block">
-</div>
-
-<div style="padding:22px 44px 14px">
-
-  <table style="width:100%;margin-bottom:14px">
-    <tr>
-      <td style="vertical-align:top;width:52%">
-        <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:1px">${BEDRIJF.naam}</div>
-        <div style="font-size:8pt;color:#64748b;line-height:1.5">
-          <div>${BEDRIJF.adres} · ${BEDRIJF.postcode}</div>
-          <div>${BEDRIJF.email} · ${BEDRIJF.telefoon}</div>
-          <div>KvK ${BEDRIJF.kvk} · BTW ${BEDRIJF.btw}</div>
-          <div>IBAN ${BEDRIJF.iban}</div>
-        </div>
-      </td>
-      <td style="vertical-align:top;text-align:right">
-        <div style="font-size:17pt;font-weight:300;letter-spacing:3px;text-transform:uppercase;color:#001337;line-height:1.15">Inkoopverklaring</div>
-        <div style="font-size:9pt;color:#94a3b8;margin-top:2px">${veilig(v.nummer)} · ${veilig(v.datum)}</div>
-      </td>
-    </tr>
-  </table>
-
-  <div style="border-top:1.5px solid #001337;margin-bottom:12px"></div>
-
-  <table style="width:100%;margin-bottom:12px">
-    <tr>
-      <td style="vertical-align:top;width:52%;padding-right:20px">
-        ${kop("De verkoper")}
-        <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:1px">${veilig(v.verkoper_naam)}</div>
-        <div style="font-size:8.5pt;color:#64748b;line-height:1.5">${adresregels}</div>
-        ${legitimatie ? `<div style="font-size:8pt;color:#64748b;margin-top:2px">${legitimatie}</div>` : ""}
-      </td>
-      <td style="vertical-align:top">
-        <div style="font-size:8.5pt;color:#334155;line-height:1.5">
-          Ondergetekende verkoopt en levert de hieronder omschreven auto aan ${BEDRIJF.naam}, dat deze
-          koopt voor het genoemde bedrag. Deze verklaring geldt als koopovereenkomst én als inkoopbewijs
-          voor de administratie.
-        </div>
-      </td>
-    </tr>
-  </table>
-
-  ${voertuigLinks || voertuigRechts ? kop("Het voertuig") : ""}
-  ${
-    voertuigLinks || voertuigRechts
-      ? `<table style="width:100%;margin-bottom:12px">
-           <tr>
-             <td style="vertical-align:top;width:52%;padding-right:22px"><table style="width:100%">${voertuigLinks}</table></td>
-             <td style="vertical-align:top"><table style="width:100%">${voertuigRechts}</table></td>
-           </tr>
-         </table>`
-      : ""
-  }
-
-  <table style="width:100%;margin-bottom:12px;background:#f8fafc;border-left:3px solid #001337">
-    <tr>
-      <td style="vertical-align:top;padding:10px 0 10px 14px;width:52%">
-        <div style="font-size:7pt;letter-spacing:1.2px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:3px">Inkoopbedrag</div>
-        <div style="font-size:19pt;font-weight:700;color:#001337;line-height:1.05">${euro(v.bedrag)}</div>
-        ${woorden ? `<div style="margin-top:2px;font-size:8.5pt;color:#334155;font-style:italic">zegge: ${veilig(woorden)}</div>` : ""}
-        <div style="margin-top:5px;font-size:7.5pt;color:#64748b;line-height:1.45">${margeRegel}</div>
-      </td>
-      <td style="vertical-align:top;padding:10px 14px 10px 18px;border-left:1px solid #e2e8f0">${koopDetails}</td>
-    </tr>
-  </table>
-
-  ${meegeleverd}
-  ${bijzonderheden}
-
-  ${kop("Verklaring van de verkoper")}
-  ${verklaringLijst}
-
-  <table style="width:100%;margin-top:20px">
-    <tr>
-      <td style="vertical-align:top;width:50%;padding-right:26px">
-        <div style="font-size:8pt;color:#64748b;margin-bottom:74px">De verkoper · <span style="color:#1e293b;font-weight:600">${veilig(v.verkoper_naam)}</span></div>
-        <div style="border-top:1px solid #94a3b8;padding-top:3px;font-size:7.5pt;color:#94a3b8">Handtekening · datum</div>
-      </td>
-      <td style="vertical-align:top;width:50%">
-        <div style="font-size:8pt;color:#64748b;margin-bottom:74px">Namens ${BEDRIJF.naam} · <span style="color:#1e293b;font-weight:600">Jimi Gaillard</span></div>
-        <div style="border-top:1px solid #94a3b8;padding-top:3px;font-size:7.5pt;color:#94a3b8">Handtekening · datum</div>
-      </td>
-    </tr>
-  </table>
-
-  <div style="margin-top:9px;font-size:7.5pt;color:#94a3b8;line-height:1.45">
-    Door te ondertekenen verklaart de verkoper het bovenstaande naar waarheid te hebben opgegeven en het
-    genoemde bedrag te hebben ontvangen. Beide partijen ontvangen een ondertekend exemplaar.
-  </div>
-
-</div>
-
-<div style="text-align:center;padding:0 44px 14px">
-  <div style="font-size:7.5pt;letter-spacing:2px;text-transform:uppercase;color:#001337">
-    ${BEDRIJF.naam} · ${BEDRIJF.website}
-  </div>
-</div>
-
+${origineel}
+${kopie}
 </body>
 </html>`;
 }
