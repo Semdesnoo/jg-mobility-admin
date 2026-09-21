@@ -370,29 +370,71 @@ export default function CosignatieContent() {
   const telPer = (s: string) => aanvragen.filter((a) => a.status === s).length;
 
   return (
-    <div>
-      {/* Kop */}
-      <div
-        className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10"
-        style={{ backgroundColor: "rgba(255,255,255,0.85)", backdropFilter: "saturate(180%) blur(10px)", WebkitBackdropFilter: "saturate(180%) blur(10px)", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
+    <div style={{ backgroundColor: "#f4f6fa", minHeight: "100%" }}>
+      {/* Dezelfde vaste kop en statusnavigatie als bij Verkopersradar. */}
+      <header
+        className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-6 xl:px-8"
+        style={{ height: 56, backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
       >
-        <div>
-          <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Consignatie</h2>
-          <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-            {telPer("nieuw")} nieuw · {telPer("geaccepteerd")} te contracteren · {telPer("lopend")} in verkoop
-          </p>
-        </div>
+        <h2
+          className="min-w-0 truncate text-[17px] sm:text-[19px]"
+          style={{ fontFamily: "var(--font-playfair)", fontWeight: 700, color: "#001337" }}
+        >
+          Consignatie
+        </h2>
+        <span className="hidden md:block flex-shrink-0" style={{ width: 1, height: 16, backgroundColor: "rgba(0,19,55,0.08)" }} />
+        <p className="hidden md:block min-w-0 truncate text-[10px] uppercase tracking-[0.14em]" style={{ color: "rgba(0,19,55,0.35)", fontFamily: "var(--font-inter)" }}>
+          {telPer("nieuw")} nieuw · {telPer("geaccepteerd")} te contracteren · {telPer("lopend")} in verkoop
+        </p>
         <button
           type="button"
           onClick={() => setToonNieuw((v) => !v)}
-          className="flex items-center justify-center gap-2 w-full sm:w-auto flex-shrink-0 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:-translate-y-0.5"
-          style={{ backgroundColor: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
+          className="ml-auto flex items-center justify-center gap-2 flex-shrink-0 px-3 sm:px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-85"
+          style={{ backgroundColor: "#001337", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}
         >
-          <Plus size={14} /> Klant toevoegen
+          <Plus size={13} /> <span className="hidden sm:inline">Klant toevoegen</span><span className="sm:hidden">Toevoegen</span>
         </button>
-      </div>
+      </header>
 
-      <div className="p-4 md:p-8">
+      <nav
+        className="sticky z-30 flex items-center px-2 md:px-4 xl:px-6 overflow-x-auto"
+        style={{ top: 56, height: 46, backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}
+      >
+        {([
+          { id: "nieuw", label: "Nieuw", Icon: Clock },
+          { id: "geaccepteerd", label: "Geaccepteerd", Icon: FileSignature },
+          { id: "lopend", label: "In verkoop", Icon: CircleCheck },
+          { id: "afgewezen", label: "Afgewezen", Icon: X },
+          { id: "alle", label: "Alle", Icon: Handshake },
+        ] as const).map(({ id, label, Icon }) => {
+          const actief = filterStatus === id;
+          const count = id === "alle" ? aanvragen.length : telPer(id);
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFilterStatus(id)}
+              className="relative flex items-center gap-2 px-3 md:px-4 transition-all flex-shrink-0"
+              style={{
+                height: 45,
+                fontFamily: "var(--font-inter)",
+                fontSize: 12.5,
+                fontWeight: actief ? 600 : 500,
+                whiteSpace: "nowrap",
+                color: actief ? "#001337" : "rgba(0,19,55,0.38)",
+                border: "none",
+              }}
+            >
+              <Icon size={13} style={{ opacity: actief ? 1 : 0.55 }} />
+              {label}
+              <span style={{ fontSize: 9, color: actief ? "rgba(0,19,55,0.45)" : "rgba(0,19,55,0.28)" }}>{count}</span>
+              {actief && <span className="absolute bottom-0 left-0 right-0" style={{ height: 2, backgroundColor: "#001337", borderRadius: "2px 2px 0 0" }} />}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1800, margin: "0 auto" }}>
         {/* Nieuw formulier */}
         {toonNieuw && (
           <div className="mb-6" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
@@ -462,28 +504,6 @@ export default function CosignatieContent() {
             </div>
           </div>
         )}
-
-        {/* Flow-filter */}
-        <div className="flex gap-1.5 mb-4 flex-wrap">
-          {(["nieuw", "geaccepteerd", "lopend", "afgewezen", "alle"] as const).map((s) => {
-            const count = s === "alle" ? aanvragen.length : telPer(s);
-            const actief = filterStatus === s;
-            return (
-              <button
-                type="button" key={s} onClick={() => setFilterStatus(s)}
-                className="px-3.5 py-1.5 text-xs font-semibold transition-all"
-                style={{
-                  backgroundColor: actief ? "#001337" : "#ffffff",
-                  color: actief ? "#ffffff" : "rgba(0,19,55,0.5)",
-                  border: `1px solid ${actief ? "#001337" : "rgba(0,19,55,0.12)"}`,
-                  borderRadius: 999,
-                }}
-              >
-                {s === "alle" ? "Alle" : STATUS_LABELS[s].label} ({count})
-              </button>
-            );
-          })}
-        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
