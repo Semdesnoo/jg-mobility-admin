@@ -123,7 +123,6 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
       { id: "dashboard",    label: "Dashboard",       icon: LayoutDashboard },
       { id: "statistieken", label: "Statistieken",    icon: BarChart2 },
       { id: "afspraken",    label: "Notities",        icon: StickyNote },
-      { id: "merkanalyse",  label: "Standtijd & Merken", icon: Clock },
     ],
   },
   {

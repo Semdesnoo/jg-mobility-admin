@@ -73,7 +73,7 @@ function Kaart({
   );
 }
 
-export default function MerkAnalyseContent() {
+export default function MerkAnalyseContent({ zonderKop = false }: { zonderKop?: boolean } = {}) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [laden, setLaden] = useState(true);
   const [fout, setFout] = useState<string | null>(null);
@@ -106,18 +106,8 @@ export default function MerkAnalyseContent() {
   const verdeling = stats?.standtijdVerdeling ?? [];
   const maxBak = Math.max(...verdeling.map((b) => Math.max(b.verkocht, b.voorraad)), 1);
 
-  return (
-    <div>
-      <div className="px-4 md:px-8 py-4 md:py-5 sticky top-0 z-10" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
-        <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-          Standtijd &amp; Merken
-        </h2>
-        <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-          Hoe lang staat een auto in de showroom, en welke merken lopen het snelst door
-        </p>
-      </div>
-
-      <div className="p-4 md:p-8">
+  const inhoud = (
+    <>
         {laden ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,19,55,0.1)", borderTopColor: "#001337" }} />
@@ -377,7 +367,23 @@ export default function MerkAnalyseContent() {
             </p>
           </div>
         )}
+    </>
+  );
+
+  // Als derde tab in Statistieken: alleen de inhoud, zonder eigen kop en buitenwrapper.
+  if (zonderKop) return inhoud;
+
+  return (
+    <div>
+      <div className="px-4 md:px-8 py-4 md:py-5 sticky top-0 z-10" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
+        <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+          Standtijd &amp; Merken
+        </h2>
+        <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+          Hoe lang staat een auto in de showroom, en welke merken lopen het snelst door
+        </p>
       </div>
+      <div className="p-4 md:p-8">{inhoud}</div>
     </div>
   );
 }

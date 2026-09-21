@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { BarChart2, Car, TrendingUp } from "lucide-react";
+import MerkAnalyseContent from "./MerkAnalyseContent";
 
 type Stats = {
   totaalVerkocht: number;
@@ -245,7 +246,7 @@ function Cijfer({ label, waarde, sub }: { label: string; waarde: string | number
   );
 }
 
-type Blad = "omzet" | "voorraad";
+type Blad = "omzet" | "voorraad" | "standtijd";
 
 export default function StatistiekenContent() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -273,6 +274,7 @@ export default function StatistiekenContent() {
   const BLADEN: { key: Blad; label: string }[] = [
     { key: "omzet", label: "Omzet & verkoop" },
     { key: "voorraad", label: "Voorraad" },
+    { key: "standtijd", label: "Standtijd & Merken" },
   ];
 
   return (
@@ -412,6 +414,9 @@ export default function StatistiekenContent() {
                 </Kaart>
               </>
             )}
+
+            {/* ══ Standtijd & Merken ══ (voorheen een aparte pagina) */}
+            {blad === "standtijd" && <MerkAnalyseContent zonderKop />}
           </div>
         )}
       </div>
