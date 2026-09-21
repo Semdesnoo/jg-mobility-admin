@@ -1,24 +1,19 @@
 /**
  * Het consignatiecontract van JG Mobility.
  *
- * WAT DIT IS
- * De klant zet zijn auto bij JG Mobility neer, maar blijft eigenaar. JG verkoopt hem
- * namens hem en rekent pas een vergoeding als de auto daadwerkelijk verkocht is. Dat is
- * een andere afspraak dan inkoop, en juist daarom hoort er iets op papier te staan: bij
- * consignatie ligt er maandenlang een auto van iemand anders op het terrein, rijden er
- * vreemden proefritten in, en gaat er straks geld van een koper via JG naar de eigenaar.
+ * STRUCTUUR (4 pagina's)
+ *   1 — Cover: logo, bedrijf, eigenaar, voertuig, afspraken, rekenvoorbeeld
+ *   2 — Voorwaarden artikelen 1-5
+ *   3 — Voorwaarden artikelen 6-9 (+ bijzondere afspraken)
+ *   4 — Ondertekening (apart, alleen handtekeningen)
  *
- * WAAROM HET ER ZO UITZIET
- * Dezelfde opmaak als de factuur (app/admin/dashboard/DashboardHub.tsx, genereerFactuurHTML):
- * 794 pixels breed is A4 op 96 dpi, alle stijl staat inline omdat de HTML in een kaal
- * iframe wordt geschreven, en de navy balk wordt met print-color-adjust geforceerd
- * meegeprint. Zo komt het contract uit dezelfde koker als de factuur die dezelfde klant
- * later krijgt.
+ * AFDRUKKEN
+ *   Bij printen komen er automatisch 8 pagina's uit:
+ *   pagina's 1-4 = origineel, pagina's 5-8 = kopie met groot KOPIE-watermerk.
  *
  * LET OP
- * De tekst hieronder is met zorg geschreven maar niet juridisch getoetst. Laat hem
- * nakijken voordat er handtekeningen onder komen, met name de artikelen over risico,
- * verzekering en beëindiging.
+ *   De tekst is met zorg geschreven maar niet juridisch getoetst. Laat hem
+ *   nakijken voordat er handtekeningen onder komen.
  */
 
 export type ContractGegevens = {
@@ -81,12 +76,8 @@ const veilig = (s: unknown) =>
     .replace(/>/g, "&gt;");
 
 /**
- * De voorwaarden.
- *
- * Bewust genummerd en in gewone taal: dit wordt aan een keukentafel gelezen, niet door een
- * advocaat. Waar een bedrag of termijn per contract verschilt wordt het uit de gegevens
- * ingevuld, zodat er nooit een percentage in de tekst staat dat niet klopt met wat er
- * bovenaan is afgesproken.
+ * De voorwaarden — bewust in gewone taal, zodat dit aan de keukentafel gelezen
+ * kan worden. Variabele bedragen en termijnen komen uit de ContractGegevens.
  */
 function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
   const auto = `${c.merk} ${c.model}`.trim();
@@ -116,7 +107,7 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
         "De onderhandeling over de prijs, binnen de grenzen die hieronder zijn afgesproken.",
         "De volledige afhandeling: koopovereenkomst, vrijwaring, tenaamstelling en de betaling.",
         c.terugname_kosten > 0
-          ? `Voor deze werkzaamheden worden vooraf geen kosten in rekening gebracht: geen instapkosten en geen advertentiekosten. Alleen wanneer de eigenaar de auto tussentijds terugneemt geldt de regeling uit artikel 7.`
+          ? "Voor deze werkzaamheden worden vooraf geen kosten in rekening gebracht: geen instapkosten en geen advertentiekosten. Alleen wanneer de eigenaar de auto tussentijds terugneemt geldt de regeling uit artikel 7."
           : "Voor deze werkzaamheden worden vooraf geen kosten in rekening gebracht. Er zijn geen instapkosten en geen advertentiekosten.",
       ],
     },
@@ -196,6 +187,9 @@ function artikelen(c: ContractGegevens): { kop: string; leden: string[] }[] {
 
 export function genereerContractHTML(c: ContractGegevens, logoSrc: string): string {
   const auto = `${c.merk} ${c.model}`.trim();
+
+  // ── Helpers ────────────────────────────────────────────────────
+
   const adresregels = [
     c.klant_adres,
     [c.klant_postcode, c.klant_stad].filter(Boolean).join(" "),
@@ -218,15 +212,15 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
     .filter(([, w]) => !!w)
     .map(
       ([l, w]) => `<tr>
-        <td style="padding:5px 0;font-size:9pt;color:#64748b;width:150px">${veilig(l)}</td>
-        <td style="padding:5px 0;font-size:9.5pt;color:#1e293b;font-weight:600">${veilig(w)}</td>
+        <td style="padding:5px 0;font-size:9pt;color:#64748b;width:140px">${veilig(l as string)}</td>
+        <td style="padding:5px 0;font-size:9.5pt;color:#001337;font-weight:600">${veilig(w as string)}</td>
       </tr>`
     )
     .join("");
 
-  const kern = [
+  const kernRijen = [
     ["Vraagprijs", euro(c.vraagprijs)],
-    c.bodemprijs > 0 ? ["Niet verkopen onder", euro(c.bodemprijs)] : null,
+    c.bodemprijs > 0 ? ["Minimumprijs", euro(c.bodemprijs)] : null,
     [
       "Vergoeding bij verkoop",
       [
@@ -239,59 +233,226 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
     .filter(Boolean)
     .map(
       (r) => `<tr>
-        <td style="padding:7px 0;font-size:9pt;color:#64748b">${veilig((r as string[])[0])}</td>
-        <td style="padding:7px 0;font-size:11pt;color:#001337;font-weight:700;text-align:right">${veilig((r as string[])[1])}</td>
+        <td style="padding:7px 0;font-size:9pt;color:#64748b;border-bottom:1px solid rgba(0,19,55,0.05)">${veilig((r as string[])[0])}</td>
+        <td style="padding:7px 0;font-size:11pt;color:#001337;font-weight:700;text-align:right;border-bottom:1px solid rgba(0,19,55,0.05)">${veilig((r as string[])[1])}</td>
       </tr>`
     )
     .join("");
 
-  // Wat houdt de eigenaar over? Gerekend met de vraagprijs die bovenaan staat, zodat het
-  // voorbeeld nooit een ander percentage laat zien dan er is afgesproken. Dit is de vraag
-  // die anders elke keer telefonisch gesteld wordt.
   const heeftVoorbeeld = c.vraagprijs > 0 && (c.fee_percentage > 0 || c.fee_vast > 0);
   const kosten = Math.round((c.vraagprijs * c.fee_percentage) / 100) + c.fee_vast;
   const netto = c.vraagprijs - kosten;
-  const voorbeeld = heeftVoorbeeld
-    ? `<div style="margin-bottom:26px;padding:16px 18px;background:#f8fafc;border-left:3px solid #001337;page-break-inside:avoid">
-         <div style="font-size:8.5pt;letter-spacing:1px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:9px">Wat u overhoudt — rekenvoorbeeld</div>
-         <table style="width:100%;max-width:340px">
-           <tr>
-             <td style="padding:3px 0;font-size:9.5pt;color:#334155">Verkoopprijs</td>
-             <td style="padding:3px 0;font-size:9.5pt;color:#1e293b;text-align:right;font-weight:600">${euro(c.vraagprijs)}</td>
-           </tr>
-           <tr>
-             <td style="padding:3px 0;font-size:9.5pt;color:#334155">Consignatiekosten${c.fee_percentage > 0 ? ` (${c.fee_percentage}%)` : ""}</td>
-             <td style="padding:3px 0;font-size:9.5pt;color:#1e293b;text-align:right;font-weight:600">− ${euro(kosten)}</td>
-           </tr>
-           <tr>
-             <td style="padding:7px 0 0;font-size:10pt;color:#001337;font-weight:700;border-top:1px solid #cbd5e1">U ontvangt</td>
-             <td style="padding:7px 0 0;font-size:11pt;color:#001337;text-align:right;font-weight:700;border-top:1px solid #cbd5e1">${euro(netto)}</td>
-           </tr>
-         </table>
-         <div style="margin-top:10px;font-size:8.5pt;color:#64748b;line-height:1.6">
-           Gerekend met de vraagprijs van nu. Wordt de auto voor een ander bedrag verkocht, dan
-           verandert de opbrengst mee — het percentage blijft hetzelfde. In deze kosten zit ook
-           de garantie van één jaar die de koper bij ons krijgt.
-         </div>
-       </div>`
+
+  const voorbeeldBox = heeftVoorbeeld
+    ? `<div style="margin-top:18px;padding:15px 18px;background:#f8fafc;border-left:3px solid #001337">
+        <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:10px">Wat u overhoudt — rekenvoorbeeld</div>
+        <table style="width:100%">
+          <tr>
+            <td style="padding:3px 0;font-size:9pt;color:#475569">Verkoopprijs</td>
+            <td style="padding:3px 0;font-size:9pt;color:#001337;text-align:right;font-weight:600">${euro(c.vraagprijs)}</td>
+          </tr>
+          <tr>
+            <td style="padding:3px 0;font-size:9pt;color:#475569">Consignatiekosten${c.fee_percentage > 0 ? ` (${c.fee_percentage}%)` : ""}</td>
+            <td style="padding:3px 0;font-size:9pt;color:#001337;text-align:right;font-weight:600">− ${euro(kosten)}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0 0;font-size:10pt;color:#001337;font-weight:700;border-top:1px solid #cbd5e1">U ontvangt</td>
+            <td style="padding:8px 0 0;font-size:11pt;color:#001337;text-align:right;font-weight:700;border-top:1px solid #cbd5e1">${euro(netto)}</td>
+          </tr>
+        </table>
+        <div style="margin-top:9px;font-size:8pt;color:#64748b;line-height:1.6">
+          Gerekend met de huidige vraagprijs. Wordt de auto voor een ander bedrag verkocht, dan verandert de opbrengst mee — het percentage blijft gelijk.
+        </div>
+      </div>`
     : "";
 
-  const voorwaarden = artikelen(c)
-    .map(
-      (a) => `
-    <div style="margin-bottom:22px;page-break-inside:avoid">
-      <div style="font-size:10pt;font-weight:700;color:#001337;margin-bottom:7px">${veilig(a.kop)}</div>
+  // Artikel-blok builder
+  const bouwArtikel = (a: { kop: string; leden: string[] }) =>
+    `<div style="margin-bottom:18px;page-break-inside:avoid">
+      <div style="font-size:8pt;font-weight:700;color:#001337;margin-bottom:7px;text-transform:uppercase;letter-spacing:0.8px">${veilig(a.kop)}</div>
       ${a.leden
         .map(
-          (l) => `<div style="display:flex;margin-bottom:5px">
-            <span style="color:#94a3b8;font-size:9pt;line-height:1.65;padding-right:8px">—</span>
+          (l) => `<div style="display:flex;margin-bottom:4px">
+            <span style="color:#94a3b8;font-size:9pt;line-height:1.65;padding-right:9px;flex-shrink:0">—</span>
             <span style="font-size:9pt;color:#334155;line-height:1.65">${veilig(l)}</span>
           </div>`
         )
         .join("")}
-    </div>`
-    )
-    .join("");
+    </div>`;
+
+  const bijzondereAfspraken = c.bijzondere_afspraken
+    ? `<div style="margin-top:4px;margin-bottom:18px;padding:13px 16px;background:#f8fafc;border-left:3px solid #001337;page-break-inside:avoid">
+        <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:5px">Bijzondere afspraken</div>
+        <div style="font-size:9pt;color:#334155;line-height:1.7;white-space:pre-line">${veilig(c.bijzondere_afspraken)}</div>
+       </div>`
+    : "";
+
+  // Artikelen split: 1-5 op pagina 2, 6-9 op pagina 3
+  const artikelLijst = artikelen(c);
+  const artikelen15 = artikelLijst.slice(0, 5);
+  const artikelen69 = artikelLijst.slice(5);
+
+  // Watermerk voor de kopiepagina's
+  const kopieWatermerk = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:130pt;font-weight:900;color:rgba(0,19,55,0.055);letter-spacing:0.5em;white-space:nowrap;pointer-events:none;z-index:0;font-family:'Helvetica Neue',Arial,sans-serif">KOPIE</div>`;
+
+  // Paginabreuk
+  const PB = `<div style="page-break-before:always;break-before:page;height:0;overflow:hidden"></div>`;
+
+  // ── Bouwblokken die op zowel origineel als kopie worden hergebruikt ──
+
+  const navyHeader = `<div style="width:100%;background-color:#001337;text-align:center;padding:20px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <img src="${logoSrc}" alt="JG Mobility" style="height:76px;object-fit:contain;display:inline-block">
+  </div>`;
+
+  const coverBody = `<div style="padding:42px 52px 36px">
+    <!-- Koptabel: bedrijf links, title rechts -->
+    <table style="width:100%;margin-bottom:26px;border-collapse:collapse">
+      <tr>
+        <td style="vertical-align:top;width:52%">
+          <div style="font-size:11pt;font-weight:700;color:#001337;margin-bottom:5px">${BEDRIJF.naam}</div>
+          <div style="font-size:9pt;color:#64748b;line-height:1.85">
+            <div>${BEDRIJF.adres}</div>
+            <div>${BEDRIJF.postcode}</div>
+            <div>${BEDRIJF.email}</div>
+            <div>${BEDRIJF.telefoon}</div>
+          </div>
+          <div style="margin-top:13px;font-size:8.5pt;color:#94a3b8;line-height:1.75">
+            <div>KVK&nbsp;&nbsp;${BEDRIJF.kvk}</div>
+            <div>BTW&nbsp;&nbsp;${BEDRIJF.btw}</div>
+          </div>
+        </td>
+        <td style="vertical-align:top;text-align:right">
+          <div style="font-size:21pt;font-weight:300;letter-spacing:5px;text-transform:uppercase;color:#001337;line-height:1.15">Consignatie</div>
+          <div style="font-size:21pt;font-weight:300;letter-spacing:5px;text-transform:uppercase;color:#001337;margin-bottom:10px">Overeenkomst</div>
+          <div style="font-size:9pt;color:#94a3b8;letter-spacing:1.5px">${veilig(c.contract_nr)}</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Eigenaar + datum -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:5px">
+      <tr>
+        <td style="vertical-align:top;width:52%">
+          <div style="font-size:8pt;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px">Datum</div>
+          <div style="font-size:10pt;font-weight:600;color:#001337">${veilig(c.datum)}</div>
+        </td>
+        <td style="vertical-align:top">
+          <div style="font-size:8pt;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">De eigenaar</div>
+          <div style="font-size:12pt;font-weight:700;color:#001337;margin-bottom:5px">${veilig(c.klant_naam)}</div>
+          <div style="font-size:9pt;color:#64748b;line-height:1.75">${adresregels}</div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="border-top:2px solid #001337;margin:22px 0 20px"></div>
+
+    <div style="font-size:9pt;color:#334155;line-height:1.75;margin-bottom:24px">
+      De ondergetekenden komen overeen dat JG Mobility de hieronder omschreven auto namens de eigenaar
+      te koop aanbiedt en de verkoop volledig verzorgt. De eigenaar blijft eigenaar tot het moment van
+      verkoop. De vergoeding is pas verschuldigd wanneer de auto daadwerkelijk verkocht is.
+    </div>
+
+    <!-- Voertuig + afspraken -->
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <td style="vertical-align:top;width:52%;padding-right:24px">
+          <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:7px;margin-bottom:10px">Het voertuig</div>
+          <table style="width:100%;border-collapse:collapse">${voertuigRijen}</table>
+        </td>
+        <td style="vertical-align:top">
+          <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:7px;margin-bottom:10px">De afspraken</div>
+          <table style="width:100%;border-collapse:collapse">${kernRijen}</table>
+          ${voorbeeldBox}
+        </td>
+      </tr>
+    </table>
+  </div>`;
+
+  const pageFooter = `<div style="text-align:center;padding:18px 52px 28px">
+    <div style="font-size:7.5pt;letter-spacing:2.5px;text-transform:uppercase;color:rgba(0,19,55,0.35)">
+      ${BEDRIJF.naam} &nbsp;·&nbsp; ${BEDRIJF.website}
+    </div>
+  </div>`;
+
+  const voorwaardenKop = `<div style="font-size:7.5pt;letter-spacing:2px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:2px solid #001337;padding-bottom:8px;margin-bottom:20px">Voorwaarden</div>`;
+
+  const ondertekeningBody = `<div style="padding:64px 52px 44px">
+    <div style="font-size:7.5pt;letter-spacing:2px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:2px solid #001337;padding-bottom:8px;margin-bottom:44px">Ondertekening</div>
+
+    <div style="font-size:9.5pt;color:#334155;line-height:1.78;margin-bottom:64px;max-width:560px">
+      Partijen verklaren kennis te hebben genomen van de inhoud van deze overeenkomst en gaan akkoord
+      met de hierin opgenomen bepalingen. Dit document is opgesteld in tweevoud; elk van de partijen
+      ontvangt een origineel exemplaar.
+    </div>
+
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <td style="vertical-align:top;width:46%;padding-right:20px">
+          <div style="font-size:9pt;color:#64748b;margin-bottom:8px">De eigenaar</div>
+          <div style="font-size:12.5pt;font-weight:700;color:#001337;margin-bottom:88px">${veilig(c.klant_naam)}</div>
+          <div style="border-top:1px solid #94a3b8;padding-top:8px;font-size:8pt;color:#94a3b8;letter-spacing:0.5px">Handtekening &nbsp;·&nbsp; datum</div>
+        </td>
+        <td style="width:8%"></td>
+        <td style="vertical-align:top;width:46%">
+          <div style="font-size:9pt;color:#64748b;margin-bottom:8px">Namens JG Mobility</div>
+          <div style="font-size:12.5pt;font-weight:700;color:#001337;margin-bottom:88px">Jimi Gaillard</div>
+          <div style="border-top:1px solid #94a3b8;padding-top:8px;font-size:8pt;color:#94a3b8;letter-spacing:0.5px">Handtekening &nbsp;·&nbsp; datum</div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="margin-top:56px;padding:18px 22px;background:#f8fafc;border-left:3px solid rgba(0,19,55,0.12)">
+      <div style="font-size:8.5pt;color:#64748b;line-height:1.75">
+        Beide partijen ontvangen een ondertekend exemplaar van deze overeenkomst. Vragen kunnen gesteld
+        worden via <strong style="color:#334155">${BEDRIJF.email}</strong> of
+        <strong style="color:#334155">${BEDRIJF.telefoon}</strong>.
+      </div>
+    </div>
+  </div>`;
+
+  // ── Kopie-wrapper: zelfde inhoud + watermerk ──────────────────
+  const kopiePagina = (inhoud: string) =>
+    `<div style="position:relative">
+      ${kopieWatermerk}
+      <div style="position:relative;z-index:1">${inhoud}</div>
+    </div>`;
+
+  // ── Samenstellen ──────────────────────────────────────────────
+
+  const origineel = `
+    ${navyHeader}${coverBody}${pageFooter}
+
+    ${PB}
+    <div style="padding:44px 52px 36px">
+      ${voorwaardenKop}
+      ${artikelen15.map(bouwArtikel).join("")}
+    </div>
+
+    ${PB}
+    <div style="padding:44px 52px 36px">
+      ${artikelen69.map(bouwArtikel).join("")}
+      ${bijzondereAfspraken}
+    </div>
+    ${pageFooter}
+
+    ${PB}
+    ${ondertekeningBody}
+    ${pageFooter}
+  `;
+
+  const kopie = `
+    ${PB}
+    ${kopiePagina(`${navyHeader}${coverBody}${pageFooter}`)}
+
+    ${PB}
+    ${kopiePagina(`<div style="padding:44px 52px 36px">${voorwaardenKop}${artikelen15.map(bouwArtikel).join("")}</div>`)}
+
+    ${PB}
+    ${kopiePagina(`<div style="padding:44px 52px 36px">${artikelen69.map(bouwArtikel).join("")}${bijzondereAfspraken}</div>${pageFooter}`)}
+
+    ${PB}
+    ${kopiePagina(`${ondertekeningBody}${pageFooter}`)}
+  `;
 
   return `<!DOCTYPE html>
 <html lang="nl">
@@ -306,113 +467,8 @@ export function genereerContractHTML(c: ContractGegevens, logoSrc: string): stri
 </style>
 </head>
 <body>
-
-<div style="width:100%;background-color:#001337;text-align:center;line-height:0;padding:14px 0">
-  <img src="${logoSrc}" alt="JG Mobility" style="height:80px;object-fit:contain;display:inline-block">
-</div>
-
-<div style="padding:44px 48px 40px">
-
-  <table style="width:100%;margin-bottom:30px">
-    <tr>
-      <td style="vertical-align:top;width:55%">
-        <div style="font-size:10.5pt;font-weight:700;color:#001337;margin-bottom:2px">${BEDRIJF.naam}</div>
-        <div style="font-size:9pt;color:#64748b;line-height:1.75">
-          <div>${BEDRIJF.adres}</div>
-          <div>${BEDRIJF.postcode}</div>
-          <div>${BEDRIJF.email}</div>
-          <div>${BEDRIJF.telefoon}</div>
-        </div>
-      </td>
-      <td style="vertical-align:top;text-align:right">
-        <div style="font-size:20pt;font-weight:300;letter-spacing:4px;text-transform:uppercase;color:#001337;line-height:1.2">Consignatie</div>
-        <div style="font-size:20pt;font-weight:300;letter-spacing:4px;text-transform:uppercase;color:#001337;margin-bottom:6px">overeenkomst</div>
-        <div style="font-size:10pt;color:#94a3b8">${veilig(c.contract_nr)}</div>
-      </td>
-    </tr>
-  </table>
-
-  <table style="width:100%;margin-bottom:8px">
-    <tr>
-      <td style="vertical-align:top;width:55%">
-        <table>
-          <tr><td style="padding:2px 0;font-size:9pt;color:#64748b;width:64px">KVK nr.</td><td style="padding:2px 0;font-size:9pt;color:#1e293b">${BEDRIJF.kvk}</td></tr>
-          <tr><td style="padding:2px 0;font-size:9pt;color:#64748b">BTW nr.</td><td style="padding:2px 0;font-size:9pt;color:#1e293b">${BEDRIJF.btw}</td></tr>
-          <tr><td style="padding:2px 0;font-size:9pt;color:#64748b">IBAN</td><td style="padding:2px 0;font-size:9pt;color:#1e293b">${BEDRIJF.iban}</td></tr>
-        </table>
-        <div style="margin-top:12px;font-size:8.5pt;letter-spacing:1px;text-transform:uppercase;color:#001337;font-weight:700">Datum: ${veilig(c.datum)}</div>
-      </td>
-      <td style="vertical-align:top">
-        <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#94a3b8;margin-bottom:5px">De eigenaar</div>
-        <div style="font-size:11pt;font-weight:700;text-transform:uppercase;color:#001337;margin-bottom:3px">${veilig(c.klant_naam)}</div>
-        <div style="font-size:9.5pt;color:#64748b;line-height:1.7">${adresregels}</div>
-      </td>
-    </tr>
-  </table>
-
-  <div style="border-top:1.5px solid #001337;margin-top:26px;margin-bottom:24px"></div>
-
-  <div style="font-size:9pt;color:#334155;line-height:1.7;margin-bottom:24px">
-    De ondergetekenden komen overeen dat JG Mobility de hieronder omschreven auto namens de eigenaar
-    te koop aanbiedt en de verkoop ervan volledig verzorgt. De eigenaar blijft eigenaar tot het moment
-    van verkoop. De vergoeding is pas verschuldigd wanneer de auto daadwerkelijk verkocht is.
-  </div>
-
-  <table style="width:100%;margin-bottom:26px">
-    <tr>
-      <td style="vertical-align:top;width:55%;padding-right:24px">
-        <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:6px;margin-bottom:6px">Het voertuig</div>
-        <table style="width:100%">${voertuigRijen}</table>
-      </td>
-      <td style="vertical-align:top">
-        <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:6px;margin-bottom:6px">De afspraken</div>
-        <table style="width:100%">${kern}</table>
-      </td>
-    </tr>
-  </table>
-
-  ${voorbeeld}
-
-  <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:6px;margin-bottom:16px">Voorwaarden</div>
-  ${voorwaarden}
-
-  ${
-    c.bijzondere_afspraken
-      ? `<div style="margin-top:4px;margin-bottom:22px;padding:12px 14px;background:#f8fafc;border-left:3px solid #001337;page-break-inside:avoid">
-           <div style="font-size:8.5pt;letter-spacing:1px;text-transform:uppercase;color:#001337;font-weight:700;margin-bottom:5px">Bijzondere afspraken</div>
-           <div style="font-size:9pt;color:#334155;line-height:1.7;white-space:pre-line">${veilig(c.bijzondere_afspraken)}</div>
-         </div>`
-      : ""
-  }
-
-  <div style="margin-top:30px;page-break-inside:avoid">
-    <div style="font-size:7.5pt;letter-spacing:1.5px;text-transform:uppercase;color:#001337;font-weight:700;border-bottom:1.5px solid #001337;padding-bottom:6px;margin-bottom:22px">Ondertekening</div>
-    <table style="width:100%">
-      <tr>
-        <td style="vertical-align:top;width:50%;padding-right:30px">
-          <div style="font-size:9pt;color:#64748b;margin-bottom:44px">De eigenaar<br><span style="color:#1e293b;font-weight:600">${veilig(c.klant_naam)}</span></div>
-          <div style="border-top:1px solid #94a3b8;padding-top:6px;font-size:8pt;color:#94a3b8">Handtekening · datum</div>
-        </td>
-        <td style="vertical-align:top;width:50%">
-          <div style="font-size:9pt;color:#64748b;margin-bottom:44px">Namens JG Mobility<br><span style="color:#1e293b;font-weight:600">Jimi Gaillard</span></div>
-          <div style="border-top:1px solid #94a3b8;padding-top:6px;font-size:8pt;color:#94a3b8">Handtekening · datum</div>
-        </td>
-      </tr>
-    </table>
-    <div style="margin-top:16px;font-size:8pt;color:#94a3b8;line-height:1.6">
-      Beide partijen ontvangen een ondertekend exemplaar. Vragen over deze overeenkomst kunnen
-      gesteld worden via ${BEDRIJF.email} of ${BEDRIJF.telefoon}.
-    </div>
-  </div>
-
-</div>
-
-<div style="text-align:center;padding:0 48px 34px">
-  <div style="font-size:8pt;letter-spacing:2.5px;text-transform:uppercase;color:#001337">
-    ${BEDRIJF.naam} · ${BEDRIJF.website}
-  </div>
-</div>
-
+${origineel}
+${kopie}
 </body>
 </html>`;
 }
