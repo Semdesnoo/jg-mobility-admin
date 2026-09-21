@@ -52,18 +52,14 @@ const ONZICHTBAAR = new RegExp(
 const STANDAARD_AFZENDER = "JG Mobility <info@jgmobility.nl>";
 
 /**
- * TIJDELIJK — testmodus.
+ * Testmodus — normaal LEEG (mails gaan naar de klant).
  *
- * Zolang deze waarde gevuld is gaan ALLE factuur- en bedankmails naar dit ene adres in
- * plaats van naar de klant. Zo kun je de nieuwe mails veilig uitproberen zonder dat er
- * echt iets naar een klant gaat. Het echte klantadres moet nog wél ingevuld zijn (anders
- * weet je bij een live-mail niet of het adres klopt), maar de verzending gaat naar de
- * testontvanger.
- *
- * UITZETTEN: leeg deze string (of zet FACTUUR_TEST_ONTVANGER leeg) en de mails gaan weer
- * gewoon naar de klant.
+ * Alleen als de omgevingsvariabele FACTUUR_TEST_ONTVANGER in Vercel gevuld is, gaan ALLE
+ * factuur-, bedank- en reviewmails naar dat ene adres in plaats van naar de klant, met
+ * [TEST → klantadres] in het onderwerp. Handig om een nieuwe mail veilig uit te proberen.
+ * Standaard staat hij uit: geen variabele = gewoon naar de klant.
  */
-const TEST_ONTVANGER = (process.env.FACTUUR_TEST_ONTVANGER ?? "semdesnoo@outlook.com").trim();
+const TEST_ONTVANGER = (process.env.FACTUUR_TEST_ONTVANGER ?? "").trim();
 
 /**
  * Maakt van de instelling een afzender die de mailserver accepteert.
