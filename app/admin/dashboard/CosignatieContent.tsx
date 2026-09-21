@@ -222,18 +222,34 @@ export default function CosignatieContent() {
     setAanvragen((p) => p.map((a) => (a.id === id ? { ...a, ...velden } : a)));
   };
 
-  /** Zet de status en, bij accepteren, meteen geaccepteerd_op via de server. */
+  /** Zet de status en, bij accepteren, meteen geaccepteerd_op via de server.
+   *  Optimistisch: de kaart springt meteen naar de nieuwe stap, ook als het herladen
+   *  even duurt. Mislukt de server, dan draaien we terug en tonen een melding — de
+   *  knop kan zo nooit stil blijven hangen. */
   const zetStatus = async (id: string, status: string) => {
-    const res = await fetch(`/api/admin/cosignaties/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      await melden({ titel: "Status niet gewijzigd", tekst: d.error || "Er ging iets mis bij het bijwerken. Probeer het nog een keer." });
-      return;
-    }
-    await laad();
+    const vorige = aanvragen.find((a) => a.id === id)?.status;
+    // Meteen in beeld bijwerken zodat de flow niet "vastloopt" op een trage fetch.
+    setAanvragen((p) => p.map((a) => (a.id === id ? { ...a, status } : a)));
     setFilterStatus(status);
+    try {
+      const res = await fetch(`/api/admin/cosignaties/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Server gaf ${res.status}`);
+      }
+      // Verse gegevens ophalen (o.a. geaccepteerd_op) — mislukt dit, dan blijft de
+      // optimistische status staan; dat is de bedoeling.
+      await laad().catch(() => {});
+    } catch (e) {
+      // Terugdraaien naar de oude status en het echt vertellen.
+      if (vorige) {
+        setAanvragen((p) => p.map((a) => (a.id === id ? { ...a, status: vorige } : a)));
+        setFilterStatus(vorige);
+      }
+      await melden({ titel: "Status niet gewijzigd", tekst: e instanceof Error ? e.message : "Er ging iets mis. Probeer het nog een keer." });
+    }
   };
 
   const haalMarktprijzen = async (id: string) => {

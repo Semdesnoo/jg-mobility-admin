@@ -22,8 +22,8 @@
  */
 
 // Verandert bij elke nieuwe versie zodat oude caches worden opgeruimd.
-// v3: consignatie-Akkoord fix (getypeerde NULL-parameters) — oude cache moet weg.
-const CACHE = "jgm-beheer-v3";
+// v4: consignatie-Akkoord optimistisch + robuust — forceer verse client-JS.
+const CACHE = "jgm-beheer-v4";
 
 // Bestanden onder /_next/static/ krijgen van Next een unieke naam per build. Die kunnen
 // veilig uit de cache: bij een nieuwe versie horen er nieuwe namen bij.
