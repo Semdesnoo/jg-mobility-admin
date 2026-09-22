@@ -165,3 +165,13 @@ textarea {
   background-color: rgba(255, 255, 255, 0.16);
   color: #ffffff;
 }
+
+/* ── Drawer met zijmenu-offset ──
+   Op desktop begint het zijmenu na 244px; de drawer verschuift mee zodat het
+   menu zichtbaar blijft. Op mobiel (geen zijmenu) vult hij het hele scherm. */
+@media (min-width: 768px) {
+  .drawer-offset-sidebar {
+    left: 244px !important;
+    width: calc(100% - 244px) !important;
+  }
+}

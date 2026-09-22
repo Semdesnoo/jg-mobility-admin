@@ -494,6 +494,7 @@ function ContractDrawer({
       <aside
         role="dialog"
         aria-label={`Contract ${c.contract_nr ?? "zonder nummer"}`}
+        className="drawer-offset-sidebar"
         style={{
           position: "fixed",
           top: 0,

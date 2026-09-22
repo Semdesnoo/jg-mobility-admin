@@ -770,6 +770,7 @@ function VerklaringDrawer({
       <aside
         role="dialog"
         aria-label={`Inkoopverklaring ${v.nummer}`}
+        className="drawer-offset-sidebar"
         style={{
           position: "fixed", top: 0, right: 0, left: 0, height: "100%",
           width: "100%",
