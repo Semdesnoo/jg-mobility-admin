@@ -117,15 +117,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;">
-      <div style="background:#001337;padding:26px 30px;text-align:center;">
+      <div style="background:#001337;padding:32px 30px;text-align:center;">
         ${(() => {
           const src = logoDataUrl();
+          // Alleen het logo — de merknaam zit al in de PNG.
           return src
-            ? `<img src="${src}" alt="JG Mobility" width="100" style="display:block;margin:0 auto 12px;width:100px;max-width:100px;height:auto;border:0" />`
+            ? `<img src="${src}" alt="JG Mobility" width="140" height="140" style="display:block;margin:0 auto;width:140px;max-width:140px;height:auto;border:0;outline:none;text-decoration:none" />`
             : "";
         })()}
-        <div style="color:#ffffff;font-family:Georgia,serif;font-size:23px;font-weight:bold;letter-spacing:1px;">JG Mobility</div>
-        <div style="color:rgba(255,255,255,0.55);font-size:10px;margin-top:5px;letter-spacing:2.5px;text-transform:uppercase;">Inkoopverklaring</div>
+        <div style="color:rgba(255,255,255,0.55);font-size:10px;margin-top:14px;letter-spacing:2.5px;text-transform:uppercase;">Inkoopverklaring</div>
       </div>
       <div style="padding:32px 34px;">
         <p style="font-size:15px;color:#1e293b;margin:0 0 16px;">Beste ${voornaam || "verkoper"},</p>

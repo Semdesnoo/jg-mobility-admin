@@ -77,15 +77,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-      <div style="background:#001337;padding:28px 32px;text-align:center;">
+      <div style="background:#001337;padding:32px;text-align:center;">
         ${(() => {
           const src = logoDataUrl();
+          // Alleen het logo — de merknaam zit al in de PNG.
           return src
-            ? `<img src="${src}" alt="JG Mobility" width="110" style="display:block;margin:0 auto 14px;width:110px;max-width:110px;height:auto;border:0" />`
+            ? `<img src="${src}" alt="JG Mobility" width="140" height="140" style="display:block;margin:0 auto;width:140px;max-width:140px;height:auto;border:0;outline:none;text-decoration:none" />`
             : "";
         })()}
-        <h1 style="color:#ffffff;font-family:Georgia,serif;margin:0;font-size:24px;">JG Mobility</h1>
-        <p style="color:rgba(255,255,255,0.55);font-size:12px;margin:8px 0 0;letter-spacing:1px;text-transform:uppercase;">Consignatieovereenkomst</p>
+        <p style="color:rgba(255,255,255,0.55);font-size:12px;margin:14px 0 0;letter-spacing:1px;text-transform:uppercase;">Consignatieovereenkomst</p>
       </div>
       <div style="padding:36px 32px;background:#f8f9fc;">
         <p style="font-size:15px;color:#001337;margin:0 0 20px;">Beste ${naam},</p>
