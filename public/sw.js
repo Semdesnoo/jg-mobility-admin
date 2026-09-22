@@ -22,8 +22,8 @@
  */
 
 // Verandert bij elke nieuwe versie zodat oude caches worden opgeruimd.
-// v8: boekhouding toont afgeronde kaarten en één gecontroleerd financieel overzicht.
-const CACHE = "jgm-beheer-v8";
+// v9: aparte taxatieaanvragenworkflow met calculator-koppeling en goedgekeurde e-mail.
+const CACHE = "jgm-beheer-v10";
 
 // Bestanden onder /_next/static/ krijgen van Next een unieke naam per build. Die kunnen
 // veilig uit de cache: bij een nieuwe versie horen er nieuwe namen bij.

@@ -382,7 +382,7 @@ export default function InkoopFacturenContent() {
 
   return (
     <div>
-      <div className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)" }}>
+      <div className="px-4 md:px-8 py-4 md:py-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10" style={{ backgroundColor: "#ffffff", borderBottom: "1px solid rgba(0,19,55,0.08)", borderRadius: "var(--radius-card, 14px)" }}>
         <div>
           <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Inkoopfacturen</h2>
           <p className="text-xs mt-0.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
@@ -445,7 +445,7 @@ export default function InkoopFacturenContent() {
 
         {/* ── Bovenaan: wat moet je nog betalen ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1 p-6" style={{ backgroundColor: "#001337" }}>
+          <div className="lg:col-span-1 p-6" style={{ backgroundColor: "#001337", borderRadius: "var(--radius-card, 14px)" }}>
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
               Nog te betalen
             </p>
@@ -456,7 +456,7 @@ export default function InkoopFacturenContent() {
               {data?.openAantal ?? 0} openstaande factu{(data?.openAantal ?? 0) === 1 ? "ur" : "ren"}
             </p>
           </div>
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x overflow-hidden" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderRadius: "var(--radius-card, 14px)" }}>
             {[
               { label: "Te laat", waarde: euroKort(data?.teLaatTotaal ?? 0), sub: `${data?.teLaatAantal ?? 0} over de vervaldatum`, kleur: (data?.teLaatAantal ?? 0) > 0 ? ROOD : "#001337" },
               { label: "Vervalt deze week", waarde: String(data?.binnenkortAantal ?? 0), sub: "binnen 7 dagen", kleur: "#001337" },
@@ -474,7 +474,7 @@ export default function InkoopFacturenContent() {
         {/* ── Uitslag van de e-mailscan ── */}
         {scanUitslag && (
           scanUitslag.error ? (
-            <div className="flex items-start gap-3 px-4 py-3" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
+            <div className="flex items-start gap-3 px-4 py-3" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}>
               <AlertTriangle size={15} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
               <p className="text-[12px]" style={{ color: AMBER, fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
                 {(scanUitslag.blokkades ?? [scanUitslag.error ?? ""]).map((b, i) => (
@@ -483,7 +483,7 @@ export default function InkoopFacturenContent() {
               </p>
             </div>
           ) : (
-            <div className="px-4 py-3.5" style={{ backgroundColor: "#f8fafc", border: "1px solid rgba(0,19,55,0.08)" }}>
+            <div className="px-4 py-3.5" style={{ backgroundColor: "#f8fafc", border: "1px solid rgba(0,19,55,0.08)", borderRadius: "var(--radius-control, 10px)" }}>
               <p className="text-[12px] font-bold" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
                 {scanUitslag.verwerkt === 0
                   ? "Geen nieuwe facturen gevonden"
@@ -517,7 +517,7 @@ export default function InkoopFacturenContent() {
         )}
 
         {aiMelding && (
-          <div className="flex items-start gap-3 px-4 py-3" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
+          <div className="flex items-start gap-3 px-4 py-3" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}>
             <AlertTriangle size={15} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
             <p className="text-[12px]" style={{ color: AMBER, fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>{aiMelding}</p>
           </div>
@@ -525,7 +525,7 @@ export default function InkoopFacturenContent() {
 
         {/* ── Invoerformulier ── */}
         {toonForm && (
-          <div ref={formRef} style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+          <div ref={formRef} style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
             <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
               <p className="text-[10px] font-bold uppercase tracking-wider" style={labelStijl}>Nieuwe inkoopfactuur</p>
               {form.bron === "ai" && (
@@ -563,6 +563,7 @@ export default function InkoopFacturenContent() {
                   style={{
                     border: `1.5px dashed ${sleep ? "#1d4ed8" : "rgba(0,19,55,0.18)"}`,
                     backgroundColor: sleep ? "#eef4ff" : "#fafbfc",
+                    borderRadius: "var(--radius-control, 10px)",
                   }}
                 >
                   <Upload size={20} style={{ color: sleep ? "#1d4ed8" : "rgba(0,19,55,0.3)" }} />
@@ -574,7 +575,7 @@ export default function InkoopFacturenContent() {
                   </p>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 px-4 py-3 flex-wrap" style={{ border: "1px solid rgba(0,19,55,0.12)", backgroundColor: "#f8fafc" }}>
+                <div className="flex items-center gap-3 px-4 py-3 flex-wrap" style={{ border: "1px solid rgba(0,19,55,0.12)", backgroundColor: "#f8fafc", borderRadius: "var(--radius-control, 10px)" }}>
                   <FileText size={16} style={{ color: "#1d4ed8", flexShrink: 0 }} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[12px] font-bold truncate" style={{ color: "#001337", fontFamily: "var(--font-inter)" }}>
@@ -606,7 +607,7 @@ export default function InkoopFacturenContent() {
             </div>
 
             {onzeker.length > 0 && (
-              <div className="mx-5 mt-4 flex items-start gap-2.5 px-3 py-2.5" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
+              <div className="mx-5 mt-4 flex items-start gap-2.5 px-3 py-2.5" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}>
                 <AlertTriangle size={13} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
                 <p className="text-[11px]" style={{ color: AMBER, fontFamily: "var(--font-inter)", lineHeight: 1.6 }}>
                   Niet met zekerheid van de factuur af te lezen: <strong>{onzeker.join(", ")}</strong>. Die
@@ -685,7 +686,7 @@ export default function InkoopFacturenContent() {
           if (urgent.length === 0) return null;
           const totaal = urgent.reduce((s, f) => s + f.bedrag_incl, 0);
           return (
-            <div className="flex items-start gap-3 px-4 py-3.5" style={{ backgroundColor: "#fee2e2", border: "1px solid #fca5a5" }}>
+            <div className="flex items-start gap-3 px-4 py-3.5" style={{ backgroundColor: "#fee2e2", border: "1px solid #fca5a5", borderRadius: "var(--radius-control, 10px)" }}>
               <AlertTriangle size={17} style={{ color: ROOD, flexShrink: 0, marginTop: 1 }} strokeWidth={2.5} />
               <div className="min-w-0">
                 <p className="text-[12px] font-bold" style={{ color: ROOD, fontFamily: "var(--font-inter)" }}>
@@ -708,13 +709,13 @@ export default function InkoopFacturenContent() {
         })()}
 
         {/* ── Lijst ── */}
-        <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+        <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
           {laden ? (
             <div className="flex items-center justify-center py-16">
               <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,19,55,0.1)", borderTopColor: "#001337" }} />
             </div>
           ) : !data || data.facturen.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16">
+            <div className="flex flex-col items-center justify-center py-16" style={{ borderRadius: "var(--radius-card, 14px)" }}>
               <Wallet size={28} style={{ color: "rgba(0,19,55,0.12)" }} />
               <p className="text-sm font-bold mt-3" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>Nog geen inkoopfacturen</p>
               <p className="text-[11px] mt-1 text-center max-w-sm" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)", lineHeight: 1.65 }}>
@@ -733,7 +734,7 @@ export default function InkoopFacturenContent() {
               return (
                 <div
                   className="px-5 py-2.5 flex items-center gap-3 flex-wrap sticky top-0 z-[1]"
-                  style={{ borderBottom: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8fafc" }}
+                  style={{ borderBottom: "1px solid rgba(0,19,55,0.08)", backgroundColor: "#f8fafc", borderRadius: "var(--radius-control, 10px) 10px 0 0" }}
                 >
                   <button
                     type="button"
@@ -799,7 +800,7 @@ export default function InkoopFacturenContent() {
               const restDagen = d !== null ? -d : 0; // 0 = vandaag, 3 = over 3 dagen
               const gekozen = selectie.has(f.id);
               return (
-                <div key={f.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)", opacity: f.status === "betaald" ? 0.6 : 1, backgroundColor: gekozen ? "#eef4ff" : undefined }}>
+                <div key={f.id} className="px-5 py-3 flex items-center gap-4 flex-wrap" style={{ borderBottom: "1px solid rgba(0,19,55,0.05)", borderRadius: "var(--radius-control, 10px)", margin: "2px 6px", opacity: f.status === "betaald" ? 0.6 : 1, backgroundColor: gekozen ? "#eef4ff" : undefined }}>
                   <button
                     type="button"
                     onClick={() => wisselSelectie(f.id)}
@@ -931,7 +932,7 @@ export default function InkoopFacturenContent() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold transition-all hover:opacity-80 w-fit max-w-full"
-                                style={{ border: "1px solid rgba(29,78,216,0.25)", color: "#1d4ed8", backgroundColor: "rgba(29,78,216,0.04)", fontFamily: "var(--font-inter)" }}
+                                style={{ border: "1px solid rgba(29,78,216,0.25)", color: "#1d4ed8", backgroundColor: "rgba(29,78,216,0.04)", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control, 10px)" }}
                               >
                                 <FileText size={13} style={{ flexShrink: 0 }} />
                                 <span className="truncate">{b.filename}</span>
