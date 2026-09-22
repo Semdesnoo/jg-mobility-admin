@@ -3839,7 +3839,15 @@ function FacturenContent() {
               const s = FACTUUR_STATUS[f.status] ?? FACTUUR_STATUS.concept;
               const isOpen = openId === f.id;
               return (
-                <div key={f.id} style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                <div
+                  key={f.id}
+                  style={{
+                    backgroundColor: "#ffffff",
+                    border: "1px solid rgba(0,19,55,0.07)",
+                    borderRadius: "var(--radius-card)",
+                    overflow: "hidden",
+                  }}
+                >
                   <button
                     onClick={() => setOpenId(isOpen ? null : f.id)}
                     className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gray-50"
