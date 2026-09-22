@@ -72,12 +72,12 @@ export function bouwTaxatieMail({
 <html lang="nl">
   <body style="margin:0;background:#f3f5f8;font-family:Arial,sans-serif;color:#001337">
     <div style="max-width:640px;margin:0 auto;padding:24px 12px">
-      <div style="background:#001337;padding:28px 30px;border-radius:14px 14px 0 0;text-align:center">
+      <div style="background:#001337;padding:28px 30px;border-radius:0;text-align:center">
         <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:#ffffff">JG Mobility</div>
         <div style="margin-top:7px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.58)">Uw taxatie</div>
       </div>
-      <div style="background:#ffffff;padding:30px;border-radius:0 0 14px 14px;box-shadow:0 10px 30px rgba(0,19,55,.08)">
-        <div style="margin-bottom:22px;padding:14px 16px;background:#f7f9fc;border-left:3px solid #001337;border-radius:8px">
+      <div style="background:#ffffff;padding:30px;border-radius:0;box-shadow:0 10px 30px rgba(0,19,55,.08)">
+        <div style="margin-bottom:22px;padding:14px 16px;background:#f7f9fc;border-left:3px solid #001337;border-radius:0">
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280">Aanvraag</div>
           <div style="margin-top:5px;font-size:14px;font-weight:700;color:#001337">${veilig(voertuig || "Uw auto")}${kenteken ? ` · ${veilig(kenteken)}` : ""}</div>
           ${naam ? `<div style="margin-top:3px;font-size:12px;color:#64748b">Voor ${veilig(naam)}</div>` : ""}

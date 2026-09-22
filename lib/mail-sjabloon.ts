@@ -302,7 +302,7 @@ export function bedankMail(g: MailGegevens): { onderwerp: string; html: string; 
                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:${KLEUR.tekst};padding-bottom:16px;">
                    Wij zouden het enorm op prijs stellen als u een review wilt plaatsen op het internet. Het kost u een minuut en helpt ons enorm.
                  </div>
-                 <a href="${BEDRIJF.review}" style="display:inline-block;background-color:${KLEUR.groen};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:6px;">Review achterlaten op Google</a>
+                 <a href="${BEDRIJF.review}" style="display:inline-block;background-color:${KLEUR.groen};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:0;">Review achterlaten op Google</a>
                </td></tr>
              </table>`,
       afsluiting: `Komt u er onverhoopt achter dat er iets niet klopt, laat het ons dan gerust weten — daar komen we samen uit.<br /><br />Met vriendelijke groet,<br /><strong>Jimi Gaillard</strong><br /><span style="color:${KLEUR.grijs};">${BEDRIJF.naam}</span>`,
@@ -364,7 +364,7 @@ export function reviewMail(g: MailGegevens): { onderwerp: string; html: string; 
                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;color:${KLEUR.tekst};padding-bottom:18px;">
                    Uw review op Google is voor ons als klein bedrijf goud waard. Toekomstige klanten lezen graag echte ervaringen &mdash; en die van u telt.
                  </div>
-                 <a href="${BEDRIJF.review}" style="display:inline-block;background-color:${KLEUR.navy};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;padding:13px 32px;border-radius:6px;">&#9733; &nbsp;Schrijf een review</a>
+                 <a href="${BEDRIJF.review}" style="display:inline-block;background-color:${KLEUR.navy};color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;padding:13px 32px;border-radius:0;">&#9733; &nbsp;Schrijf een review</a>
                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${KLEUR.zacht};padding-top:12px;">Duurt minder dan een minuut</div>
                </td></tr>
              </table>`,
