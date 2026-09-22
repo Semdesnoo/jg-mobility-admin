@@ -2,6 +2,8 @@ import sql from "@/lib/db";
 import { getDossiers } from "@/lib/dossiers-db";
 import { getAutos } from "@/lib/autos-db";
 import { getInkoopFacturen } from "@/lib/inkoopfacturen-db";
+import { bedragUit } from "@/lib/bedrag";
+import { berekenBoekhouding } from "@/lib/boekhouding-berekening";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,14 @@ type Factuur = {
   regels: unknown;
 };
 
+type Consignatie = {
+  id: string;
+  status: string;
+  vraagprijs: unknown;
+  fee_percentage: unknown;
+  fee_vast: unknown;
+};
+
 /** "31-5-2026", "3-6-2026" of ISO → Date. */
 function parseDatum(s: string | undefined | null): Date | null {
   if (!s) return null;
@@ -66,13 +76,18 @@ function brutoBedrag(f: Factuur): number {
 const rond = (n: number) => Math.round(n * 100) / 100;
 
 export async function GET() {
-  const [facturenRows, dossiers, autos, inkoopFacturen] = await Promise.all([
-    sql`SELECT * FROM facturen`.catch(() => []),
-    getDossiers().catch(() => []),
-    getAutos().catch(() => []),
-    getInkoopFacturen().catch(() => []),
+  const [facturenRows, dossiers, autos, inkoopFacturen, consignatieRows] = await Promise.all([
+    sql`SELECT * FROM facturen`,
+    getDossiers(),
+    getAutos(),
+    getInkoopFacturen(),
+    sql`SELECT * FROM cosignaties`,
   ]);
   const facturen = facturenRows as unknown as Factuur[];
+  const consignaties = consignatieRows as unknown as Consignatie[];
+  // Alleen verzonden en betaalde verkoopfacturen zijn definitieve omzet. Concepten
+  // blijven buiten omzet, BTW, debiteuren en kwartaalcijfers.
+  const definitieveFacturen = facturen.filter((f) => ["verzonden", "betaald"].includes(String(f.status).toLowerCase()));
 
   // Een margefactuur moet weten wat de auto heeft gekost. Twee manieren om dat
   // dossier te vinden, in volgorde van betrouwbaarheid:
@@ -155,16 +170,12 @@ export async function GET() {
   };
   const kwartalen = new Map<string, Kwartaal>();
 
-  let omzetTotaal = 0;
-  let inkoopTotaal = 0;
-  let kostenTotaal = 0;
-  let btwTotaal = 0;
   const zonderInkoopAlgemeen: Herstelpunt[] = [];
   // Facturen waarvan de inkoop op naam is gevonden i.p.v. op kenteken — die
   // wil je kunnen nalopen voor je de aangifte indient.
   const afgeleideKoppelingen: Herstelpunt[] = [];
 
-  for (const f of facturen) {
+  for (const f of definitieveFacturen) {
     const datum = parseDatum(f.datum);
     if (!datum) continue;
     const bruto = brutoBedrag(f);
@@ -181,12 +192,10 @@ export async function GET() {
     const k = kwartalen.get(sleutel)!;
     k.omzet += bruto;
     k.aantal += 1;
-    omzetTotaal += bruto;
 
     if (f.btw_type === "21") {
       const btw = rond((bruto * 21) / 121);
       k.btwHoog += btw;
-      btwTotaal += btw;
     } else {
       // Margeregeling: BTW over (verkoop − inkoop).
       const gegevens = zoekInkoop(f);
@@ -202,9 +211,6 @@ export async function GET() {
       const btw = marge > 0 ? rond((marge * 21) / 121) : 0;
       k.btwMarge += btw;
       k.margeGrondslag += Math.max(marge, 0);
-      btwTotaal += btw;
-      inkoopTotaal += gegevens.inkoop;
-      kostenTotaal += gegevens.kosten;
     }
   }
 
@@ -235,7 +241,7 @@ export async function GET() {
     }
     return inUitMap.get(sleutel)!;
   };
-  for (const f of facturen) {
+  for (const f of definitieveFacturen) {
     const d = parseDatum(f.datum);
     if (!d) continue;
     const b = inUitBucket(d);
@@ -256,8 +262,8 @@ export async function GET() {
   // ── Debiteuren: wat staat er nog open ──
   const nu = new Date();
   const vandaag = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
-  const debiteuren = facturen
-    .filter((f) => String(f.status ?? "").toLowerCase() !== "betaald")
+  const debiteuren = definitieveFacturen
+    .filter((f) => String(f.status ?? "").toLowerCase() === "verzonden")
     .map((f) => {
       const verval = parseDatum(f.vervaldatum);
       const dagenOver = verval ? Math.round((vandaag.getTime() - verval.getTime()) / 86_400_000) : null;
@@ -303,26 +309,74 @@ export async function GET() {
   const crediteurenTotaal = rond(crediteuren.reduce((s, c) => s + c.bedrag, 0));
   const crediteurenTeLaat = crediteuren.filter((c) => (c.dagenOver ?? 0) > 0);
 
-  // ── Resultaat ──
-  const brutowinst = rond(omzetTotaal - inkoopTotaal);
-  const nettowinst = rond(brutowinst - kostenTotaal - btwTotaal);
+  // ── Genormaliseerd financieel overzicht ──
+  // Verkoopfacturen bepalen de omzet; calculatordossiers leveren uitsluitend de
+  // kostprijs van de verkochte auto. Inkoopfacturen leveren de echte algemene
+  // bedrijfskosten en voorbelasting. Auto-inkoopfacturen worden niet nogmaals als
+  // kosten geboekt, omdat de kostprijs al via het gekoppelde dossier wordt genomen.
+  const financieel = berekenBoekhouding({
+    verkopen: facturen.map((f) => {
+      const gevonden = zoekInkoop(f);
+      return {
+        id: f.id,
+        status: String(f.status ?? ""),
+        datum: f.datum,
+        vervaldatum: f.vervaldatum,
+        bruto: brutoBedrag(f),
+        btwType: String(f.btw_type ?? "marge"),
+        inkoop: gevonden?.inkoop ?? 0,
+        inkoopBekend: Boolean(gevonden && gevonden.inkoop > 0),
+      };
+    }),
+    inkopen: inkoopFacturen.map((f) => ({
+      id: f.id,
+      status: f.status,
+      datum: f.datum,
+      vervaldatum: f.vervaldatum,
+      bedragIncl: Number(f.bedrag_incl) || 0,
+      btwBedrag: Number(f.btw_bedrag) || 0,
+      categorie: f.categorie,
+    })),
+    consignaties: consignaties.map((c) => ({
+      id: c.id,
+      status: String(c.status ?? ""),
+      vraagprijs: bedragUit(c.vraagprijs == null ? null : String(c.vraagprijs)) ?? 0,
+      feePercentage: bedragUit(c.fee_percentage == null ? null : String(c.fee_percentage)) ?? 0,
+      feeVast: bedragUit(c.fee_vast == null ? null : String(c.fee_vast)) ?? 0,
+    })),
+  });
 
-  // ── Voorraadwaarde: wat er nu aan inkoop in de schappen staat ──
+  // Ook bij een normale 21%-verkoop is de inkoopprijs nodig voor een kloppende
+  // brutowinst. Voeg ontbrekende koppelingen daarom toe aan dezelfde herstelrij.
+  for (const f of definitieveFacturen) {
+    const gevonden = zoekInkoop(f);
+    if (!gevonden || gevonden.inkoop <= 0) zonderInkoopAlgemeen.push(zoekDoel(f));
+  }
+
+  // ── Voorraadwaarde: uitsluitend eigen, onverkochte auto's ──
+  // Consignatieauto's staan in hun eigen tabel en komen dus nooit als bezit in
+  // deze voorraadwaarde terecht.
+  const onverkochteAutoIds = new Set(autos.filter((a) => !a.verkocht).map((a) => a.id));
   const voorraadInkoop = dossiers
-    .filter((d) => !d.gearchiveerd && d.inkoop > 0)
+    .filter((d) => !d.gearchiveerd && d.inkoop > 0 && (d.auto_id == null || onverkochteAutoIds.has(d.auto_id)))
     .reduce((s, d) => s + d.inkoop, 0);
 
   return Response.json({
     perKwartaal,
     inUit,
     resultaat: {
-      omzet: rond(omzetTotaal),
-      inkoopwaarde: rond(inkoopTotaal),
-      kosten: rond(kostenTotaal),
-      brutowinst,
-      btwAfdracht: rond(btwTotaal),
-      nettowinst,
+      omzet: financieel.resultaat.omzetExclBtw,
+      omzetInclBtw: financieel.verkoop.omzetInclBtw,
+      inkoopwaarde: financieel.resultaat.kostprijsAutos,
+      kosten: financieel.resultaat.bedrijfskostenExclBtw,
+      brutowinst: financieel.resultaat.brutowinst,
+      btwAfdracht: financieel.btw.saldo,
+      nettowinst: financieel.resultaat.nettowinst,
     },
+    verkoop: financieel.verkoop,
+    inkoop: financieel.inkoop,
+    btw: financieel.btw,
+    consignatie: financieel.consignatie,
     debiteuren,
     debiteurenTotaal: openstaandTotaal,
     debiteurenTeLaat: teLaat.length,
@@ -330,8 +384,8 @@ export async function GET() {
     crediteurenTotaal,
     crediteurenTeLaat: crediteurenTeLaat.length,
     voorraadInkoop: rond(voorraadInkoop),
-    // Facturen waarvan de marge-BTW niet berekend kon worden — met het doel
-    // (dossier/auto) zodat de knop in de UI er rechtstreeks heen kan springen.
+    // Facturen zonder betrouwbare kostprijskoppeling blijven zichtbaar. Zo lijkt
+    // de winst nooit vollediger dan de onderliggende administratie werkelijk is.
     zonderInkoop: dedupeHerstel(zonderInkoopAlgemeen),
     afgeleideKoppelingen: dedupeHerstel(afgeleideKoppelingen),
   });
