@@ -813,7 +813,7 @@ function DashboardContent({
             <Link
               href="/admin/auto-toevoegen"
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all hover:opacity-90"
-              style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)" }}
+              style={{ backgroundColor: "#001337", color: "#ffffff", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control, 10px)" }}
             >
               <Plus size={12} /> Nieuwe auto
             </Link>
@@ -1968,7 +1968,7 @@ function VoorraadContent({ autos, refresh }: { autos: Auto[]; refresh: () => voi
               backgroundColor: "#001337",
               color: "#ffffff",
               fontFamily: "var(--font-inter)",
-              borderRadius: "var(--radius-control)",
+              borderRadius: "var(--radius-control, 10px)",
               boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)",
             }}
           >
