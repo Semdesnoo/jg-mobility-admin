@@ -1,4 +1,4 @@
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 
 // Lazy database-client. De Neon client wordt pas aangemaakt bij het eerste
 // SQL-statement, zodat `next build` op Vercel niet faalt als DATABASE_URL niet
@@ -8,9 +8,9 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 // collecten. Als de import-keten van zo'n route via deze module loopt, werd de
 // `neon()`-call eerder direct op module-load gedaan en crashte de build met
 // "No database connection string was provided".
-type Sql = NeonQueryFunction<false, false>;
-let _sql: Sql | null = null;
-function getSql(): Sql {
+type Neon = ReturnType<typeof neon>;
+let _sql: Neon | null = null;
+function sql(): Neon {
   if (_sql) return _sql;
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -23,39 +23,77 @@ function getSql(): Sql {
   return _sql;
 }
 
-// Proxy zodat `sql\`...\`` identiek blijft werken als voorheen. De Neon client
-// is een aanroepbare tagged-template-functie met extra methodes (transaction,
-// etc.). We geven elke property door aan de onderliggende client zodat het
-// type-signature transparant blijft.
-const sql = new Proxy({} as Sql, {
-  get(_target, prop, receiver) {
-    const real = getSql() as unknown as Record<string | symbol, unknown>;
-    const value = real[prop];
-    if (typeof value === "function") {
-      return function (this: unknown, ...args: unknown[]) {
-        return (value as (...a: unknown[]) => unknown).apply(real, args);
-      };
-    }
-    return value;
-  },
-  apply(_target, _thisArg, args) {
-    // sql`SELECT ...` — tagged template literal call
-    const real = getSql() as unknown as (...a: unknown[]) => unknown;
-    return Reflect.apply(real, real, args);
-  },
-});
+/**
+ * Tagged-template handler die naar de lazy Neon client doorgeeft. Neon is zelf
+ * een tagged-template-functie. We exposen dezelfde generieke signature zodat
+ * aanroepen zoals `const autos = await sql<{data: Auto}>\`SELECT data FROM autos\``
+ * getypeerd blijven zoals de Neon client zelf zou doen.
+ */
+interface SqlTag {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  <T extends Record<string, any> = Record<string, any>>(
+    strings: TemplateStringsArray,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...values: any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Promise<T[]>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transaction<T>(fn: (tx: any) => Promise<T>): Promise<T>;
+  // Sommige plekken in het project gebruiken `sql.query(text, params)` voor
+  // dynamische table/column-namen die niet in een tagged-template passen.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query<T extends Record<string, any> = Record<string, any>>(
+    text: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    params?: any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Promise<T[]>;
+}
 
-export default sql;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const taggedFn = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+  const client = sql() as unknown as <T extends Record<string, unknown>>(
+    s: TemplateStringsArray,
+    ...v: unknown[]
+  ) => Promise<T[]>;
+  return client(strings, ...values);
+}) as unknown as <T extends Record<string, unknown>>(
+  s: TemplateStringsArray,
+  ...v: unknown[]
+) => Promise<T[]>;
+
+const handler = Object.assign(taggedFn, {
+  transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
+    const client = sql() as unknown as { transaction: <U>(f: (tx: unknown) => Promise<U>) => Promise<U> };
+    return client.transaction(fn);
+  },
+  query<T extends Record<string, unknown>>(
+    text: string,
+    params: unknown[] = []
+  ): Promise<T[]> {
+    const client = sql() as unknown as <T extends Record<string, unknown>>(
+      text: string,
+      params: unknown[]
+    ) => Promise<T[]>;
+    return client(text, params);
+  },
+}) as unknown as SqlTag;
+
+export default handler;
 
 export async function initDB() {
-  await sql`
+  // Gebruikt de lazy Neon client direct. Door de cast naar `any` aan de grens
+  // accepteert TS de tagged-template-syntax zonder gedoe met Object.assign.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = sql() as any;
+  await client`
     CREATE TABLE IF NOT EXISTS autos (
       id INTEGER PRIMARY KEY,
       slug TEXT UNIQUE NOT NULL,
       data JSONB NOT NULL
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS bellog (
       id TEXT PRIMARY KEY,
       datum TEXT NOT NULL,
@@ -67,13 +105,13 @@ export async function initDB() {
       afgehandeld BOOLEAN DEFAULT false
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS facturen (
       id TEXT PRIMARY KEY,
       factuur_nr TEXT NOT NULL,
@@ -100,21 +138,21 @@ export async function initDB() {
       regels TEXT DEFAULT '[]'
     )
   `;
-  await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS regels TEXT DEFAULT '[]'`.catch(() => null);
+  await client`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS regels TEXT DEFAULT '[]'`.catch(() => null);
   // Houdt bij wanneer elke mail naar de klant is verstuurd (ISO-tijdstring, leeg = nog niet verstuurd)
-  await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS factuurmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
-  await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS bedankmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
-  await sql`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS reviewmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
+  await client`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS factuurmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
+  await client`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS bedankmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
+  await client`ALTER TABLE facturen ADD COLUMN IF NOT EXISTS reviewmail_verstuurd_op TEXT DEFAULT ''`.catch(() => null);
   // Welke kwartaalpakketten (inkoopfacturen-zip) al gedownload zijn. Zo weet de
   // meldingenbel of een afgesloten kwartaal nog aandacht vraagt of al bij de
   // boekhouder ligt.
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS kwartaal_exports (
       sleutel TEXT PRIMARY KEY,
       gedownload_op TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `.catch(() => null);
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS cosignaties (
       id TEXT PRIMARY KEY,
       datum TEXT NOT NULL,
@@ -133,7 +171,7 @@ export async function initDB() {
       notitie TEXT DEFAULT ''
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS klanten (
       id TEXT PRIMARY KEY,
       naam TEXT DEFAULT '',
@@ -145,7 +183,7 @@ export async function initDB() {
       aangemaakt TIMESTAMPTZ DEFAULT NOW()
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS afspraken (
       id TEXT PRIMARY KEY,
       datum TEXT NOT NULL,
@@ -160,7 +198,7 @@ export async function initDB() {
       aangemaakt TIMESTAMPTZ DEFAULT NOW()
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS inkoop_dossiers (
       id TEXT PRIMARY KEY,
       datum TEXT NOT NULL,
@@ -182,7 +220,7 @@ export async function initDB() {
       aangemaakt TIMESTAMPTZ DEFAULT NOW()
     )
   `;
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       naam TEXT DEFAULT '',
@@ -199,7 +237,7 @@ export async function initDB() {
   // Archief van gegenereerde social-teksten. De invoer_hash dekt alle autovelden
   // die de tekst beïnvloeden plus de extra aanwijzing: verandert er niets, dan
   // komt de tekst uit dit archief in plaats van opnieuw bij het model.
-  await sql`
+  await client`
     CREATE TABLE IF NOT EXISTS social_teksten (
       id TEXT PRIMARY KEY,
       auto_id INTEGER,
@@ -216,9 +254,9 @@ export async function initDB() {
       aangemaakt TIMESTAMPTZ DEFAULT NOW()
     )
   `;
-  await sql`CREATE INDEX IF NOT EXISTS social_teksten_hash_idx ON social_teksten (invoer_hash, aangemaakt DESC)`.catch(() => null);
-  await sql`CREATE INDEX IF NOT EXISTS social_teksten_auto_idx ON social_teksten (auto_id, aangemaakt DESC)`.catch(() => null);
-  await sql`
+  await client`CREATE INDEX IF NOT EXISTS social_teksten_hash_idx ON social_teksten (invoer_hash, aangemaakt DESC)`.catch(() => null);
+  await client`CREATE INDEX IF NOT EXISTS social_teksten_auto_idx ON social_teksten (auto_id, aangemaakt DESC)`.catch(() => null);
+  await client`
     CREATE TABLE IF NOT EXISTS auto_kosten (
       id TEXT PRIMARY KEY,
       auto_id INTEGER NOT NULL,
@@ -230,7 +268,7 @@ export async function initDB() {
   `;
   // Backfill standtijd-startdatum voor bestaande auto's: vanaf nu wordt de showroom-tijd
   // bijgehouden. Eenmalig + idempotent (alleen waar het veld nog ontbreekt).
-  await sql`
+  await client`
     UPDATE autos
     SET data = jsonb_set(data, '{toegevoegd_op}', to_jsonb(now()::text), true)
     WHERE NOT (data ? 'toegevoegd_op')
