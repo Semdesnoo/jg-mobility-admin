@@ -47,6 +47,37 @@ const euro = (n: number) => `&euro; ${Math.round(n).toLocaleString("nl-NL")}`;
 const veilig = (s: unknown) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/**
+ * Het JG Mobility logo als data-URL, klaar om in mail-HTML te bakken.
+ *
+ * WAAROM DIT BESTAAT
+ * De mails worden server-side gebouwd door API routes (geen browser-fetch). Als we
+ * <img src="/JG Mobility Transparant.png"> zouden gebruiken, blokkeren Gmail/Outlook
+ * die externe image en ziet de klant een lege kop. Daarom lezen we het PNG-bestand
+ * hier in, zetten het om naar base64, en stoppen het als data-URL direct in de HTML.
+ *
+ * De transparante versie (wit monogram op doorzichtige achtergrond) is gekozen omdat
+ * hij op de navy header-strip van de romp staat — een gekleurd logo zou een lelijke
+ * "blauw vakje in een blauwe strook" geven. Wordt gecached in module-scope: één
+ * disk-read per server-start.
+ */
+let _logoCache: string | null = null;
+function logoDataUrl(): string {
+  if (_logoCache) return _logoCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("path") as typeof import("path");
+    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const buf = fs.readFileSync(p);
+    _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
+    return _logoCache;
+  } catch {
+    return "";
+  }
+}
+
 /** Eén regel in het gegevensblok. */
 function regel(label: string, waarde: string, nadruk = false): string {
   return `<tr>
@@ -86,6 +117,15 @@ function romp(opts: {
 
         <tr>
           <td align="center" style="background-color:${KLEUR.navy};padding:26px 30px;">
+            ${(() => {
+              const src = logoDataUrl();
+              // Logo gecentreerd boven de bedrijfsnaam. Op een smal scherm schaalt
+              // het mee dankzij width="100%" + max-width; op een 600px-blad blijft
+              // het 100px en staat de tekstnaam eronder als woordmerk.
+              return src
+                ? `<img src="${src}" alt="${veilig(BEDRIJF.naam)}" width="100" style="display:block;margin:0 auto 12px;width:100px;max-width:100px;height:auto;border:0" />`
+                : "";
+            })()}
             <div style="font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:bold;color:#ffffff;letter-spacing:1px;">${BEDRIJF.naam}</div>
             ${opts.kopExtra ?? ""}
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);padding-top:5px;">${veilig(opts.titel)}</div>

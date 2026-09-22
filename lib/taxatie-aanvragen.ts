@@ -3,6 +3,28 @@ type TaxatieBron = {
   taxatie_resultaat?: unknown;
 };
 
+/**
+ * Het JG Mobility logo als data-URL — zelfde patroon als in mail-sjabloon.ts.
+ * We lezen het PNG-bestand één keer in en stoppen het in de HTML zodat Gmail/Outlook
+ * het niet blokkeren als externe image.
+ */
+let _taxLogoCache: string | null = null;
+function logoDataUrl(): string {
+  if (_taxLogoCache) return _taxLogoCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("path") as typeof import("path");
+    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const buf = fs.readFileSync(p);
+    _taxLogoCache = `data:image/png;base64,${buf.toString("base64")}`;
+    return _taxLogoCache;
+  } catch {
+    return "";
+  }
+}
+
 export type TaxatieFase = "nieuw" | "getaxeerd" | "klaar" | "verstuurd";
 
 function alsObject(waarde: unknown): Record<string, unknown> {
@@ -73,6 +95,12 @@ export function bouwTaxatieMail({
   <body style="margin:0;background:#f3f5f8;font-family:Arial,sans-serif;color:#001337">
     <div style="max-width:640px;margin:0 auto;padding:24px 12px">
       <div style="background:#001337;padding:28px 30px;border-radius:0;text-align:center">
+        ${(() => {
+          const src = logoDataUrl();
+          return src
+            ? `<img src="${src}" alt="JG Mobility" width="110" style="display:block;margin:0 auto 14px;width:110px;max-width:110px;height:auto;border:0" />`
+            : "";
+        })()}
         <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:#ffffff">JG Mobility</div>
         <div style="margin-top:7px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.58)">Uw taxatie</div>
       </div>

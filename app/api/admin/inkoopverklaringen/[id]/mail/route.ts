@@ -6,6 +6,28 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 /**
+ * Het JG Mobility logo als data-URL, klaar om in mail-HTML te bakken.
+ * Server-side lezen we het PNG-bestand en stoppen het als base64 in de HTML
+ * zodat Gmail/Outlook de image niet als externe blokkeren.
+ */
+let _logoCache: string | null = null;
+function logoDataUrl(): string {
+  if (_logoCache) return _logoCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("path") as typeof import("path");
+    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const buf = fs.readFileSync(p);
+    _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
+    return _logoCache;
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Mailt de inkoopverklaring (kopie-versie) als PDF-bijlage naar de verkoper.
  *
  * De PDF wordt in de browser gemaakt — dezelfde html2pdf-aanpak als bij de facturen en
@@ -96,6 +118,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;">
       <div style="background:#001337;padding:26px 30px;text-align:center;">
+        ${(() => {
+          const src = logoDataUrl();
+          return src
+            ? `<img src="${src}" alt="JG Mobility" width="100" style="display:block;margin:0 auto 12px;width:100px;max-width:100px;height:auto;border:0" />`
+            : "";
+        })()}
         <div style="color:#ffffff;font-family:Georgia,serif;font-size:23px;font-weight:bold;letter-spacing:1px;">JG Mobility</div>
         <div style="color:rgba(255,255,255,0.55);font-size:10px;margin-top:5px;letter-spacing:2.5px;text-transform:uppercase;">Inkoopverklaring</div>
       </div>

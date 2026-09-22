@@ -5,6 +5,28 @@ import sql from "@/lib/db";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+/**
+ * Het JG Mobility logo als data-URL, klaar om in mail-HTML te bakken.
+ * Server-side lezen we het PNG-bestand en stoppen het als base64 in de HTML
+ * zodat Gmail/Outlook de image niet als externe blokkeren.
+ */
+let _logoCache: string | null = null;
+function logoDataUrl(): string {
+  if (_logoCache) return _logoCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("path") as typeof import("path");
+    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const buf = fs.readFileSync(p);
+    _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
+    return _logoCache;
+  } catch {
+    return "";
+  }
+}
+
 /** Onzichtbare tekens die bij het plakken van instellingen meekomen (zie factuurmail). */
 const ONZICHTBAAR = new RegExp(
   "[" + String.fromCharCode(0x200b, 0x200c, 0x200d, 0xfeff, 0x00a0) + "]",
@@ -56,6 +78,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
       <div style="background:#001337;padding:28px 32px;text-align:center;">
+        ${(() => {
+          const src = logoDataUrl();
+          return src
+            ? `<img src="${src}" alt="JG Mobility" width="110" style="display:block;margin:0 auto 14px;width:110px;max-width:110px;height:auto;border:0" />`
+            : "";
+        })()}
         <h1 style="color:#ffffff;font-family:Georgia,serif;margin:0;font-size:24px;">JG Mobility</h1>
         <p style="color:rgba(255,255,255,0.55);font-size:12px;margin:8px 0 0;letter-spacing:1px;text-transform:uppercase;">Consignatieovereenkomst</p>
       </div>

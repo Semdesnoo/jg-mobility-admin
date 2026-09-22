@@ -30,6 +30,28 @@ const PLATFORM_LABEL: Record<string, string> = {
   autoscout24: "AutoScout24.nl",
 };
 
+/**
+ * Het JG Mobility logo als data-URL, klaar voor in de HTML. Server-side: leest het
+ * PNG-bestand één keer en stopt het als base64 in de mail zodat mail-clients (Gmail,
+ * Outlook) de image niet als externe blokkeren. Zelfde patroon als mail-sjabloon.ts.
+ */
+let _logoCache: string | null = null;
+function logoDataUrl(): string {
+  if (_logoCache) return _logoCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("path") as typeof import("path");
+    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const buf = fs.readFileSync(p);
+    _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
+    return _logoCache;
+  } catch {
+    return "";
+  }
+}
+
 /** Bouwt onderwerp en HTML van de update-mail voor deze consignatie. */
 export function bouwUpdateMail(c: CosignatieRij): { onderwerp: string; html: string } {
   // De teller loopt vanaf het moment dat de auto daadwerkelijk in de verkoop staat
@@ -65,6 +87,12 @@ export function bouwUpdateMail(c: CosignatieRij): { onderwerp: string; html: str
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
       <div style="background:#001337;padding:28px 32px;text-align:center;">
+        ${(() => {
+          const src = logoDataUrl();
+          return src
+            ? `<img src="${src}" alt="JG Mobility" width="110" style="display:block;margin:0 auto 14px;width:110px;max-width:110px;height:auto;border:0" />`
+            : "";
+        })()}
         <h1 style="color:#ffffff;font-family:Georgia,serif;margin:0;font-size:24px;">JG Mobility</h1>
         <p style="color:rgba(255,255,255,0.55);font-size:12px;margin:8px 0 0;letter-spacing:1px;text-transform:uppercase;">Update consignatie</p>
       </div>
