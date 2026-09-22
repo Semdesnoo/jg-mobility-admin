@@ -69,7 +69,7 @@ function logoDataUrl(): string {
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("path") as typeof import("path");
-    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const p = path.join(process.cwd(), "public", "JG Mobility Mail Header.png");
     const buf = fs.readFileSync(p);
     _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
     return _logoCache;
@@ -116,19 +116,24 @@ function romp(opts: {
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;border:1px solid ${KLEUR.lijn};">
 
         <tr>
-          <td align="center" style="background-color:${KLEUR.navy};padding:32px 30px;">
+          <td align="center" style="padding:0;line-height:0;font-size:0">
             ${(() => {
               const src = logoDataUrl();
-              // Alleen het logo, geen tekstuele merknaam — die zit al in de PNG.
-              // Outlook rendert data-URLs betrouwbaar; height-attribuut naast width
-              // voorkomt dat sommige clients de verhouding verkeerd terugrekenen
-              // als inline `height:auto` op een smal viewport moet resizen.
+              // Volledige-breedte header-banner. Aspect-ratio 2000×423 → bij 600px
+              // breed wordt 'ie ~127px hoog. Geen padding/achtergrond om de banner —
+              // de PNG IS het design. line-height:0 voorkomt een wit randje onder
+              // de image in sommige Outlook-versies.
               return src
-                ? `<img src="${src}" alt="${veilig(BEDRIJF.naam)}" width="140" height="140" style="display:block;margin:0 auto;width:140px;max-width:140px;height:auto;border:0;outline:none;text-decoration:none" />`
+                ? `<img src="${src}" alt="${veilig(BEDRIJF.naam)}" width="600" height="127" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;mso-line-height-rule:exactly" />`
                 : "";
             })()}
+          </td>
+        </tr>
+
+        <tr>
+          <td align="center" style="background-color:${KLEUR.navy};padding:18px 30px 22px;border-bottom:0">
             ${opts.kopExtra ?? ""}
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);padding-top:14px;">${veilig(opts.titel)}</div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">${veilig(opts.titel)}</div>
           </td>
         </tr>
 

@@ -43,7 +43,7 @@ function logoDataUrl(): string {
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("path") as typeof import("path");
-    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const p = path.join(process.cwd(), "public", "JG Mobility Mail Header.png");
     const buf = fs.readFileSync(p);
     _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
     return _logoCache;
@@ -85,18 +85,22 @@ export function bouwUpdateMail(c: CosignatieRij): { onderwerp: string; html: str
   const kmStand = c.km ? `${parseInt(c.km as string).toLocaleString("nl-NL")} km` : "";
 
   const html = `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-      <div style="background:#001337;padding:32px;text-align:center;">
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;">
+      <div style="padding:0;line-height:0;font-size:0;text-align:center">
         ${(() => {
           const src = logoDataUrl();
-          // Alleen het logo — de merknaam zit al in de PNG. height-attribuut naast
-          // width voorkomt dat Outlook op een smal viewport de verhouding verkeerd
-          // terugrekent als `height:auto` moet resizen.
+          // Volledige-breedte header-banner. Aspect-ratio 2000×423 → bij 600px
+          // breed wordt 'ie ~127px hoog. Geen padding/achtergrond om de banner —
+          // de PNG IS het design. line-height:0 voorkomt een wit randje onder
+          // de image in sommige Outlook-versies.
           return src
-            ? `<img src="${src}" alt="JG Mobility" width="140" height="140" style="display:block;margin:0 auto;width:140px;max-width:140px;height:auto;border:0;outline:none;text-decoration:none" />`
+            ? `<img src="${src}" alt="JG Mobility" width="600" height="127" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;mso-line-height-rule:exactly" />`
             : "";
         })()}
-        <p style="color:rgba(255,255,255,0.55);font-size:12px;margin:14px 0 0;letter-spacing:1px;text-transform:uppercase;">Update consignatie</p>
+      </div>
+      <div style="background:#001337;padding:18px 30px 22px;text-align:center">
+        <p style="color:rgba(255,255,255,0.55);font-size:12px;margin:0;letter-spacing:1px;text-transform:uppercase;">Update consignatie</p>
+      </div>
       </div>
 
       <div style="padding:36px 32px;background:#f8f9fc;">

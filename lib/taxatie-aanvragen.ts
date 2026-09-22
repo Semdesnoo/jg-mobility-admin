@@ -16,7 +16,7 @@ function logoDataUrl(): string {
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("path") as typeof import("path");
-    const p = path.join(process.cwd(), "public", "JG Mobility Transparant.png");
+    const p = path.join(process.cwd(), "public", "JG Mobility Mail Header.png");
     const buf = fs.readFileSync(p);
     _taxLogoCache = `data:image/png;base64,${buf.toString("base64")}`;
     return _taxLogoCache;
@@ -94,17 +94,17 @@ export function bouwTaxatieMail({
 <html lang="nl">
   <body style="margin:0;background:#f3f5f8;font-family:Arial,sans-serif;color:#001337">
     <div style="max-width:640px;margin:0 auto;padding:24px 12px">
-      <div style="background:#001337;padding:32px 30px;border-radius:0;text-align:center">
+      <div style="padding:0;line-height:0;font-size:0;text-align:center">
         ${(() => {
           const src = logoDataUrl();
-          // Alleen het logo — de merknaam zit al in de PNG. height-attribuut naast
-          // width voorkomt dat Outlook op een smal viewport de verhouding verkeerd
-          // terugrekent als `height:auto` moet resizen.
+          // Volledige-breedte header-banner (2000×423 → bij ~600px breed ~127px hoog).
           return src
-            ? `<img src="${src}" alt="JG Mobility" width="140" height="140" style="display:block;margin:0 auto;width:140px;max-width:140px;height:auto;border:0;outline:none;text-decoration:none" />`
+            ? `<img src="${src}" alt="JG Mobility" width="600" height="127" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;mso-line-height-rule:exactly" />`
             : "";
         })()}
-        <div style="margin-top:14px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.58)">Uw taxatie</div>
+      </div>
+      <div style="background:#001337;padding:18px 30px 22px;text-align:center;border-radius:0">
+        <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.58)">Uw taxatie</div>
       </div>
       <div style="background:#ffffff;padding:30px;border-radius:0;box-shadow:0 10px 30px rgba(0,19,55,.08)">
         <div style="margin-bottom:22px;padding:14px 16px;background:#f7f9fc;border-left:3px solid #001337;border-radius:0">
