@@ -18,7 +18,7 @@ function logoDataUrl(): string {
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("path") as typeof import("path");
-    const p = path.join(process.cwd(), "public", "JG Mobility Mail Header.png");
+    const p = path.join(process.cwd(), "public", "mail-header.png");
     const buf = fs.readFileSync(p);
     _logoCache = `data:image/png;base64,${buf.toString("base64")}`;
     return _logoCache;
