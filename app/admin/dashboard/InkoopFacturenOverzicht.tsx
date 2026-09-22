@@ -37,6 +37,8 @@ const paneel: React.CSSProperties = {
   backgroundColor: "#ffffff",
   border: "1px solid rgba(0,19,55,0.07)",
   boxShadow: "0 1px 3px rgba(0,19,55,0.05)",
+  borderRadius: "var(--radius-card, 14px)",
+  overflow: "hidden",
 };
 const kop: React.CSSProperties = { fontFamily: "var(--font-playfair)", color: NAVY, fontWeight: 700 };
 const tekst: React.CSSProperties = { fontFamily: "var(--font-inter)", color: "rgba(0,19,55,0.6)" };
@@ -304,14 +306,14 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
   return (
     <div className="flex flex-col gap-5">
       {fout && (
-        <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fee2e2", border: "1px solid #fecaca" }}>
+        <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fee2e2", border: "1px solid #fecaca", borderRadius: "var(--radius-control, 10px)" }}>
           <AlertTriangle size={14} style={{ color: ROOD, flexShrink: 0, marginTop: 1 }} />
           <p style={{ ...tekst, fontSize: 12.5, color: ROOD }}>{fout}</p>
         </div>
       )}
 
       {zonderDatum > 0 && (
-        <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a" }}>
+        <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}>
           <AlertTriangle size={14} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
           <p style={{ ...tekst, fontSize: 12.5, color: "rgba(0,19,55,0.7)" }}>
             {zonderDatum} factu{zonderDatum === 1 ? "ur heeft" : "ren hebben"} geen leesbare datum en
@@ -334,7 +336,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
               value={actiefJaar}
               onChange={(e) => setJaarKeuze(Number(e.target.value))}
               className="text-sm font-semibold px-3 py-2"
-              style={{ fontFamily: "var(--font-inter)", color: NAVY, border: "1px solid rgba(0,19,55,0.15)", backgroundColor: "#ffffff" }}
+              style={{ fontFamily: "var(--font-inter)", color: NAVY, border: "1px solid rgba(0,19,55,0.15)", backgroundColor: "#ffffff", borderRadius: "var(--radius-control, 10px)" }}
               aria-label="Jaar kiezen"
             >
               {jaren.map((j) => (
@@ -364,7 +366,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
                     backgroundColor: actief ? NAVY : "#ffffff",
                     color: actief ? "#ffffff" : isGedownload ? GROEN : NAVY,
                     border: `1.5px solid ${actief ? NAVY : isGedownload ? "rgba(21,128,61,0.4)" : "rgba(0,19,55,0.18)"}`,
-                    borderRadius: "var(--radius-control, 8px)",
+                    borderRadius: "var(--radius-control, 10px)",
                     fontFamily: "var(--font-inter)",
                     boxShadow: actief ? "0 6px 16px -8px rgba(0,19,55,0.5)" : "none",
                   }}
@@ -522,7 +524,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
                 onClick={maakZip}
                 disabled={!data || pakken || laden || data.totalen.aantal === 0}
                 className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-40"
-                style={{ backgroundColor: NAVY, color: "#ffffff", fontFamily: "var(--font-inter)" }}
+                style={{ backgroundColor: NAVY, color: "#ffffff", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control, 10px)" }}
               >
                 <Download size={13} />
                 {pakken ? voortgang || "Bezig…" : "Download als zip"}
@@ -541,7 +543,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
                   { l: "BTW terug te vragen", v: euro(data.totalen.btw), kleur: GROEN },
                   { l: "Totaal excl. BTW", v: euro(data.totalen.excl) },
                 ].map((s) => (
-                  <div key={s.l} className="p-3.5" style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div key={s.l} className="p-3.5" style={{ backgroundColor: "rgba(0,19,55,0.02)", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-control, 10px)" }}>
                     <p style={{ ...kopCel, padding: 0, marginBottom: 6 }}>{s.l}</p>
                     <p style={{ fontFamily: "var(--font-playfair)", fontSize: 20, fontWeight: 700, color: s.kleur ?? NAVY }}>
                       {s.v}
@@ -551,7 +553,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
               </div>
 
               {data.gmailFout && (
-                <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a" }}>
+                <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}>
                   <AlertTriangle size={14} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
                   <p style={{ ...tekst, fontSize: 12.5, color: "rgba(0,19,55,0.7)" }}>
                     {data.gmailFout} De zip bevat wél de specificatie met alle bedragen.
@@ -560,7 +562,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
               )}
 
               {data.afgekapt && (
-                <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a" }}>
+                <div className="flex items-start gap-2.5 px-4 py-3" style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}>
                   <AlertTriangle size={14} style={{ color: AMBER, flexShrink: 0, marginTop: 1 }} />
                   <p style={{ ...tekst, fontSize: 12.5, color: "rgba(0,19,55,0.7)" }}>
                     Niet alle documenten konden binnen de tijd worden opgezocht. Vernieuw de pagina en
@@ -582,7 +584,7 @@ export default function InkoopFacturenOverzicht({ facturen }: { facturen: Inkoop
               </div>
 
               {data.perCategorie.length > 0 && (
-                <div style={{ border: "1px solid rgba(0,19,55,0.07)" }}>
+                <div style={{ border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-control, 10px)", overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
