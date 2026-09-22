@@ -362,11 +362,19 @@ export default function AanvragenContent({
           vanzelf allemaal even hoog. */}
       <div
         className="flex flex-wrap items-center gap-2 px-3 py-2.5 mb-4"
-        style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
+        style={{
+          backgroundColor: T.paper,
+          border: `1px solid ${T.line}`,
+          borderRadius: "var(--radius-control, 10px)",
+        }}
       >
         {/* Twee knoppen die aan elkaar vast zitten lezen als één keuze; twee losse
-            chips lezen als twee dingen die allebei aan kunnen staan. */}
-        <div className="flex" style={{ border: `1px solid ${T.line2}` }}>
+            chips lezen als twee dingen die allebei aan kunnen staan. Asymmetrische
+            radius zodat de middelste segment-uiteinden strak tegen elkaar plakken. */}
+        <div
+          className="flex overflow-hidden"
+          style={{ border: `1px solid ${T.line2}`, borderRadius: "var(--radius-control, 10px)" }}
+        >
           <Segment actief={blad === "dag"} onClick={() => setBlad("dag")}>
             <CalendarDays size={11} /> Per dag
           </Segment>
@@ -412,7 +420,10 @@ export default function AanvragenContent({
 
         {/* Twee lijsten die elkaar uitsluiten, net als Per dag en Per auto. Wat je
             afvinkt gaat naar het archief en blijft daar staan; terughalen kan altijd. */}
-        <div className="flex" style={{ border: `1px solid ${T.line2}` }}>
+        <div
+          className="flex overflow-hidden"
+          style={{ border: `1px solid ${T.line2}`, borderRadius: "var(--radius-control, 10px)" }}
+        >
           <Segment actief={weergave === "open"} onClick={() => { setWeergave("open"); setOpen(null); }}>
             Open · {nogTeDoen}
           </Segment>
@@ -452,6 +463,7 @@ export default function AanvragenContent({
                 color: bewerken ? "#ffffff" : T.ink(0.55),
                 backgroundColor: bewerken ? T.navy : "transparent",
                 border: `1px solid ${bewerken ? T.navy : T.line2}`,
+                borderRadius: "var(--radius-control, 10px)",
               }}
             >
               {bewerken ? <Check size={12} /> : <Pencil size={12} />}

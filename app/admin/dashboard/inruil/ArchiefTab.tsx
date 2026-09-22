@@ -120,7 +120,7 @@ export default function InruilArchiefTab({
 
   if (rijen.length === 0) {
     return (
-      <div style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+      <div style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-card, 14px)" }}>
         <Empty
           icon={<Archive size={30} style={{ color: T.ink(0.15) }} />}
           title="Nog niets bewaard"
@@ -162,7 +162,7 @@ export default function InruilArchiefTab({
       )}
 
       {groepen.map((g) => (
-        <div key={g.label} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+        <div key={g.label} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
           <div
             className="px-4 md:px-5 py-3 flex items-center justify-between gap-3 flex-wrap"
             style={{ borderBottom: `1px solid ${T.line}`, backgroundColor: "rgba(0,19,55,0.02)" }}
@@ -225,7 +225,7 @@ export default function InruilArchiefTab({
                   onClick={() => verwijder(r)}
                   aria-label="Verwijderen"
                   className="px-2 py-1 transition-all hover:opacity-70 flex-shrink-0"
-                  style={{ border: "1px solid rgba(185,28,28,0.25)", color: T.rood }}
+                  style={{ border: "1px solid rgba(185,28,28,0.25)", color: T.rood, borderRadius: "var(--radius-control, 10px)" }}
                 >
                   <Trash2 size={11} />
                 </button>

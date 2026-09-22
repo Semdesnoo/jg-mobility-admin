@@ -829,7 +829,7 @@ function LeadsTab({
           dan zijn ze vanzelf allemaal gelijk. */}
       <div
         className="flex flex-wrap items-center gap-2 px-3 py-2.5"
-        style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}
+        style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}
       >
         <div className="relative flex-1" style={{ minWidth: 190 }}>
           <Search
@@ -1062,6 +1062,7 @@ function SelectieBalk({
                 fontFamily: T.inter,
                 fontSize: 12,
                 fontWeight: 600,
+                borderRadius: "var(--radius-control, 10px)",
               }}
             >
               <Trash2 size={12} /> Weggooien
@@ -1159,6 +1160,8 @@ function LeadKaart({
       style={{
         backgroundColor: aangevinkt ? "rgba(0,19,55,0.04)" : T.paper,
         border: `1px solid ${aangevinkt ? T.navy : T.line}`,
+        borderRadius: "var(--radius-card, 14px)",
+        overflow: "hidden",
       }}
     >
       {/* In de selecteerstand ligt er een vinkvakje bovenop; in de gewone stand niet,
@@ -1176,6 +1179,7 @@ function LeadKaart({
             border: `1px solid ${aangevinkt ? T.navy : T.line2}`,
             color: "#ffffff",
             pointerEvents: "none",
+            borderRadius: "var(--radius-control, 10px)",
           }}
         >
           {aangevinkt && <Check size={13} />}
@@ -1342,7 +1346,7 @@ function RijKnop({
       onClick={onClick}
       disabled={bezig}
       className="flex items-center justify-center transition-all hover:opacity-70 disabled:opacity-40"
-      style={{ width: 30, height: 28, color: kleur, border: `1px solid ${T.line2}`, backgroundColor: T.paper }}
+      style={{ width: 30, height: 28, color: kleur, border: `1px solid ${T.line2}`, backgroundColor: T.paper, borderRadius: "var(--radius-control, 10px)" }}
     >
       {bezig ? <Spinner size={12} /> : children}
     </button>
@@ -1489,7 +1493,7 @@ function NakijkPaneel({
   ].filter(Boolean);
 
   return (
-    <div style={{ backgroundColor: T.paper, border: `1px solid ${T.line2}` }}>
+    <div style={{ backgroundColor: T.paper, border: `1px solid ${T.line2}`, borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
       {/* ── Om welke auto gaat het ── */}
       <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.line}` }}>
         <div className="flex flex-wrap items-start gap-2 mb-1.5">
@@ -1516,7 +1520,7 @@ function NakijkPaneel({
             target="_blank"
             rel="noopener noreferrer"
             className="mt-3 flex items-center gap-2 px-3 py-2.5 transition-all hover:opacity-80"
-            style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}` }}
+            style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}
           >
             <ExternalLink size={13} color={T.blauw} style={{ flexShrink: 0 }} />
             <span className="min-w-0 truncate" style={{ ...body(11.5, T.blauw), textDecoration: "underline" }}>
@@ -2114,6 +2118,8 @@ function WachtrijKaart({
       style={{
         backgroundColor: actief ? T.navy : T.paper,
         border: `1px solid ${actief ? T.navy : T.line}`,
+        borderRadius: "var(--radius-card, 14px)",
+        overflow: "hidden",
         // Streepje links: in de wachtrij of er al een tekst ligt, in het archief of er
         // al gereageerd is. Met twintig in de rij wil je dat zien zonder te lezen.
         borderLeft: `3px solid ${

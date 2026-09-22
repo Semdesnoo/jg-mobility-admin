@@ -1512,6 +1512,7 @@ export default function InruilContent({
                             backgroundColor: "rgba(0,19,55,0.02)",
                             border: `1px solid ${T.line}`,
                             borderLeft: `3px solid ${bijMax.nettoMarge < 0 ? T.rood : T.groen}`,
+                            borderRadius: "var(--radius-control, 10px)",
                           }}
                         >
                           <p style={{ ...micro(), fontSize: 9 }}>Houd je over aan zijn auto</p>
@@ -1532,6 +1533,7 @@ export default function InruilContent({
                             borderLeft: `3px solid ${
                               onzeWinst ? (totaalBijMax < 0 ? T.rood : T.navy) : T.line2
                             }`,
+                            borderRadius: "var(--radius-control, 10px)",
                           }}
                         >
                           <p style={{ ...micro(), fontSize: 9 }}>Op de hele ruil</p>

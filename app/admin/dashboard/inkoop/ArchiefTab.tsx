@@ -134,7 +134,7 @@ export default function ArchiefTab() {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center text-center py-20" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+      <div className="flex flex-col items-center justify-center text-center py-20" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-card, 14px)" }}>
         <Archive size={30} style={{ color: T.ink(0.15) }} />
         <p className="mt-3" style={{ fontFamily: T.play, fontWeight: 700, fontSize: 16, color: T.navy }}>Nog geen analyses bewaard</p>
         <p className="mt-1.5 max-w-md" style={body(12, T.ink(0.45))}>
@@ -160,7 +160,7 @@ export default function ArchiefTab() {
         const aantalTax = g.items.filter((i) => i.soort === "taxatie").length;
         const aantalMarkt = g.items.filter((i) => i.soort === "markt").length;
         return (
-          <div key={g.label} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+          <div key={g.label} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
             {/* Kwartaalkop */}
             <div className="px-4 md:px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: `1px solid ${T.line}`, backgroundColor: "rgba(0,19,55,0.02)" }}>
               <span style={{ fontFamily: T.play, fontWeight: 700, fontSize: 15, color: T.navy }}>{g.label}</span>
@@ -197,7 +197,7 @@ export default function ArchiefTab() {
                     {it.soort === "taxatie" ? (
                       <>
                         {BETROUWBAAR[it.betrouwbaarheid] && (
-                          <span className="px-2 py-1 flex-shrink-0" style={{ fontFamily: T.inter, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: BETROUWBAAR[it.betrouwbaarheid].kleur, backgroundColor: BETROUWBAAR[it.betrouwbaarheid].bg }}>
+                          <span className="px-2 py-1 flex-shrink-0" style={{ fontFamily: T.inter, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: BETROUWBAAR[it.betrouwbaarheid].kleur, backgroundColor: BETROUWBAAR[it.betrouwbaarheid].bg, borderRadius: "var(--radius-control, 10px)" }}>
                             {BETROUWBAAR[it.betrouwbaarheid].label}
                           </span>
                         )}
@@ -207,14 +207,14 @@ export default function ArchiefTab() {
                         </span>
                       </>
                     ) : (
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}` }}>
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}>
                         <Flame size={12} style={{ color: tempKleur(it.markt_temperatuur) }} />
                         <span style={{ fontFamily: T.play, fontWeight: 700, fontSize: 14, color: tempKleur(it.markt_temperatuur), fontVariantNumeric: "tabular-nums" }}>{it.markt_temperatuur}</span>
                         <span style={{ fontFamily: T.inter, fontSize: 9.5, color: T.ink(0.4) }}>/10 temp.</span>
                       </span>
                     )}
 
-                    <button type="button" onClick={() => verwijder(it)} aria-label="Verwijderen" className="px-2 py-1 transition-all hover:opacity-70 flex-shrink-0" style={{ border: `1px solid rgba(185,28,28,0.25)`, color: T.rood }}>
+                    <button type="button" onClick={() => verwijder(it)} aria-label="Verwijderen" className="px-2 py-1 transition-all hover:opacity-70 flex-shrink-0" style={{ border: `1px solid rgba(185,28,28,0.25)`, color: T.rood, borderRadius: "var(--radius-control, 10px)" }}>
                       <Trash2 size={11} />
                     </button>
                   </div>
@@ -258,14 +258,14 @@ function TaxatieDetail({ r }: { r: TaxatieRij }) {
           { l: "Advertenties gevonden", v: markt?.aantal_gevonden != null ? String(markt.aantal_gevonden) : "—" },
           { l: "Gebaseerd op", v: ber?.live == null ? "—" : ber.live ? "live advertenties" : "modelkennis" },
         ].map((c) => (
-          <div key={c.l} className="px-3 py-2" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+          <div key={c.l} className="px-3 py-2" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}>
             <p style={{ ...micro(T.ink(0.4)), fontSize: 8.5 }}>{c.l}</p>
             <p className="mt-1" style={{ fontFamily: T.inter, fontWeight: 700, fontSize: 12.5, color: T.navy }}>{c.v}</p>
           </div>
         ))}
       </div>
       {markt?.advies && (
-        <div className="mt-3 px-3.5 py-2.5" style={{ backgroundColor: T.tintBlauw, border: `1px solid rgba(29,78,216,0.2)` }}>
+        <div className="mt-3 px-3.5 py-2.5" style={{ backgroundColor: T.tintBlauw, border: `1px solid rgba(29,78,216,0.2)`, borderRadius: "var(--radius-control, 10px)" }}>
           <p style={{ ...micro(T.blauw), fontSize: 8.5 }}>Advies van de analyse</p>
           <p className="mt-1" style={body(12, T.ink(0.7))}>{markt.advies}</p>
         </div>
@@ -275,7 +275,7 @@ function TaxatieDetail({ r }: { r: TaxatieRij }) {
           <p style={{ ...micro(T.ink(0.4)), fontSize: 8.5 }} className="mb-1.5">Vergelijkbaar aanbod dat toen gevonden werd</p>
           <div className="flex flex-col gap-1">
             {markt!.vergelijkbare!.slice(0, 6).map((v, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+              <div key={i} className="flex items-center justify-between gap-3 px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}>
                 {/* Ook hier klikbaar: een bewaarde taxatie haal je er juist bij om na te
                     gaan waarop hij gebaseerd was, en dan wil je die advertenties zien. */}
                 {v.url ? (
@@ -309,7 +309,7 @@ function MarktDetail({ r }: { r: MarktRij }) {
   return (
     <div className="pt-3 flex flex-col gap-3">
       {samenvatting && (
-        <div className="px-3.5 py-2.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+        <div className="px-3.5 py-2.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}>
           <p style={{ ...micro(T.ink(0.4)), fontSize: 8.5 }}>Samenvatting · markttemperatuur {r.markt_temperatuur}/10</p>
           <p className="mt-1" style={body(12, T.ink(0.7))}>{samenvatting}</p>
         </div>
@@ -320,7 +320,7 @@ function MarktDetail({ r }: { r: MarktRij }) {
           <p style={{ ...micro(T.groen), fontSize: 8.5 }} className="mb-1.5">Hot modellen — inkoopkansen</p>
           <div className="flex flex-col gap-1">
             {o!.hot_modellen.slice(0, 6).map((h, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+              <div key={i} className="flex items-center justify-between gap-3 px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}>
                 <span className="min-w-0">
                   <span className="block truncate" style={{ fontFamily: T.inter, fontWeight: 700, fontSize: 11.5, color: T.navy }}>{[h.merk, h.model].filter(Boolean).join(" ")}</span>
                   <span className="block truncate" style={{ fontFamily: T.inter, fontSize: 10, color: T.ink(0.42) }}>{[h.segment, h.advies].filter(Boolean).join(" · ")}</span>
@@ -337,7 +337,7 @@ function MarktDetail({ r }: { r: MarktRij }) {
           <p style={{ ...micro(T.rood), fontSize: 8.5 }} className="mb-1.5">Te vermijden</p>
           <div className="flex flex-col gap-1">
             {o!.te_vermijden.slice(0, 6).map((v, i) => (
-              <div key={i} className="px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
+              <div key={i} className="px-3 py-1.5" style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}>
                 <span style={{ fontFamily: T.inter, fontSize: 11, color: T.ink(0.65) }}>
                   <strong style={{ color: T.navy }}>{[v.merk, v.model].filter(Boolean).join(" ")}</strong>{v.reden ? ` — ${v.reden}` : ""}
                 </span>

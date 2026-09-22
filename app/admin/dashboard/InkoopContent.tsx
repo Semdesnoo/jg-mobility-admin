@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Archive, Brain } from "lucide-react";
+import { Search, Archive } from "lucide-react";
 import { T, micro, num } from "./inkoop/ui";
 import type { InkoopDossier, PrestatiesData } from "./inkoop/types";
 import TaxatieTab from "./inkoop/TaxatieTab";
 import ArchiefTab from "./inkoop/ArchiefTab";
-import PrijsgeheugenTab from "./inkoop/PrijsgeheugenTab";
+// Prijsgeheugen is tijdelijk uitgezet — de gebruiker wil hem niet meer zien
+// in het dashboard. De component + DB-laag blijven bestaan voor het geval de
+// feature later terugkomt.
 
-type TabId = "taxatie" | "archief" | "prijsgeheugen";
+type TabId = "taxatie" | "archief";
 
 const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[] = [
   { id: "taxatie", label: "Taxatietool", Icon: Search, context: "Waardebepaling aan de stoeprand" },
   { id: "archief", label: "Archief", Icon: Archive, context: "Bewaarde analyses per kwartaal" },
-  { id: "prijsgeheugen", label: "Prijsgeheugen", Icon: Brain, context: "Wat auto's in het echt deden" },
 ];
 
 export default function InkoopContent({
@@ -142,7 +143,6 @@ export default function InkoopContent({
           />
         )}
         {tab === "archief" && <ArchiefTab />}
-        {tab === "prijsgeheugen" && <PrijsgeheugenTab />}
       </div>
     </div>
   );

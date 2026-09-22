@@ -202,7 +202,7 @@ function Kaart({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)" }}>
+    <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
       <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
         {Icon && (
           <div className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, backgroundColor: "rgba(29,78,216,0.1)", borderRadius: 7 }}>
@@ -320,7 +320,7 @@ export default function StatistiekenContent() {
               <>
                 {/* Hoofdcijfer + context ernaast */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="lg:col-span-1 p-5 sm:p-6" style={{ backgroundColor: "#001337" }}>
+                  <div className="lg:col-span-1 p-5 sm:p-6" style={{ backgroundColor: "#001337", borderRadius: "var(--radius-card, 14px)" }}>
                     <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
                       Omzet dit jaar
                     </p>
@@ -331,7 +331,7 @@ export default function StatistiekenContent() {
                       {fmtEur(stats.omzetDezeMaand)} deze maand · {stats.betaaldeFacturen} betaalde facturen
                     </p>
                   </div>
-                  <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
+                  <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 divide-x overflow-hidden" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)" }}>
                     <Cijfer label="Verkocht totaal" waarde={stats.totaalVerkocht} sub={`${stats.verkochtDitJaar} dit jaar`} />
                     <Cijfer label="Deze maand" waarde={stats.verkochtDezeMaand} sub="auto's verkocht" />
                     <Cijfer label="Gem. verkoopprijs" waarde={stats.gemVerkoopprijs > 0 ? fmtEur(stats.gemVerkoopprijs) : "—"} sub="per auto" />
@@ -357,7 +357,7 @@ export default function StatistiekenContent() {
             {/* ══ Voorraad ══ */}
             {blad === "voorraad" && (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-4 divide-x" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)" }}>
+                <div className="grid grid-cols-2 md:grid-cols-4 divide-x overflow-hidden" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", boxShadow: "0 1px 3px rgba(0,19,55,0.05)", borderColor: "rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)" }}>
                   <Cijfer label="Op voorraad" waarde={stats.inVoorraad} sub={stats.gereserveerd > 0 ? `+ ${stats.gereserveerd} gereserveerd` : "beschikbaar"} />
                   <Cijfer label="Voorraadwaarde" waarde={fmtEur(stats.voorraadwaarde)} sub={`gem. ${fmtEur(stats.gemVraagprijs)}`} />
                   <Cijfer label="Staat gemiddeld" waarde={stats.gemStandtijdVoorraad != null ? `${stats.gemStandtijdVoorraad} dgn` : "—"} sub="in de showroom" />

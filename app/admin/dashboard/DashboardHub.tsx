@@ -4640,7 +4640,7 @@ function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
                     className="flex items-center gap-4 mb-5 p-4"
                     style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)" }}
                   >
-                    <div className="relative flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ width: 96, height: 72, backgroundColor: "#001337", borderRadius: 9 }}>
+                    <div className="relative flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ width: 96, height: 72, backgroundColor: "#001337", borderRadius: "var(--radius-control, 10px)" }}>
                       {detailFoto ? (
                         <Image src={detailFoto} alt="" fill sizes="96px" className="object-cover" />
                       ) : (
@@ -4664,7 +4664,7 @@ function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
                 {/* Invoer */}
                 <div className="flex flex-col gap-4 lg:flex-[3] min-w-0">
                   {/* Auto naam */}
-                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
                     <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
                       <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Auto</p>
                     </div>
@@ -4681,7 +4681,7 @@ function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
                   </div>
 
                   {/* Inkoop */}
-                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
                     <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
                       <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Inkoop</p>
                     </div>
@@ -4712,7 +4712,7 @@ function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
                   </div>
 
                   {/* Kosten */}
-                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
                     <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
                       <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Extra kosten</p>
                     </div>
@@ -4739,7 +4739,7 @@ function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
                   </div>
 
                   {/* Verkoopprijs */}
-                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
                     <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
                       <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Gewenste verkoopprijs</p>
                     </div>
@@ -4757,7 +4757,7 @@ function CalculatorContent({ autos = [], focus, onFocusGebruikt }: {
                 {/* Resultaten */}
                 <div className="lg:w-[320px] flex flex-col gap-3">
                   {/* Kostprijsoverzicht */}
-                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)" }}>
+                  <div style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
                     <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(0,19,55,0.06)", backgroundColor: "rgba(0,19,55,0.02)" }}>
                       <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>Kostprijsoverzicht</p>
                     </div>
