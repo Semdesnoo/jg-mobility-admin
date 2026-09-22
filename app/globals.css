@@ -99,3 +99,69 @@ select,
 textarea {
   border-radius: var(--radius-control);
 }
+
+/* ── Klikbare tab-swatches ──
+   Sectietabs zijn echte knoppen: een duidelijke navy omlijning, een wit vlak en
+   een volledig ingevulde actieve staat. Zo is meteen zichtbaar waar je kunt klikken. */
+.jg-tab-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 34px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 19, 55, 0.26) !important;
+  border-radius: var(--radius-control) !important;
+  background-color: #ffffff !important;
+  color: rgba(0, 19, 55, 0.58) !important;
+  font-family: var(--font-inter);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 19, 55, 0.04);
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.jg-tab-swatch:hover {
+  border-color: #001337 !important;
+  background-color: rgba(0, 19, 55, 0.025) !important;
+  color: #001337 !important;
+  box-shadow: 0 3px 8px rgba(0, 19, 55, 0.08);
+  transform: translateY(-1px);
+}
+
+.jg-tab-swatch:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.jg-tab-swatch[data-active="true"] {
+  border-color: #001337 !important;
+  background-color: #001337 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(0, 19, 55, 0.18);
+}
+
+.jg-tab-swatch[data-active="true"] svg {
+  opacity: 1 !important;
+}
+
+.jg-tab-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background-color: rgba(0, 19, 55, 0.07);
+  color: rgba(0, 19, 55, 0.58);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.jg-tab-swatch[data-active="true"] .jg-tab-count {
+  background-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}

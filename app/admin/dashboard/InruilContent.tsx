@@ -729,7 +729,7 @@ export default function InruilContent({
 
       {/* ── Rekenen of terugkijken ── */}
       <nav
-        className="sticky z-30 flex items-center px-2 md:px-4 xl:px-6 overflow-x-auto"
+        className="sticky z-30 flex items-center gap-2 px-2 md:px-4 xl:px-6 overflow-x-auto"
         style={{ top: 56, height: 46, backgroundColor: T.paper, borderBottom: `1px solid ${T.line2}` }}
       >
         {(
@@ -744,22 +744,12 @@ export default function InruilContent({
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className="flex items-center gap-2 px-3 md:px-4 transition-all flex-shrink-0"
-              style={{
-                height: 45,
-                fontFamily: T.inter,
-                fontSize: 12.5,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                color: actief ? T.navy : T.ink(0.38),
-                borderBottom: `2px solid ${actief ? T.navy : "transparent"}`,
-              }}
+              className="jg-tab-swatch"
+              data-active={actief}
             >
-              <Icon size={13} />
+              <Icon size={13} style={{ opacity: actief ? 1 : 0.55 }} />
               {label}
-              {teller != null && teller > 0 && (
-                <span style={{ ...micro(actief ? T.ink(0.45) : T.ink(0.28)), fontSize: 9 }}>{teller}</span>
-              )}
+              {teller != null && teller > 0 && <span className="jg-tab-count">{teller}</span>}
             </button>
           );
         })}

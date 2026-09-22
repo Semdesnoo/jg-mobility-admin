@@ -248,22 +248,22 @@ export default function GmailWidget() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
-        {(["inbox", "cosignatie"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="px-5 py-3 text-xs font-semibold tracking-wide uppercase transition-all"
-            style={{
-              fontFamily: "var(--font-inter)",
-              color: tab === t ? "#001337" : "rgba(0,19,55,0.4)",
-              borderBottom: tab === t ? "2px solid #001337" : "2px solid transparent",
-            }}
-          >
-            {t === "inbox" ? "Inbox" : "Cosignaties"}
-          </button>
-        ))}
+      {/* Tabs als duidelijke, klikbare swatches in plaats van alleen een onderstreping. */}
+      <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid rgba(0,19,55,0.07)" }}>
+        {(["inbox", "cosignatie"] as const).map((t) => {
+          const actief = tab === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className="jg-tab-swatch uppercase tracking-wide"
+              data-active={actief}
+            >
+              {t === "inbox" ? "Inbox" : "Cosignaties"}
+            </button>
+          );
+        })}
       </div>
 
       {/* Berichten */}

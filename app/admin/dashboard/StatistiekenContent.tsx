@@ -285,19 +285,16 @@ export default function StatistiekenContent() {
           Overzicht van je bedrijfsprestaties
         </p>
         {/* Bladen — houdt de pagina kort in plaats van één lange kolom */}
-        <div className="flex flex-wrap items-center gap-1 mt-3">
+        <div className="flex flex-wrap items-center gap-2 mt-3 pb-3">
           {BLADEN.map((b) => {
             const actief = blad === b.key;
             return (
               <button
                 key={b.key}
+                type="button"
                 onClick={() => setBlad(b.key)}
-                className="px-3 py-2 text-xs font-semibold transition-all"
-                style={{
-                  fontFamily: "var(--font-inter)",
-                  color: actief ? "#001337" : "rgba(0,19,55,0.4)",
-                  borderBottom: `2px solid ${actief ? "#001337" : "transparent"}`,
-                }}
+                className="jg-tab-swatch"
+                data-active={actief}
               >
                 {b.label}
               </button>
