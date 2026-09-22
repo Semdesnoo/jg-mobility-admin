@@ -94,17 +94,9 @@ export function bouwTaxatieMail({
 <html lang="nl">
   <body style="margin:0;background:#f3f5f8;font-family:Arial,sans-serif;color:#001337">
     <div style="max-width:640px;margin:0 auto;padding:24px 12px">
-      <div style="padding:0;line-height:0;font-size:0;text-align:center">
-        ${(() => {
-          const src = logoDataUrl();
-          // Volledige-breedte header-banner (2000×423 → bij ~600px breed ~127px hoog).
-          return src
-            ? `<img src="${src}" alt="JG Mobility" width="600" height="127" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;mso-line-height-rule:exactly" />`
-            : "";
-        })()}
-      </div>
-      <div style="background:#001337;padding:18px 30px 22px;text-align:center;border-radius:0">
-        <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.58)">Uw taxatie</div>
+      <div style="background:#001337;padding:32px 30px;border-radius:0;text-align:center">
+        <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:#ffffff">JG Mobility</div>
+        <div style="margin-top:7px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.58)">Uw taxatie</div>
       </div>
       <div style="background:#ffffff;padding:30px;border-radius:0;box-shadow:0 10px 30px rgba(0,19,55,.08)">
         <div style="margin-bottom:22px;padding:14px 16px;background:#f7f9fc;border-left:3px solid #001337;border-radius:0">

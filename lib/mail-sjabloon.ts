@@ -116,24 +116,10 @@ function romp(opts: {
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;border:1px solid ${KLEUR.lijn};">
 
         <tr>
-          <td align="center" style="padding:0;line-height:0;font-size:0">
-            ${(() => {
-              const src = logoDataUrl();
-              // Volledige-breedte header-banner. Aspect-ratio 2000×423 → bij 600px
-              // breed wordt 'ie ~127px hoog. Geen padding/achtergrond om de banner —
-              // de PNG IS het design. line-height:0 voorkomt een wit randje onder
-              // de image in sommige Outlook-versies.
-              return src
-                ? `<img src="${src}" alt="${veilig(BEDRIJF.naam)}" width="600" height="127" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;mso-line-height-rule:exactly" />`
-                : "";
-            })()}
-          </td>
-        </tr>
-
-        <tr>
-          <td align="center" style="background-color:${KLEUR.navy};padding:18px 30px 22px;border-bottom:0">
+          <td align="center" style="background-color:${KLEUR.navy};padding:32px 30px;">
+            <div style="font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:bold;color:#ffffff;letter-spacing:1px;">${BEDRIJF.naam}</div>
             ${opts.kopExtra ?? ""}
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);">${veilig(opts.titel)}</div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,255,255,0.55);padding-top:5px;">${veilig(opts.titel)}</div>
           </td>
         </tr>
 
