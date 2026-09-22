@@ -23,7 +23,7 @@
 
 // Verandert bij elke nieuwe versie zodat oude caches worden opgeruimd.
 // v11: taxatieaanvragen, calculator-koppeling en gecontroleerde antwoordmail.
-const CACHE = "jgm-beheer-v20";
+const CACHE = "jgm-beheer-v21";
 
 // Bestanden onder /_next/static/ krijgen van Next een unieke naam per build. Die kunnen
 // veilig uit de cache: bij een nieuwe versie horen er nieuwe namen bij.

@@ -19,6 +19,7 @@ import {
   RefreshCw,
   ScrollText,
   ChevronRight,
+  X,
 } from "lucide-react";
 import VerkopersCriteria, { type Criteria as ZoekCriteria } from "./VerkopersCriteria";
 import { useAiTaak } from "./AiTaken";
@@ -97,10 +98,13 @@ type Blokkade = { waarde: string; soort: string; reden: string; aangemaakt: stri
 type TabId = "zoeken" | "leads" | "nakijken" | "blokkade";
 
 const TABS: { id: TabId; label: string; Icon: typeof Radar; context: string }[] = [
-  { id: "zoeken", label: "Radar", Icon: Radar, context: "Particuliere verkopers zoeken" },
-  { id: "leads", label: "Verkopers", Icon: Users, context: "Bekijk de advertentie, gooi weg of zet klaar" },
-  { id: "nakijken", label: "Nakijken", Icon: ScrollText, context: "Bericht schrijven en versturen" },
-  { id: "blokkade", label: "Blokkadelijst", Icon: ShieldOff, context: "Nooit meer benaderen" },
+  // Radar staat vooraan: zoek particulier aanbod. Verkopers toont wat eruit
+  // kwam. Berichten is waar de JA's belanden — klaargezet, handmatig te sturen.
+  // Blokkadelijst is voor de NEE's zonder uitnodiging: komt nooit meer terug.
+  { id: "zoeken", label: "Radar", Icon: Radar, context: "Zoek particuliere verkopers" },
+  { id: "leads", label: "Verkopers", Icon: Users, context: "Beoordeel met JA of NEE" },
+  { id: "nakijken", label: "Berichten", Icon: ScrollText, context: "Klaargezet om te versturen" },
+  { id: "blokkade", label: "Blokkadelijst", Icon: ShieldOff, context: "Komt nooit meer terug" },
 ];
 
 const STATUS_LABEL: Record<Status, { label: string; kleur: string }> = {
@@ -479,13 +483,11 @@ function korteTitel(lead: Lead): string {
  */
 const FILTER_VELD = { ...inputStijl, padding: "7px 10px", fontSize: 12.5 } as const;
 
-const FILTERS: { id: "alle" | Status; label: string }[] = [
-  { id: "alle", label: "Alles" },
-  { id: "nieuw", label: "Nieuw" },
-  { id: "verstuurd", label: "Verstuurd" },
-  { id: "gereageerd", label: "Reactie" },
-  { id: "cosignatie", label: "Consignatie" },
-  { id: "afgewezen", label: "Opzij gezet" },
+// Twee keuzes op het Verkopers-tabblad: beoordeel de binnenkomers of kijk terug.
+// Alles wat je op JA zet (status: goedgekeurd) verdwijnt hier en komt op Berichten.
+const FILTERS: { id: "beoordeel" | "archief"; label: string }[] = [
+  { id: "beoordeel", label: "Te beoordelen" },
+  { id: "archief", label: "Archief" },
 ];
 
 function LeadsTab({
@@ -504,7 +506,7 @@ function LeadsTab({
   aantalKlaar: number;
 }) {
   const { vraag } = useDialoog();
-  const [filter, setFilter] = useState<"alle" | Status>("alle");
+  const [filter, setFilter] = useState<"beoordeel" | "archief">("beoordeel");
   // Filters op de lijst zelf. Met tweehonderd kaarten is scrollen geen doen.
   const [zoekterm, setZoekterm] = useState("");
   const [merkFilter, setMerkFilter] = useState("");
@@ -641,7 +643,10 @@ function LeadsTab({
     const max = Number(prijsTot) || 0;
 
     const uit = teBeoordelen.filter((l) => {
-      if (filter !== "alle" && l.status !== filter) return false;
+      // Beoordeel = alles wat nog beoordeeld moet worden (nieuw). Archief = erna,
+      // behalve goedgekeurd want die zit op Berichten.
+      if (filter === "beoordeel" && l.status !== "nieuw") return false;
+      if (filter === "archief" && !["verstuurd", "gereageerd", "cosignatie", "afgewezen"].includes(l.status)) return false;
       if (merkFilter && l.merk !== merkFilter) return false;
       if (bronFilter && l.bron !== bronFilter) return false;
       if (min > 0 && (l.vraagprijs === 0 || l.vraagprijs < min)) return false;
@@ -812,7 +817,9 @@ function LeadsTab({
       <div className="flex flex-wrap gap-1.5">
         {FILTERS.map((f) => {
           const aantal =
-            f.id === "alle" ? teBeoordelen.length : teBeoordelen.filter((l) => l.status === f.id).length;
+            f.id === "beoordeel"
+              ? teBeoordelen.filter((l) => l.status === "nieuw").length
+              : teBeoordelen.filter((l) => l.status !== "nieuw" && l.status !== "goedgekeurd").length;
           return (
             <Chip key={f.id} active={filter === f.id} onClick={() => setFilter(f.id)}>
               {f.label} {aantal > 0 && <span style={{ opacity: 0.6 }}>{aantal}</span>}
@@ -1144,10 +1151,6 @@ function LeadKaart({
     lead.status === "gereageerd" ||
     lead.status === "cosignatie" ||
     lead.status === "afgewezen";
-  // Nooit uitgelezen: dan kennen we alleen wat op de overzichtspagina stond, geen
-  // bouwjaar en geen kilometerstand. Aan het bouwjaar afmeten en niet aan de
-  // particulier-score: AutoScout24-vondsten krijgen die score al bij het ophalen mee.
-  const ongelezen = !lead.bouwjaar;
 
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -1215,77 +1218,82 @@ function LeadKaart({
         </a>
       )}
 
+      {/* Eén rij met twee duidelijke knoppen: NEE (weg, klaar) en JA (klaar om te
+          mailen). Open de advertentie staat onderaan — buiten de knoppen, niet ernaast
+          om de keuze niet te verdringen. Bij afgeronde leads toont de kaart alleen
+          een knop om naar Berichten te springen of de lead terug te halen. */}
       <div
-        className="flex items-center gap-2 px-3 py-2"
+        className="flex items-stretch gap-2 px-3 py-2.5"
         style={{ borderTop: `1px solid ${T.line}`, backgroundColor: "rgba(0,19,55,0.015)" }}
       >
-        <span style={{ ...micro(ongelezen ? T.amber : T.ink(0.3)), fontSize: 8.5 }}>
-          {ongelezen ? "nog niet uitgelezen" : `Particulier ${lead.particulier_score}/10`}
-        </span>
-        <span className="ml-auto flex items-center gap-1.5">
-          <RijKnop
-            titel="Weggooien en blokkeren"
-            kleur={T.rood}
-            bezig={bezig === "weg"}
+        {lead.status === "afgewezen" ? (
+          <button
+            type="button"
+            disabled={bezig === "terug"}
             onClick={(e) => {
               stop(e);
-              onWeg();
+              onTerug();
             }}
+            className="flex-1 flex items-center justify-center gap-1.5 transition-all hover:opacity-80 disabled:opacity-40"
+            style={{ backgroundColor: T.amber, color: "#ffffff", padding: "8px 12px", borderRadius: "var(--radius-control, 10px)", fontFamily: T.inter, fontSize: 12, fontWeight: 700 }}
           >
-            <Trash2 size={13} />
-          </RijKnop>
-          {!afgerond && ongelezen && (
-            <RijKnop
-              titel="Advertentie uitlezen"
-              kleur={T.amber}
-              bezig={bezig === "lezen"}
+            <RefreshCw size={12} /> Terug naar lijst
+          </button>
+        ) : afgerond ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              stop(e);
+              onOpenen();
+            }}
+            className="flex-1 flex items-center justify-center gap-1.5 transition-all hover:opacity-80"
+            style={{ backgroundColor: T.navy, color: "#ffffff", padding: "8px 12px", borderRadius: "var(--radius-control, 10px)", fontFamily: T.inter, fontSize: 12, fontWeight: 700 }}
+          >
+            Naar berichten <ChevronRight size={13} />
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={bezig === "weg"}
               onClick={(e) => {
                 stop(e);
-                onLezen();
+                onWeg();
               }}
+              className="flex-1 flex items-center justify-center gap-1.5 transition-all hover:opacity-80 disabled:opacity-40"
+              style={{ backgroundColor: T.paper, color: T.rood, border: `1px solid rgba(185,28,28,0.35)`, padding: "8px 12px", borderRadius: "var(--radius-control, 10px)", fontFamily: T.inter, fontSize: 12, fontWeight: 700 }}
             >
-              <RefreshCw size={13} />
-            </RijKnop>
-          )}
-          {lead.status === "afgewezen" ? (
-            <RijKnop
-              titel="Toch een particulier? Zet hem terug in de lijst"
-              kleur={T.amber}
-              bezig={bezig === "terug"}
-              onClick={(e) => {
-                stop(e);
-                onTerug();
-              }}
-            >
-              <RefreshCw size={13} />
-            </RijKnop>
-          ) : afgerond ? (
-            <RijKnop
-              titel="Bekijk op Nakijken"
-              kleur={T.navy}
-              bezig={false}
-              onClick={(e) => {
-                stop(e);
-                onOpenen();
-              }}
-            >
-              <ChevronRight size={14} />
-            </RijKnop>
-          ) : (
-            <RijKnop
-              titel="Klaarzetten om te mailen"
-              kleur={T.groen}
-              bezig={bezig === "klaar"}
+              <X size={14} /> NEE
+            </button>
+            <button
+              type="button"
+              disabled={bezig === "klaar"}
               onClick={(e) => {
                 stop(e);
                 onKlaar();
               }}
+              className="flex-1 flex items-center justify-center gap-1.5 transition-all hover:opacity-80 disabled:opacity-40"
+              style={{ backgroundColor: T.groen, color: "#ffffff", padding: "8px 12px", borderRadius: "var(--radius-control, 10px)", fontFamily: T.inter, fontSize: 12, fontWeight: 700 }}
             >
-              <Check size={14} />
-            </RijKnop>
-          )}
-        </span>
+              {bezig === "klaar" ? <Spinner size={12} /> : <Check size={14} />} JA
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Advertentielink onder de JA/NEE-knoppen: hoeft geen strijd aan te gaan
+          met de keuze. Op een eigen rijtje, klein, niet mis te klikken. */}
+      {lead.advertentie_url && (
+        <a
+          href={lead.advertentie_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 transition-all hover:opacity-70"
+          style={{ borderTop: `1px solid ${T.line}`, padding: "7px 12px", color: T.ink(0.5), fontFamily: T.inter, fontSize: 11 }}
+        >
+          <ExternalLink size={11} /> Open de advertentie
+        </a>
+      )}
     </div>
   );
 }
