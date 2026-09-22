@@ -1,6 +1,49 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
-const sql = neon(process.env.DATABASE_URL!);
+// Lazy database-client. De Neon client wordt pas aangemaakt bij het eerste
+// SQL-statement, zodat `next build` op Vercel niet faalt als DATABASE_URL niet
+// in de build-omgeving staat (Vercel injecteert env vars pas bij runtime).
+//
+// Tijdens de build probeert Next.js ook statische routes als /sitemap.xml te
+// collecten. Als de import-keten van zo'n route via deze module loopt, werd de
+// `neon()`-call eerder direct op module-load gedaan en crashte de build met
+// "No database connection string was provided".
+type Sql = NeonQueryFunction<false, false>;
+let _sql: Sql | null = null;
+function getSql(): Sql {
+  if (_sql) return _sql;
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL is niet gezet. Voeg de Neon connection string toe aan " +
+        "Vercel → Project → Settings → Environment Variables."
+    );
+  }
+  _sql = neon(url);
+  return _sql;
+}
+
+// Proxy zodat `sql\`...\`` identiek blijft werken als voorheen. De Neon client
+// is een aanroepbare tagged-template-functie met extra methodes (transaction,
+// etc.). We geven elke property door aan de onderliggende client zodat het
+// type-signature transparant blijft.
+const sql = new Proxy({} as Sql, {
+  get(_target, prop, receiver) {
+    const real = getSql() as unknown as Record<string | symbol, unknown>;
+    const value = real[prop];
+    if (typeof value === "function") {
+      return function (this: unknown, ...args: unknown[]) {
+        return (value as (...a: unknown[]) => unknown).apply(real, args);
+      };
+    }
+    return value;
+  },
+  apply(_target, _thisArg, args) {
+    // sql`SELECT ...` — tagged template literal call
+    const real = getSql() as unknown as (...a: unknown[]) => unknown;
+    return Reflect.apply(real, real, args);
+  },
+});
 
 export default sql;
 
