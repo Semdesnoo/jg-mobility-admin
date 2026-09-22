@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send, Archive, Undo2, X } from "lucide-react";
+import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send, Archive, Undo2, X, PanelRightOpen } from "lucide-react";
 import {
   T, micro, body, klein, fmt, Panel, Btn, Field, inputStijl, Chip, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -705,8 +705,20 @@ export default function InkoopverklaringContent() {
                           {v.datum} · {v.betaalwijze === "contant" ? "Contant" : v.betaalwijze === "inruil" ? "Inruil" : "Bank"}
                         </p>
                       </div>
-                      <span className="text-xs ml-2 flex-shrink-0" style={{ color: T.ink(0.3) }}>
-                        {drawerId === v.id ? "▲" : "▶"}
+                      <span
+                        className="ml-2 flex-shrink-0 inline-flex items-center justify-center transition-all"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          color: drawerId === v.id ? T.paper : T.ink(0.4),
+                          backgroundColor: drawerId === v.id ? T.navy : T.wash,
+                          border: `1px solid ${drawerId === v.id ? T.navy : T.line}`,
+                          borderRadius: "var(--radius-control, 10px)",
+                        }}
+                        aria-hidden="true"
+                        title={drawerId === v.id ? "Detail sluiten" : "Detail openen in paneel"}
+                      >
+                        <PanelRightOpen size={14} />
                       </span>
                     </button>
                   </div>
@@ -763,6 +775,8 @@ function VerklaringDrawer({
           width: "min(70vw, 980px)",
           backgroundColor: T.paper, borderLeft: `1px solid ${T.line}`,
           boxShadow: "-16px 0 32px -8px rgba(0,19,55,0.18)",
+          borderRadius: "var(--radius-card, 14px) 0 0 var(--radius-card, 14px)",
+          overflow: "hidden",
           zIndex: 51, display: "flex", flexDirection: "column",
         }}
       >

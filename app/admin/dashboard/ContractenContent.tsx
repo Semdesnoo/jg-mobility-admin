@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { FileSignature, Printer, Download, Search, Check, AlertTriangle, Send, X, Pencil, Trash2 } from "lucide-react";
+import { FileSignature, Printer, Download, Search, Check, AlertTriangle, Send, X, Pencil, Trash2, PanelRightOpen, FileText } from "lucide-react";
 import {
   T, micro, klein, Field, inputStijl, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -345,7 +345,8 @@ export default function ContractenContent() {
         <p className="hidden md:block min-w-0 truncate" style={micro(T.ink(0.35))}>
           De afspraken op papier voor auto&apos;s die je voor een ander verkoopt
         </p>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          <FileText size={12} style={{ color: T.ink(0.3) }} />
           <span style={klein()}>{zichtbaar.length} consignatie{zichtbaar.length === 1 ? "" : "s"}</span>
         </div>
       </header>
@@ -425,8 +426,20 @@ export default function ContractenContent() {
                         {feeTekst}
                       </p>
                     </div>
-                    <span className="text-xs ml-2 flex-shrink-0" style={{ color: T.ink(0.3) }}>
-                      {drawerId === c.id ? "▲" : "▶"}
+                    <span
+                      className="ml-2 flex-shrink-0 inline-flex items-center justify-center transition-all"
+                      style={{
+                        width: 30,
+                        height: 30,
+                        color: drawerId === c.id ? T.paper : T.ink(0.4),
+                        backgroundColor: drawerId === c.id ? T.navy : T.wash,
+                        border: `1px solid ${drawerId === c.id ? T.navy : T.line}`,
+                        borderRadius: "var(--radius-control, 10px)",
+                      }}
+                      aria-hidden="true"
+                      title={drawerId === c.id ? "Detail sluiten" : "Detail openen in paneel"}
+                    >
+                      <PanelRightOpen size={14} />
                     </span>
                   </button>
                 </div>
@@ -490,9 +503,11 @@ function ContractDrawer({
           backgroundColor: T.paper,
           borderLeft: `1px solid ${T.line}`,
           boxShadow: "-16px 0 32px -8px rgba(0,19,55,0.18)",
+          borderRadius: "var(--radius-card, 14px) 0 0 var(--radius-card, 14px)",
           zIndex: 51,
           display: "flex",
           flexDirection: "column",
+          overflow: "hidden",
         }}
       >
         {/* Cover: links merk+model+kenteken+klant+badge, rechts prijs+fee. */}
