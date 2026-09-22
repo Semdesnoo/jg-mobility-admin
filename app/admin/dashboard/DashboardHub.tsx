@@ -48,6 +48,7 @@ import {
   MailCheck,
   Star,
   StickyNote,
+  BadgeEuro,
 } from "lucide-react";
 import DeleteButton from "./DeleteButton";
 import Dropdown from "./Dropdown";
@@ -64,6 +65,7 @@ import InkoopFacturenContent from "./InkoopFacturenContent";
 import SocialContent from "./SocialContent";
 import VerkopersContent from "./VerkopersContent";
 import AanvragenContent from "./AanvragenContent";
+import TaxatieAanvragenContent from "./TaxatieAanvragenContent";
 import ContractenContent from "./ContractenContent";
 import InkoopverklaringContent from "./InkoopverklaringContent";
 import FotosOpruimen from "./FotosOpruimen";
@@ -72,7 +74,7 @@ import GmailWidget from "./GmailWidget";
 import { useDialoog } from "./Dialoog";
 import { prijsTekst } from "@/lib/prijs";
 
-type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "inruil" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "inkoopverklaring" | "molibox" | "email" | "verkopers" | "aanvragen" | "contracten";
+type Tab = "dashboard" | "voorraad" | "cosignatie" | "social" | "facturen" | "calculator" | "klanten" | "afspraken" | "inkoop" | "inruil" | "statistieken" | "merkanalyse" | "boekhouding" | "inkoopfacturen" | "inkoopverklaring" | "molibox" | "email" | "verkopers" | "aanvragen" | "taxatieaanvragen" | "contracten";
 
 type Auto = {
   id: number;
@@ -132,8 +134,9 @@ const NAV_GROUPS: { title: string; icon: React.ComponentType<IconProps>; items: 
     items: [
       { id: "voorraad",   label: "Auto Voorraad",    icon: Car },
       { id: "calculator", label: "Winst per auto",   icon: Calculator },
-      { id: "aanvragen",  label: "Aanvragen",        icon: Inbox },
-      { id: "email",      label: "E-mail",           icon: Mail },
+      { id: "aanvragen",           label: "Aanvragen",          icon: Inbox },
+      { id: "taxatieaanvragen",   label: "Taxatieaanvragen",  icon: BadgeEuro },
+      { id: "email",              label: "E-mail",              icon: Mail },
       { id: "inkoop",     label: "Inkoop & Taxatie", icon: TrendingDown },
       { id: "inruil",     label: "Inruil",           icon: ArrowLeftRight },
       { id: "cosignatie", label: "Cosignatie",       icon: Handshake },
@@ -500,8 +503,10 @@ export default function DashboardHub() {
     autoId?: number;
     /** Vanuit een aanvraag doortaxeren: de taxatietool begint dan met dit kenteken. */
     kenteken?: string;
+    aanvraagId?: string;
+    km?: string;
   } | null>(null);
-  const gaNaarTab = (doel: Tab, focus?: { dossierId?: number; autoId?: number; kenteken?: string }) => {
+  const gaNaarTab = (doel: Tab, focus?: { dossierId?: number; autoId?: number; kenteken?: string; aanvraagId?: string; km?: string }) => {
     setTab(doel);
     setNavFocus(focus ?? null);
     setMenuOpen(false);
@@ -651,7 +656,14 @@ export default function DashboardHub() {
         {tab === "klanten" && <KlantenContent />}
         {tab === "afspraken" && <AfsprakenContent />}
         {tab === "inkoop" && (
-          <InkoopContent kenteken={navFocus?.kenteken} />
+          <InkoopContent
+            kenteken={navFocus?.kenteken}
+            km={navFocus?.km}
+            aanvraagId={navFocus?.aanvraagId}
+            onTaxatieGekoppeld={(aanvraagId) =>
+              gaNaarTab("taxatieaanvragen", { aanvraagId })
+            }
+          />
         )}
         {tab === "inruil" && <InruilContent autos={autos} focus={navFocus} />}
         {tab === "contracten" && <ContractenContent />}
@@ -660,6 +672,14 @@ export default function DashboardHub() {
             onNaarTaxatie={(kenteken) => gaNaarTab("inkoop", { kenteken })}
             onNaarInruil={(kenteken, autoId) =>
               gaNaarTab("inruil", { kenteken, autoId: autoId ?? undefined })
+            }
+          />
+        )}
+        {tab === "taxatieaanvragen" && (
+          <TaxatieAanvragenContent
+            focusId={navFocus?.aanvraagId}
+            onOpenCalculator={({ id, kenteken, km }) =>
+              gaNaarTab("inkoop", { aanvraagId: id, kenteken, km })
             }
           />
         )}

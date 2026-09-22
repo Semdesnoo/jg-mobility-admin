@@ -126,7 +126,7 @@ export function Panel({
   return (
     <section
       className={`flex flex-col min-w-0 ${className}`}
-      style={{ backgroundColor: donker ? T.navy : T.paper, border: `1px solid ${rand}`, ...style }}
+      style={{ backgroundColor: donker ? T.navy : T.paper, border: `1px solid ${rand}`, borderRadius: "var(--radius-card, 14px)", overflow: "hidden", ...style }}
     >
       {(title || actions) && (
         <header
@@ -203,6 +203,7 @@ export function Stat({
       style={{
         backgroundColor: donker ? "rgba(255,255,255,0.06)" : "rgba(0,19,55,0.02)",
         border: `1px solid ${donker ? "rgba(255,255,255,0.08)" : T.line}`,
+        borderRadius: "var(--radius-control, 10px)",
         textAlign: align,
       }}
     >
@@ -495,7 +496,7 @@ export function Empty({
   compact?: boolean;
 }) {
   return (
-    <div className={`flex flex-col items-center justify-center text-center ${compact ? "py-8" : "py-16"}`}>
+    <div className={`flex flex-col items-center justify-center text-center ${compact ? "py-8" : "py-16"}`} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-card, 14px)" }}>
       {icon}
       <p className="mt-3 mb-1.5" style={{ fontFamily: T.play, fontSize: compact ? 15 : 18, fontWeight: 700, color: T.navy }}>
         {title}
@@ -514,7 +515,7 @@ export function Foutmelding({ children }: { children: ReactNode }) {
   return (
     <div
       className="flex items-start gap-2.5 px-4 py-3"
-      style={{ backgroundColor: T.tintRood, border: "1px solid #fecaca" }}
+      style={{ backgroundColor: T.tintRood, border: "1px solid #fecaca", borderRadius: "var(--radius-control, 10px)" }}
     >
       <span style={{ color: T.rood, fontSize: 13, lineHeight: 1.3, flexShrink: 0 }}>●</span>
       <p style={{ fontFamily: T.inter, fontSize: 12.5, color: T.rood, lineHeight: 1.5 }}>{children}</p>
@@ -531,7 +532,7 @@ export function Waarschuwing({ children }: { children: ReactNode }) {
   return (
     <div
       className="flex items-start gap-2.5 px-4 py-3"
-      style={{ backgroundColor: T.tintAmber, border: "1px solid #fde68a" }}
+      style={{ backgroundColor: T.tintAmber, border: "1px solid #fde68a", borderRadius: "var(--radius-control, 10px)" }}
     >
       <span style={{ color: T.amber, fontSize: 13, lineHeight: 1.3, flexShrink: 0 }}>●</span>
       <p style={{ fontFamily: T.inter, fontSize: 12.5, color: T.amber, lineHeight: 1.5 }}>{children}</p>

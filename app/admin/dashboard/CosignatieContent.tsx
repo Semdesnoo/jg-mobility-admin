@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Plus, Handshake, ChevronDown, ChevronUp, Trash2, RefreshCw, Send,
   ExternalLink, FileSignature, Check, X, Mail, Phone, CircleCheck, Clock, Pencil,
+  Archive,
 } from "lucide-react";
 import { useDialoog } from "./Dialoog";
 import { toonBedrag, bedragUit, AUTO_ONDERGRENS } from "@/lib/bedrag";
@@ -50,6 +51,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
   geaccepteerd: { label: "Geaccepteerd", color: "#1d4ed8", bg: "#dbeafe" },
   lopend:       { label: "In verkoop",   color: "#15803d", bg: "#dcfce7" },
   afgewezen:    { label: "Afgewezen",    color: "#b91c1c", bg: "#fee2e2" },
+  archief:      { label: "Archief",      color: "#475569", bg: "#e2e8f0" },
 };
 // Volgorde van de stappenbalk boven aan een geopende aanvraag.
 const FLOW = ["nieuw", "geaccepteerd", "lopend"] as const;
@@ -358,7 +360,13 @@ export default function CosignatieContent() {
     if (openId === id) setOpenId(null);
   };
 
-  const gefilterd = filterStatus === "alle" ? aanvragen : aanvragen.filter((a) => a.status === filterStatus);
+  const gefilterd = (() => {
+    if (filterStatus === "alle") return aanvragen;
+    if (filterStatus === "archief") return aanvragen.filter((a) => a.status === "archief" || a.status === "afgewezen");
+    return aanvragen.filter((a) => a.status === filterStatus);
+  })();
+
+  const telArchief = aanvragen.filter((a) => a.status === "archief" || a.status === "afgewezen").length;
 
   const dagenSinds = (datum: string | null | undefined) => {
     if (!datum) return null;
@@ -404,11 +412,11 @@ export default function CosignatieContent() {
           { id: "nieuw", label: "Nieuw", Icon: Clock },
           { id: "geaccepteerd", label: "Geaccepteerd", Icon: FileSignature },
           { id: "lopend", label: "In verkoop", Icon: CircleCheck },
-          { id: "afgewezen", label: "Afgewezen", Icon: X },
+          { id: "archief", label: "Archief", Icon: Archive },
           { id: "alle", label: "Alle", Icon: Handshake },
         ] as const).map(({ id, label, Icon }) => {
           const actief = filterStatus === id;
-          const count = id === "alle" ? aanvragen.length : telPer(id);
+          const count = id === "alle" ? aanvragen.length : id === "archief" ? telArchief : telPer(id);
           return (
             <button
               key={id}
@@ -504,10 +512,10 @@ export default function CosignatieContent() {
           <div className="flex flex-col items-center justify-center py-24" style={{ backgroundColor: "#ffffff", border: "1px solid rgba(0,19,55,0.07)", borderRadius: "var(--radius-card)" }}>
             <Handshake size={38} style={{ color: "rgba(0,19,55,0.12)" }} />
             <p className="text-base font-bold mt-4" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
-              {filterStatus === "nieuw" ? "Geen nieuwe aanvragen" : filterStatus === "alle" ? "Nog geen aanvragen" : `Niets ${STATUS_LABELS[filterStatus]?.label.toLowerCase() ?? ""}`}
+              {filterStatus === "nieuw" ? "Geen nieuwe aanvragen" : filterStatus === "alle" ? "Nog geen aanvragen" : filterStatus === "archief" ? "Het archief is leeg" : `Niets ${STATUS_LABELS[filterStatus]?.label.toLowerCase() ?? ""}`}
             </p>
             <p className="text-sm mt-1" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
-              Voeg een klant toe of wacht op aanvragen via de website.
+              {filterStatus === "archief" ? "Hier komen aanvragen die je zelf archiveert of hebt afgewezen." : "Voeg een klant toe of wacht op aanvragen via de website."}
             </p>
           </div>
         ) : (
@@ -532,6 +540,7 @@ export default function CosignatieContent() {
                 contractLaden={!!contractLaden[a.id]}
                 ontbreekt={ontbreekt}
                 onVerwijder={verwijder}
+                vraag={vraag}
               />
             ))}
           </div>
@@ -544,7 +553,7 @@ export default function CosignatieContent() {
 // ══ Eén aanvraagkaart met de volledige flow ══════════════════════
 function Kaart({
   a, open, onToggle, nu, dagenSinds, onStatus, onPatch, onMarktprijzen, prijzenLaden,
-  onUpdate, updateLaden, updateOk, onDrukContract, onMailContract, contractLaden, ontbreekt, onVerwijder,
+  onUpdate, updateLaden, updateOk, onDrukContract, onMailContract, contractLaden, ontbreekt, onVerwijder, vraag,
 }: {
   a: Cosignatie;
   open: boolean;
@@ -562,6 +571,7 @@ function Kaart({
   onMailContract: (c: Cosignatie) => void;
   contractLaden: boolean;
   ontbreekt: (c: Cosignatie) => string[];
+  vraag: (q: { titel: string; tekst: string; bevestig: string }) => Promise<boolean>;
   onVerwijder: (id: string) => void;
 }) {
   const sl = STATUS_LABELS[a.status] ?? STATUS_LABELS.nieuw;
@@ -747,6 +757,36 @@ function Kaart({
                     </a>
                   )}
                 </div>
+
+                {/* Archief-acties: lopend kan naar archief, gearchiveerd kan terug naar actief. */}
+                {a.status === "lopend" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const door = await vraag({
+                        titel: "Naar het archief?",
+                        tekst: `Deze aanvraag verdwijnt uit de actieve tabs en is terug te vinden op de archief-tab. De data blijven bewaard; je kunt hem later altijd weer terughalen.`,
+                        bevestig: "Ja, archiveer",
+                      });
+                      if (door) onStatus(a.id, "archief");
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5"
+                    style={{ border: "1px solid rgba(71,85,105,0.3)", color: "#475569", backgroundColor: "#f1f5f9", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}
+                  >
+                    <Archive size={13} /> Naar archief
+                  </button>
+                )}
+                {a.status === "archief" && (
+                  <button
+                    type="button"
+                    onClick={() => onStatus(a.id, "lopend")}
+                    className="inline-flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5"
+                    style={{ border: "1px solid rgba(21,128,61,0.3)", color: "#15803d", backgroundColor: "#f0fdf4", fontFamily: "var(--font-inter)", borderRadius: "var(--radius-control)" }}
+                  >
+                    <CircleCheck size={13} /> Terug naar in verkoop
+                  </button>
+                )}
+
                 <button type="button" onClick={() => onVerwijder(a.id)} className="text-xs py-1.5 transition-all hover:opacity-70 text-center" style={{ color: "#b91c1c", fontFamily: "var(--font-inter)" }}>
                   <Trash2 size={11} className="inline mr-1" /> Verwijder aanvraag
                 </button>

@@ -67,6 +67,9 @@ export type Aanvraag = {
   /** Het antwoord dat klaarstaat. Je kunt het aanpassen voor je het verstuurt. */
   antwoord: string;
   antwoord_verstuurd_op: string | null;
+  /** Volledige, gecontroleerde uitkomst uit Inkoop & Taxatie. */
+  taxatie_resultaat: unknown | null;
+  taxatie_berekend_op: string | null;
   /** Afgehandeld: uit het dagoverzicht, maar niet weg. */
   afgehandeld_op: string | null;
 };
@@ -100,6 +103,8 @@ async function init(): Promise<void> {
     "kenteken TEXT DEFAULT ''",
     "antwoord TEXT DEFAULT ''",
     "antwoord_verstuurd_op TIMESTAMPTZ",
+    "taxatie_resultaat JSONB",
+    "taxatie_berekend_op TIMESTAMPTZ",
     "afgehandeld_op TIMESTAMPTZ",
     "auto_id INTEGER",
     "auto_naam TEXT DEFAULT ''",
@@ -111,7 +116,10 @@ async function init(): Promise<void> {
     "bericht TEXT DEFAULT ''",
   ];
   for (const k of kolommen) {
-    await sql.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${k}`).catch(() => null);
+    // Een ontbrekende kolom maakt de hele workflow onbruikbaar. Laat die fout daarom
+    // zichtbaar terugkomen en zet `gereed` pas na een geslaagde migratie, zodat een
+    // tijdelijke databasefout bij het volgende verzoek opnieuw kan worden geprobeerd.
+    await sql.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ${k}`);
   }
   // Dezelfde mail mag niet twee keer in het overzicht komen. Partieel, want handmatige
   // aanvragen hebben geen message-id en die zijn er straks veel meer dan mails.
@@ -154,8 +162,19 @@ function rij(r: Record<string, unknown>): Aanvraag {
     advertentie_url: (r.advertentie_url as string) ?? "",
     bericht: (r.bericht as string) ?? "",
     antwoord: (r.antwoord as string) ?? "",
-    antwoord_verstuurd_op: (r.antwoord_verstuurd_op as string) ?? null,
-    afgehandeld_op: (r.afgehandeld_op as string) ?? null,
+    antwoord_verstuurd_op:
+      r.antwoord_verstuurd_op instanceof Date
+        ? r.antwoord_verstuurd_op.toISOString()
+        : (r.antwoord_verstuurd_op as string) ?? null,
+    taxatie_resultaat: r.taxatie_resultaat ?? null,
+    taxatie_berekend_op:
+      r.taxatie_berekend_op instanceof Date
+        ? r.taxatie_berekend_op.toISOString()
+        : (r.taxatie_berekend_op as string) ?? null,
+    afgehandeld_op:
+      r.afgehandeld_op instanceof Date
+        ? r.afgehandeld_op.toISOString()
+        : (r.afgehandeld_op as string) ?? null,
   };
 }
 
@@ -277,6 +296,56 @@ export async function zetAfgehandeld(id: string, aan: boolean): Promise<Aanvraag
   if (aan) await sql`UPDATE leads SET afgehandeld_op = NOW() WHERE id = ${id}`;
   else await sql`UPDATE leads SET afgehandeld_op = NULL WHERE id = ${id}`;
   return eenAanvraag(id);
+}
+
+export async function bewaarTaxatieResultaat(id: string, resultaat: unknown): Promise<Aanvraag | null> {
+  await init();
+  const bron = resultaat !== null && typeof resultaat === "object" ? (resultaat as Record<string, unknown>) : {};
+  const berekening = bron.berekening !== null && typeof bron.berekening === "object"
+    ? (bron.berekening as Record<string, unknown>)
+    : {};
+  const onsBod = Number(berekening.max_inkoop);
+  const rijen = await sql`
+    UPDATE leads
+    SET taxatie_resultaat = ${JSON.stringify(resultaat)}::jsonb,
+        taxatie_berekend_op = NOW(),
+        ons_bod = ${Number.isFinite(onsBod) ? String(Math.round(onsBod)) : ""},
+        antwoord = '',
+        antwoord_verstuurd_op = NULL
+    WHERE id = ${id}
+      AND antwoord_verstuurd_op IS NULL
+    RETURNING *
+  `;
+  return rijen[0] ? rij(rijen[0] as Record<string, unknown>) : null;
+}
+
+/**
+ * Claimt de verzending atomair. Twee snelle klikken leveren daardoor nooit twee mails op.
+ * Bij een fout geeft `maakAntwoordVrij` de aanvraag weer vrij.
+ */
+export async function claimAntwoordVersturen(
+  id: string,
+  goedgekeurdOnderwerp: string,
+  goedgekeurdAntwoord: string
+): Promise<Aanvraag | null> {
+  await init();
+  const rijen = await sql`
+    UPDATE leads
+    SET antwoord_verstuurd_op = NOW(), status = 'contact_gehad'
+    WHERE id = ${id}
+      AND antwoord_verstuurd_op IS NULL
+      AND COALESCE(email, '') <> ''
+      AND onderwerp = ${goedgekeurdOnderwerp}
+      AND antwoord = ${goedgekeurdAntwoord}
+      AND COALESCE(antwoord, '') <> ''
+    RETURNING *
+  `;
+  return rijen[0] ? rij(rijen[0] as Record<string, unknown>) : null;
+}
+
+export async function maakAntwoordVrij(id: string): Promise<void> {
+  await init();
+  await sql`UPDATE leads SET antwoord_verstuurd_op = NULL WHERE id = ${id}`;
 }
 
 export async function noteerAntwoordVerstuurd(id: string): Promise<void> {

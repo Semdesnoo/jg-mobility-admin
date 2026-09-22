@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send, Archive, Undo2 } from "lucide-react";
+import { Receipt, Printer, Download, Search, Check, Plus, Trash2, Car, Pencil, Send, Archive, Undo2, X } from "lucide-react";
 import {
   T, micro, body, klein, fmt, Panel, Btn, Field, inputStijl, Chip, Spinner, Empty, Foutmelding,
 } from "./inkoop/ui";
@@ -218,7 +218,10 @@ export default function InkoopverklaringContent() {
   const { vraag } = useDialoog();
   const [lijst, setLijst] = useState<Verklaring[] | null>(null);
   const [view, setView] = useState<"lijst" | "form">("lijst");
-  const [openRij, setOpenRij] = useState<string | null>(null);
+  // Welke rij open staat in de 70%-drawer. null = dicht. Een klik op een rij opent de
+  // drawer; de inklap-sectie is verwijderd omdat dezelfde info in een echt zijpaneel
+  // prettiger leest en je dan ook nog links door de lijst kunt scrollen.
+  const [drawerId, setDrawerId] = useState<string | null>(null);
   const [gekozenId, setGekozenId] = useState<string | null>(null);
   const [f, setF] = useState<Formulier>(leegFormulier);
   const [zoek, setZoek] = useState("");
@@ -253,6 +256,12 @@ export default function InkoopverklaringContent() {
     [gekozenId, lijst]
   );
 
+  /** De rij die in de drawer staat — afgeleid van de state, anders herbouwen we op elke render. */
+  const inDrawer = useMemo(
+    () => (drawerId ? (lijst ?? []).find((v) => v.id === drawerId) ?? null : null),
+    [drawerId, lijst]
+  );
+
   const zichtbaar = useMemo(() => {
     const z = zoek.trim().toLowerCase();
     return (lijst ?? []).filter(
@@ -285,7 +294,7 @@ export default function InkoopverklaringContent() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || "Archiveren mislukt");
       }
-      setOpenRij(null);
+      setDrawerId(null);
       await laad();
     } catch (e) {
       setFout(e instanceof Error ? e.message : String(e));
@@ -411,7 +420,7 @@ export default function InkoopverklaringContent() {
       // meteen het resultaat en staan de afdrukknoppen voor je neus.
       const id = d.id ?? gekozen?.id ?? null;
       setGekozenId(null);
-      setOpenRij(id);
+      setDrawerId(id);
       setView("lijst");
     } catch (e) {
       setFout(e instanceof Error ? e.message : String(e));
@@ -431,7 +440,7 @@ export default function InkoopverklaringContent() {
     });
     if (!akkoord) return;
     await fetch(`/api/admin/inkoopverklaringen/${v.id}`, { method: "DELETE" });
-    if (openRij === v.id) setOpenRij(null);
+    if (drawerId === v.id) setDrawerId(null);
     await laad();
   };
 
@@ -581,6 +590,7 @@ export default function InkoopverklaringContent() {
   // ── Lijstweergave: inklapbare rijen, zoals de facturenpagina ──
   if (view === "lijst") {
     return (
+      <>
       <div style={{ backgroundColor: T.wash, minHeight: "100%" }}>
         {kop}
         <div className="px-4 md:px-6 xl:px-8 py-4 md:py-6" style={{ maxWidth: 1240, margin: "0 auto" }}>
@@ -596,7 +606,7 @@ export default function InkoopverklaringContent() {
                 ] as const).map(({ key, label }) => (
                   <button
                     key={key}
-                    onClick={() => { setTab(key); setOpenRij(null); }}
+                    onClick={() => { setTab(key); setDrawerId(null); }}
                     className="px-3.5 py-1.5 text-xs font-semibold transition-all"
                     style={{
                       backgroundColor: tab === key ? T.navy : T.paper,
@@ -650,13 +660,12 @@ export default function InkoopverklaringContent() {
           ) : (
             <div className="flex flex-col gap-2">
               {zichtbaar.map((v) => {
-                const isOpen = openRij === v.id;
                 const voertuig = [v.merk, v.model, v.bouwjaar].filter(Boolean).join(" ");
                 return (
-                  <div key={v.id} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}` }}>
-                    {/* Rijkop: nummer · verkoper + badge, bedrag rechts. Klik = open/dicht. */}
+                  <div key={v.id} style={{ backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-card, 14px)", overflow: "hidden" }}>
+                    {/* Rijkop: nummer · verkoper + badge, bedrag rechts. Klik = drawer open. */}
                     <button
-                      onClick={() => setOpenRij(isOpen ? null : v.id)}
+                      onClick={() => setDrawerId(drawerId === v.id ? null : v.id)}
                       className="w-full flex items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gray-50"
                     >
                       <div className="flex-1 min-w-0">
@@ -697,157 +706,9 @@ export default function InkoopverklaringContent() {
                         </p>
                       </div>
                       <span className="text-xs ml-2 flex-shrink-0" style={{ color: T.ink(0.3) }}>
-                        {isOpen ? "▲" : "▼"}
+                        {drawerId === v.id ? "▲" : "▶"}
                       </span>
                     </button>
-
-                    {isOpen && (
-                      <div className="px-5 pb-5" style={{ borderTop: `1px solid ${T.line2}` }}>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
-                          {/* Links: de details, zelfde tabelvorm als bij een factuur */}
-                          <div>
-                            <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
-                              Details
-                            </p>
-                            <table className="w-full text-xs" style={{ fontFamily: T.inter }}>
-                              <tbody>
-                                {([
-                                  ["Verkoper", v.verkoper_naam],
-                                  ["Adres", [v.verkoper_adres, v.verkoper_postcode, v.verkoper_stad].filter(Boolean).join(", ")],
-                                  ["E-mail", v.verkoper_email],
-                                  ["Telefoon", v.verkoper_telefoon],
-                                  ["Legitimatie", [v.legitimatie_soort, v.legitimatie_nummer].filter(Boolean).join(" · ")],
-                                  ["Voertuig", voertuig],
-                                  ["Kenteken", v.kenteken?.toUpperCase()],
-                                  ["Chassisnummer", v.vin],
-                                  ["KM-stand", v.km ? `${parseInt(v.km).toLocaleString("nl-NL")} km` : ""],
-                                  ["Overdracht", v.datum_overdracht],
-                                  ["Vrijwaring", v.vrijwaringsnummer],
-                                  ["Meegeleverd", (v.meegeleverd ?? []).join(", ")],
-                                ] as [string, string][])
-                                  .filter(([, w]) => w)
-                                  .map(([label, waarde]) => (
-                                    <tr key={label}>
-                                      <td className="py-1 pr-3 align-top" style={{ color: T.ink(0.45), width: "110px" }}>{label}</td>
-                                      <td className="py-1 font-semibold" style={{ color: T.navy }}>{waarde}</td>
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                            {v.bijzonderheden && (
-                              <div className="mt-3 p-3 text-xs" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}`, color: T.ink(0.65), fontFamily: T.inter, lineHeight: 1.6 }}>
-                                {v.bijzonderheden}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Rechts: het document en de acties, zelfde knoppenrij als bij een factuur */}
-                          <div>
-                            <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>
-                              Document
-                            </p>
-                            <p className="text-xs mb-4" style={{ color: T.ink(0.55), fontFamily: T.inter, lineHeight: 1.6 }}>
-                              Afdrukken levert twee vellen in één printtaak: een origineel voor de
-                              verkoper en een kopie met watermerk voor je eigen administratie. Het
-                              bedrag staat er in cijfers én voluit op, met de handtekeningvelden.
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {/* Hoofdactie: afdrukken levert origineel + kopie */}
-                              <button
-                                onClick={() => afdrukkenRij(v)}
-                                disabled={!!rijBezig[v.id]}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
-                                style={{ backgroundColor: T.navy, fontFamily: T.inter, borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
-                                title="Print een origineel (voor de verkoper) én een kopie (voor onze administratie)"
-                              >
-                                <Printer size={14} />
-                                {rijBezig[v.id] === "print" ? "Voorbereiden..." : "Afdrukken"}
-                                <span className="hidden sm:inline opacity-60 font-normal">· origineel + kopie</span>
-                              </button>
-
-                              <button
-                                onClick={() => pdfRij(v)}
-                                disabled={!!rijBezig[v.id]}
-                                className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
-                                style={{
-                                  backgroundColor: T.paper,
-                                  color: "#334155",
-                                  border: `1px solid ${T.line}`,
-                                  fontFamily: T.inter,
-                                  borderRadius: "var(--radius-control)",
-                                }}
-                              >
-                                <Download size={14} />
-                                {rijBezig[v.id] === "pdf" ? "PDF maken..." : "PDF"}
-                              </button>
-
-                              <button
-                                onClick={() => mailRij(v)}
-                                disabled={!!rijBezig[v.id]}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
-                                style={{ backgroundColor: v.gemaild_op ? "#15803d" : "#1d4ed8", fontFamily: T.inter, borderRadius: "var(--radius-control)", boxShadow: "0 6px 16px -8px rgba(29,78,216,0.5)" }}
-                                title="Mail het kopie-exemplaar met een begeleidend bericht naar de verkoper"
-                              >
-                                <Send size={14} />
-                                {rijBezig[v.id] === "mail" ? "Versturen..." : v.gemaild_op ? "Verstuurd" : "Verstuur verklaring"}
-                              </button>
-
-                              {/* Betaald? Dan het archief in — of er weer uit als het per ongeluk was. */}
-                              {v.archief_op ? (
-                                <button
-                                  onClick={() => archiveer(v, true)}
-                                  disabled={!!rijBezig[v.id]}
-                                  className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
-                                  style={{ backgroundColor: T.paper, color: "#334155", border: `1px solid ${T.line}`, fontFamily: T.inter, borderRadius: "var(--radius-control)" }}
-                                  title="Terug naar de actuele lijst"
-                                >
-                                  <Undo2 size={14} />
-                                  {rijBezig[v.id] === "archief" ? "Bezig..." : "Terug naar actueel"}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => archiveer(v)}
-                                  disabled={!!rijBezig[v.id]}
-                                  className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
-                                  style={{ backgroundColor: "#f0fdf4", color: "#15803d", border: "1px solid rgba(21,128,61,0.3)", fontFamily: T.inter, borderRadius: "var(--radius-control)" }}
-                                  title="Betaling overgemaakt? Dan mag de verklaring het archief in"
-                                >
-                                  <Archive size={14} />
-                                  {rijBezig[v.id] === "archief" ? "Bezig..." : "Betaald → archief"}
-                                </button>
-                              )}
-
-                              {/* Rechts, apart: bewerken (potlood) en verwijderen (prullenbak) */}
-                              <div className="flex items-center gap-1.5 ml-auto">
-                                <button
-                                  onClick={() => openen(v)}
-                                  aria-label="Verklaring bewerken"
-                                  title="Bewerken"
-                                  className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
-                                  style={{ width: 38, height: 38, color: T.navy, backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control)" }}
-                                >
-                                  <Pencil size={15} />
-                                </button>
-                                <button
-                                  onClick={() => verwijderRij(v)}
-                                  aria-label="Verklaring verwijderen"
-                                  title="Verwijderen"
-                                  className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
-                                  style={{ width: 38, height: 38, color: T.rood, backgroundColor: T.paper, border: "1px solid #fecaca", borderRadius: "var(--radius-control)" }}
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              </div>
-                            </div>
-                            {v.gemaild_op && (
-                              <p className="mt-2.5 text-[11px] font-medium" style={{ color: "#15803d", fontFamily: T.inter }}>
-                                ✓ Gemaild op {new Date(v.gemaild_op).toLocaleString("nl-NL", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} naar {v.verkoper_email}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -855,8 +716,206 @@ export default function InkoopverklaringContent() {
           )}
         </div>
       </div>
+
+      {/* ── 70%-drawer: detail van de geselecteerde verklaring ──
+          Zelfde patroon als bij de contracten: een klik op een rij schuift dit paneel
+          van rechts in beeld. Sluit via X, Escape of de backdrop. */}
+      {inDrawer && <VerklaringDrawer v={inDrawer} onClose={() => setDrawerId(null)} afdrukkenRij={afdrukkenRij} pdfRij={pdfRij} mailRij={mailRij} archiveer={archiveer} openen={openen} verwijderRij={verwijderRij} rijBezig={rijBezig} />}
+      </>
     );
   }
+
+/**
+ * De 70%-detailkaart van één inkoopverklaring. Vervangt de oude inklap-rij: openklappen
+ * onder een rij werd snel lang en lastig scannbaar, terwijl een vast zijpaneel het
+ * overzicht aan de linkerkant intact houdt en de details prettig leesbaar maakt.
+ */
+function VerklaringDrawer({
+  v, onClose, afdrukkenRij, pdfRij, mailRij, archiveer, openen, verwijderRij, rijBezig,
+}: {
+  v: Verklaring;
+  onClose: () => void;
+  afdrukkenRij: (v: Verklaring) => Promise<void>;
+  pdfRij: (v: Verklaring) => Promise<void>;
+  mailRij: (v: Verklaring) => Promise<void>;
+  archiveer: (v: Verklaring, terug?: boolean) => Promise<void>;
+  openen: (v: Verklaring) => void;
+  verwijderRij: (v: Verklaring) => Promise<void>;
+  rijBezig: Record<string, "print" | "pdf" | "mail" | "archief">;
+}) {
+  const voertuig = [v.merk, v.model, v.bouwjaar].filter(Boolean).join(" ");
+
+  // Escape sluit de drawer, net als de sluitknop of de backdrop.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,19,55,0.32)", zIndex: 50 }} />
+      <aside
+        role="dialog"
+        aria-label={`Inkoopverklaring ${v.nummer}`}
+        style={{
+          position: "fixed", top: 0, right: 0, height: "100%",
+          width: "min(70vw, 980px)",
+          backgroundColor: T.paper, borderLeft: `1px solid ${T.line}`,
+          boxShadow: "-16px 0 32px -8px rgba(0,19,55,0.18)",
+          zIndex: 51, display: "flex", flexDirection: "column",
+        }}
+      >
+        <div className="px-6 py-5" style={{ borderBottom: `1px solid ${T.line2}`, backgroundColor: "rgba(0,19,55,0.015)" }}>
+          <div className="flex items-start gap-4 mb-2">
+            <p className="text-base font-bold flex-1 min-w-0 truncate" style={{ color: T.navy, fontFamily: T.play }}>
+              {v.nummer} · {v.verkoper_naam || "Naamloos"}
+            </p>
+            <button
+              type="button" onClick={onClose} aria-label="Sluiten"
+              className="inline-flex items-center justify-center flex-shrink-0 transition-all hover:opacity-70"
+              style={{ width: 32, height: 32, color: T.ink(0.5), backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}
+            >
+              <X size={15} />
+            </button>
+          </div>
+          <p className="text-[11px] mb-3" style={{ color: T.ink(0.45), fontFamily: T.inter }}>
+            {voertuig}{v.kenteken ? ` · ${v.kenteken.toUpperCase()}` : ""}
+          </p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] px-2 py-0.5 font-semibold" style={{ backgroundColor: v.particulier ? "#f1f5f9" : "#dbeafe", color: v.particulier ? "#64748b" : "#1d4ed8", fontFamily: T.inter }}>
+                {v.particulier ? "Particulier" : "Bedrijf"}
+              </span>
+              {v.archief_op && (
+                <span className="text-[10px] px-2 py-0.5 font-semibold inline-flex items-center gap-1" style={{ backgroundColor: "#dcfce7", color: "#15803d", fontFamily: T.inter }}>
+                  <Check size={10} /> Betaald · archief
+                </span>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-base font-bold" style={{ fontFamily: T.play, color: T.navy }}>{v.bedrag ? fmt(v.bedrag) : "—"}</p>
+              <p className="text-[10px]" style={{ color: T.ink(0.35), fontFamily: T.inter }}>
+                {v.datum} · {v.betaalwijze === "contant" ? "Contant" : v.betaalwijze === "inruil" ? "Inruil" : "Bank"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto jg-scroll px-6 py-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>Details</p>
+              <table className="w-full text-xs" style={{ fontFamily: T.inter }}>
+                <tbody>
+                  {([
+                    ["Verkoper", v.verkoper_naam],
+                    ["Adres", [v.verkoper_adres, v.verkoper_postcode, v.verkoper_stad].filter(Boolean).join(", ")],
+                    ["E-mail", v.verkoper_email],
+                    ["Telefoon", v.verkoper_telefoon],
+                    ["Legitimatie", [v.legitimatie_soort, v.legitimatie_nummer].filter(Boolean).join(" · ")],
+                    ["Voertuig", voertuig],
+                    ["Kenteken", v.kenteken?.toUpperCase()],
+                    ["Chassisnummer", v.vin],
+                    ["KM-stand", v.km ? `${parseInt(v.km).toLocaleString("nl-NL")} km` : ""],
+                    ["Overdracht", v.datum_overdracht],
+                    ["Vrijwaring", v.vrijwaringsnummer],
+                    ["Meegeleverd", (v.meegeleverd ?? []).join(", ")],
+                  ] as [string, string][])
+                    .filter(([, w]) => w)
+                    .map(([label, waarde]) => (
+                      <tr key={label}>
+                        <td className="py-1 pr-3 align-top" style={{ color: T.ink(0.45), width: "110px" }}>{label}</td>
+                        <td className="py-1 font-semibold" style={{ color: T.navy }}>{waarde}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              {v.bijzonderheden && (
+                <div className="mt-3 p-3 text-xs" style={{ backgroundColor: "rgba(0,19,55,0.03)", border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)", color: T.ink(0.65), fontFamily: T.inter, lineHeight: 1.6 }}>
+                  {v.bijzonderheden}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-bold mb-2 uppercase tracking-wider" style={{ color: T.ink(0.4), fontFamily: T.inter }}>Document</p>
+              <p className="text-xs mb-4" style={{ color: T.ink(0.55), fontFamily: T.inter, lineHeight: 1.6 }}>
+                Afdrukken levert twee vellen in één printtaak: een origineel voor de
+                verkoper en een kopie met watermerk voor je eigen administratie. Het
+                bedrag staat er in cijfers én voluit op, met de handtekeningvelden.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => afdrukkenRij(v)} disabled={!!rijBezig[v.id]}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                  style={{ backgroundColor: T.navy, fontFamily: T.inter, borderRadius: "var(--radius-control, 10px)", boxShadow: "0 6px 16px -8px rgba(0,19,55,0.5)" }}
+                  title="Print een origineel (voor de verkoper) én een kopie (voor onze administratie)"
+                >
+                  <Printer size={14} />
+                  {rijBezig[v.id] === "print" ? "Voorbereiden..." : "Afdrukken"}
+                  <span className="hidden sm:inline opacity-60 font-normal">· origineel + kopie</span>
+                </button>
+                <button onClick={() => pdfRij(v)} disabled={!!rijBezig[v.id]}
+                  className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                  style={{ backgroundColor: T.paper, color: "#334155", border: `1px solid ${T.line}`, fontFamily: T.inter, borderRadius: "var(--radius-control, 10px)" }}
+                >
+                  <Download size={14} />
+                  {rijBezig[v.id] === "pdf" ? "PDF maken..." : "PDF"}
+                </button>
+                <button onClick={() => mailRij(v)} disabled={!!rijBezig[v.id]}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                  style={{ backgroundColor: v.gemaild_op ? "#15803d" : "#1d4ed8", fontFamily: T.inter, borderRadius: "var(--radius-control, 10px)", boxShadow: "0 6px 16px -8px rgba(29,78,216,0.5)" }}
+                  title="Mail het kopie-exemplaar met een begeleidend bericht naar de verkoper"
+                >
+                  <Send size={14} />
+                  {rijBezig[v.id] === "mail" ? "Versturen..." : v.gemaild_op ? "Verstuurd" : "Verstuur verklaring"}
+                </button>
+                {v.archief_op ? (
+                  <button onClick={() => archiveer(v, true)} disabled={!!rijBezig[v.id]}
+                    className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                    style={{ backgroundColor: T.paper, color: "#334155", border: `1px solid ${T.line}`, fontFamily: T.inter, borderRadius: "var(--radius-control, 10px)" }}
+                    title="Terug naar de actuele lijst"
+                  >
+                    <Undo2 size={14} />
+                    {rijBezig[v.id] === "archief" ? "Bezig..." : "Terug naar actueel"}
+                  </button>
+                ) : (
+                  <button onClick={() => archiveer(v)} disabled={!!rijBezig[v.id]}
+                    className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold transition-all duration-150 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+                    style={{ backgroundColor: "#f0fdf4", color: "#15803d", border: "1px solid rgba(21,128,61,0.3)", fontFamily: T.inter, borderRadius: "var(--radius-control, 10px)" }}
+                    title="Betaling overgemaakt? Dan mag de verklaring het archief in"
+                  >
+                    <Archive size={14} />
+                    {rijBezig[v.id] === "archief" ? "Bezig..." : "Betaald → archief"}
+                  </button>
+                )}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button onClick={() => openen(v)} aria-label="Verklaring bewerken" title="Bewerken"
+                    className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
+                    style={{ width: 38, height: 38, color: T.navy, backgroundColor: T.paper, border: `1px solid ${T.line}`, borderRadius: "var(--radius-control, 10px)" }}
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button onClick={() => verwijderRij(v)} aria-label="Verklaring verwijderen" title="Verwijderen"
+                    className="inline-flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5"
+                    style={{ width: 38, height: 38, color: T.rood, backgroundColor: T.paper, border: "1px solid #fecaca", borderRadius: "var(--radius-control, 10px)" }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+              {v.gemaild_op && (
+                <p className="mt-2.5 text-[11px] font-medium" style={{ color: "#15803d", fontFamily: T.inter }}>
+                  ✓ Gemaild op {new Date(v.gemaild_op).toLocaleString("nl-NL", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} naar {v.verkoper_email}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+}
 
   // ── Formulier: nieuwe verklaring of bewerken (apart scherm, zoals "Nieuwe factuur") ──
   return (

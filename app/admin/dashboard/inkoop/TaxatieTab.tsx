@@ -77,11 +77,17 @@ export default function TaxatieTab({
   prestaties,
   onOpgeslagen,
   startKenteken,
+  startKm,
+  aanvraagId,
+  onTaxatieGekoppeld,
 }: {
   prestaties: PrestatiesData | null;
   onOpgeslagen: () => Promise<void> | void;
   /** Vanuit het aanvragenoverzicht doorgestuurd: begin met dit kenteken al opgezocht. */
   startKenteken?: string;
+  startKm?: string;
+  aanvraagId?: string;
+  onTaxatieGekoppeld?: (aanvraagId: string) => void;
 }) {
   const [kenteken, setKenteken] = useState("");
   const [rdw, setRdw] = useState<RdwData | null>(null);
@@ -105,6 +111,9 @@ export default function TaxatieTab({
   const [posten, setPosten] = useState<{ id: number; label: string; bedrag: number }[]>([]);
   const [scanStap, setScanStap] = useState(0);
   const [opgeslagen, setOpgeslagen] = useState(false);
+  const [taxatieKoppelen, setTaxatieKoppelen] = useState(false);
+  const [taxatieGekoppeld, setTaxatieGekoppeld] = useState(false);
+  const [koppelFout, setKoppelFout] = useState<string | null>(null);
 
   // De taxatie draait in de takenlaag boven de tabbladen, zodat hij doorloopt als
   // je tussendoor wegklikt en het antwoord er nog staat als je terugkomt.
@@ -163,8 +172,11 @@ export default function TaxatieTab({
     if (!startKenteken || gedaanVoor.current === startKenteken) return;
     gedaanVoor.current = startKenteken;
     setKenteken(startKenteken);
+    if (startKm) setKm(startKm.replace(/\D/g, ""));
+    setTaxatieGekoppeld(false);
+    setKoppelFout(null);
     rdwOpzoeken(startKenteken);
-  }, [startKenteken, rdwOpzoeken]);
+  }, [startKenteken, startKm, rdwOpzoeken]);
 
   const analyseer = () => {
     if (!rdw || laden) return;
@@ -277,9 +289,31 @@ export default function TaxatieTab({
     setTimeout(() => setOpgeslagen(false), 3000);
   };
 
+  const koppelAanAanvraag = async () => {
+    if (!aanvraagId || !resultaat || taxatieKoppelen) return;
+    setTaxatieKoppelen(true);
+    setKoppelFout(null);
+    try {
+      const res = await fetch(`/api/admin/aanvragen/${aanvraagId}/taxatie`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultaat }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "De taxatie kon niet aan de aanvraag worden gekoppeld.");
+      setTaxatieGekoppeld(true);
+      onTaxatieGekoppeld?.(aanvraagId);
+    } catch (e) {
+      setKoppelFout(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTaxatieKoppelen(false);
+    }
+  };
+
   const reset = () => {
     wis(); setRdw(null); setKenteken(""); setKm("");
     setRdwFout(null); setKosten(0); setPosten([]);
+    setTaxatieGekoppeld(false); setKoppelFout(null);
   };
 
   const voegKostenToe = (label: string, bedrag: number) => {
@@ -658,6 +692,7 @@ export default function TaxatieTab({
       {/* ══ CANVAS ════════════════════════════════════════════════ */}
       <div className="flex flex-col gap-4 min-w-0">
         {fout && <Foutmelding>{fout}</Foutmelding>}
+        {koppelFout && <Foutmelding>{koppelFout}</Foutmelding>}
 
         {/* ── Uitslagbalk ── */}
         <div style={{ backgroundColor: T.navy, border: "1px solid rgba(255,255,255,0.1)" }}>
@@ -744,7 +779,12 @@ export default function TaxatieTab({
             >
               <Verkoopbaarheid oordeel={b?.verkoopbaarheid} reden={b?.verkoopbaarheid_reden} />
               <div className="flex flex-col gap-2 w-full xl:w-40">
-                <Btn variant="wit" size="sm" full disabled={!b} onClick={slaOp}>
+                {aanvraagId && (
+                  <Btn variant="wit" size="sm" full disabled={!b || taxatieKoppelen || taxatieGekoppeld} onClick={koppelAanAanvraag}>
+                    {taxatieKoppelen ? <><Spinner size={12} tone="donker" /> Koppelen…</> : taxatieGekoppeld ? <><Check size={12} /> Gekoppeld</> : <><Check size={12} /> Koppel aan aanvraag</>}
+                  </Btn>
+                )}
+                <Btn variant={aanvraagId ? "ghostDonker" : "wit"} size="sm" full disabled={!b} onClick={slaOp}>
                   {opgeslagen ? <><Check size={12} /> Opgeslagen</> : <><Plus size={12} /> Opslaan als dossier</>}
                 </Btn>
                 <Btn variant="ghostDonker" size="sm" full onClick={reset} disabled={!rdw && !resultaat}>

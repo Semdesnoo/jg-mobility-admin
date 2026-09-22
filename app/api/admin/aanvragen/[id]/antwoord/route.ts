@@ -157,9 +157,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = alsObject(await req.json().catch(() => ({})));
 
   // De taxatiepagina houdt haar uitkomst als { markt, berekening } bij. Wordt dat hele object
-  // doorgestuurd, dan leggen we beide lagen plat; wordt alleen de uitkomst doorgestuurd, dan
-  // staat alles al op het eerste niveau. Zo hoeft de aanroeper niet te weten wat wij verwachten.
-  const ruw = alsObject(body.taxatie);
+  // doorgestuurd, dan leggen we beide lagen plat; zonder body gebruiken we de eerder aan deze
+  // aanvraag gekoppelde uitkomst. Zo blijft de workflow werken nadat je terug navigeert.
+  const meegestuurd = alsObject(body.taxatie);
+  const opgeslagen = alsObject(aanvraag.taxatie_resultaat);
+  const ruw = Object.keys(meegestuurd).length > 0 ? meegestuurd : opgeslagen;
   const t = { ...alsObject(ruw.markt), ...alsObject(ruw.berekening), ...ruw };
   const taxatieMeegestuurd = Object.keys(ruw).length > 0;
 
@@ -181,8 +183,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const cijfers = [
-    `Ons bod op zijn auto: ${euro(bod)}`,
-    verwachteVerkoop ? `Wat de auto op de markt zou moeten opbrengen: ${euro(verwachteVerkoop)}` : "",
+    `Onze taxatiewaarde voor de klant: ${euro(verwachteVerkoop || bod)}`,
+    `Ons concrete inkoopbod: ${euro(bod)}`,
     aantal ? `Aantal vergelijkbare auto's dat nu online staat: ${aantal}` : "",
     verkoopbaarheid ? `Hoe deze auto in de markt ligt (achtergrond voor jou, niet letterlijk overnemen): ${verkoopbaarheid}` : "",
   ]
@@ -211,7 +213,7 @@ Onze eigen notitie erbij: ${aanvraag.notitie || "—"}
 ${
   bod > 0
     ? `DIT ANTWOORD GAAT OVER ONS BOD OP ZIJN AUTO
-Neem deze bedragen letterlijk over en reken zelf niets uit:
+Neem deze bedragen letterlijk over en reken zelf niets uit. Noem zowel de taxatiewaarde als het concrete inkoopbod duidelijk en leg in één korte zin uit dat de taxatiewaarde een verwachte verkoopwaarde is en het inkoopbod het bedrag is dat wij willen betalen:
 ${cijfers}`
     : `DIT IS EEN GEWOON ANTWOORD OP ZIJN VRAAG
 Er is geen taxatie gedaan. Noem dus geen bedragen en doe geen bod.`

@@ -18,9 +18,15 @@ const TABS: { id: TabId; label: string; Icon: typeof Search; context: string }[]
 
 export default function InkoopContent({
   kenteken,
+  km,
+  aanvraagId,
+  onTaxatieGekoppeld,
 }: {
   /** Vanuit een aanvraag doorgestuurd: begin meteen op de taxatietool met dit kenteken. */
   kenteken?: string;
+  km?: string;
+  aanvraagId?: string;
+  onTaxatieGekoppeld?: (aanvraagId: string) => void;
 } = {}) {
   const [tab, setTab] = useState<TabId>("taxatie");
 
@@ -130,6 +136,9 @@ export default function InkoopContent({
             prestaties={prestaties}
             onOpgeslagen={laadDossiers}
             startKenteken={kenteken}
+            startKm={km}
+            aanvraagId={aanvraagId}
+            onTaxatieGekoppeld={onTaxatieGekoppeld}
           />
         )}
         {tab === "archief" && <ArchiefTab />}
