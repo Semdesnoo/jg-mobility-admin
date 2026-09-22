@@ -771,12 +771,11 @@ function VerklaringDrawer({
         role="dialog"
         aria-label={`Inkoopverklaring ${v.nummer}`}
         style={{
-          position: "fixed", top: 0, right: 0, height: "100%",
-          width: "min(70vw, 980px)",
-          backgroundColor: T.paper, borderLeft: `1px solid ${T.line}`,
+          position: "fixed", top: 0, right: 0, left: 0, height: "100%",
+          width: "100%",
+          backgroundColor: T.paper,
           boxShadow: "-16px 0 32px -8px rgba(0,19,55,0.18)",
-          borderRadius: "var(--radius-card, 14px) 0 0 var(--radius-card, 14px)",
-          overflow: "hidden",
+          overflow: "auto",
           zIndex: 51, display: "flex", flexDirection: "column",
         }}
       >
