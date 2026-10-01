@@ -905,7 +905,7 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
 
         {/* ── ADVERTENTIE-DETAILS ──
             De vragen die een koper per WhatsApp alsnog stelt: is er onderhoud bekend, klopt
-            de teller, zit er garantie op, wat moet ik van de staat verwachten? Vul je het
+            de teller, wat moet ik van de staat verwachten? Vul je het
             hier in, dan staat het op de autopagina en hoeft niemand ernaar te vragen. */}
         <Sectie titel="Advertentie-details">
           <p className="text-xs mb-5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
@@ -953,14 +953,6 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
                 value={form.onderhoudshistorie}
                 onChange={(e) => set("onderhoudshistorie", e.target.value)}
                 placeholder="bijv. Volledig dealeronderhouden, boekjes aanwezig"
-                {...inputProps}
-              />
-            </Veld>
-            <Veld label="Garantie">
-              <input
-                value={form.garantie}
-                onChange={(e) => set("garantie", e.target.value)}
-                placeholder="bijv. 12 maanden garantie via Bovag-afleverpakket"
                 {...inputProps}
               />
             </Veld>
