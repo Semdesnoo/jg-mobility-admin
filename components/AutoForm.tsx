@@ -61,6 +61,21 @@ type FormState = {
   cilinderinhoud: string;
   aantalDeuren: string;
   aantalCilinders: string;
+  // ── Advertentie-details ──
+  // Allemaal optioneel; de website laat een blok weg zodra het veld leeg is. Zie het
+  // Auto-type in lib/autos.ts en de sectie "Advertentie-details" onderaan dit formulier.
+  video: string;
+  onderhoudshistorie: string;
+  nap: string;
+  garantie: string;
+  bijzonderheden: string;
+  // Alleen gevraagd bij een bedrijfswagen (de sub-sectie verschijnt dan).
+  laadruimte: string;
+  laadvermogen: string;
+  trekgewicht: string;
+  euroklasse: string;
+  /** Staat standaard aan; uit betekent "deze auto niet als lease aanbieden". */
+  leaseMogelijk: boolean;
 };
 
 const STANDAARD_CATEGORIEEN = ["Exterieur", "Interieur", "Technologie", "Aandrijving"];
@@ -95,6 +110,16 @@ const leegFormulier = (): FormState => ({
   cilinderinhoud: "",
   aantalDeuren: "",
   aantalCilinders: "",
+  video: "",
+  onderhoudshistorie: "",
+  nap: "",
+  garantie: "",
+  bijzonderheden: "",
+  laadruimte: "",
+  laadvermogen: "",
+  trekgewicht: "",
+  euroklasse: "",
+  leaseMogelijk: true,
 });
 
 // Zet een bestaande auto (uit de database) om naar de formulier-velden (alles als string).
@@ -128,6 +153,17 @@ const formulierVanAuto = (a: Auto): FormState => ({
   cilinderinhoud: a.cilinderinhoud ?? "",
   aantalDeuren: a.aantalDeuren ?? "",
   aantalCilinders: a.aantalCilinders ?? "",
+  video: a.video ?? "",
+  onderhoudshistorie: a.onderhoudshistorie ?? "",
+  nap: a.nap ?? "",
+  garantie: a.garantie ?? "",
+  bijzonderheden: a.bijzonderheden ?? "",
+  laadruimte: a.laadruimte ?? "",
+  laadvermogen: a.laadvermogen ?? "",
+  trekgewicht: a.trekgewicht ?? "",
+  euroklasse: a.euroklasse ?? "",
+  // Niets opgeslagen betekent "lease mogelijk" — alleen een expliciete `false` zet hem uit.
+  leaseMogelijk: a.leaseMogelijk !== false,
 });
 
 // `initial` aanwezig → bewerkmodus (voorgevuld + behoudt id/slug/standtijd).
@@ -864,6 +900,148 @@ export default function AutoForm({ initial }: { initial?: Auto }) {
                 })}
               </div>
             </>
+          )}
+        </Sectie>
+
+        {/* ── ADVERTENTIE-DETAILS ──
+            De vragen die een koper per WhatsApp alsnog stelt: is er onderhoud bekend, klopt
+            de teller, zit er garantie op, wat moet ik van de staat verwachten? Vul je het
+            hier in, dan staat het op de autopagina en hoeft niemand ernaar te vragen. */}
+        <Sectie titel="Advertentie-details">
+          <p className="text-xs mb-5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+            Alles hieronder is optioneel. Laat je een veld leeg, dan blijft dat blok op de
+            website gewoon weg — er komt dus nooit een lege regel op de autopagina.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Veld label="Walkaround-video (URL)">
+              <input
+                value={form.video}
+                onChange={(e) => set("video", e.target.value.trim())}
+                placeholder="bijv. https://....mp4"
+                {...inputProps}
+              />
+              {/* De website speelt de video zelf af in de galerij. Dat kan alleen met een
+                  videobestand; een YouTube- of Vimeo-pagina is een webpagina en blijft
+                  zwart. Daarom een waarschuwing in plaats van stil mislukken. */}
+              {/youtube\.com|youtu\.be|vimeo\.com/i.test(form.video) ? (
+                <p className="text-xs mt-1.5" style={{ color: "#b45309", fontFamily: "var(--font-inter)" }}>
+                  Dit is een videopagina, geen videobestand — de speler op de website blijft dan leeg.
+                  Gebruik een directe link naar het bestand (.mp4).
+                </p>
+              ) : (
+                <p className="text-xs mt-1.5" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                  Directe link naar het bestand (.mp4). De bezoeker kan hem openen vanuit de fotogalerij.
+                </p>
+              )}
+            </Veld>
+            <Veld label="NAP-tellerstand">
+              <Dropdown
+                value={form.nap}
+                onChange={(v) => set("nap", v)}
+                placeholder="Niet gecontroleerd"
+                options={[
+                  { value: "", label: "Niet gecontroleerd — niet tonen" },
+                  { value: "Logisch", label: "Logisch" },
+                  { value: "Onlogisch", label: "Onlogisch" },
+                ]}
+                className="px-4 py-2.5"
+              />
+            </Veld>
+            <Veld label="Onderhoudshistorie">
+              <input
+                value={form.onderhoudshistorie}
+                onChange={(e) => set("onderhoudshistorie", e.target.value)}
+                placeholder="bijv. Volledig dealeronderhouden, boekjes aanwezig"
+                {...inputProps}
+              />
+            </Veld>
+            <Veld label="Garantie">
+              <input
+                value={form.garantie}
+                onChange={(e) => set("garantie", e.target.value)}
+                placeholder="bijv. 12 maanden garantie via Bovag-afleverpakket"
+                {...inputProps}
+              />
+            </Veld>
+            <Veld label="Financial lease">
+              <Dropdown
+                value={form.leaseMogelijk ? "mogelijk" : "niet"}
+                onChange={(v) => set("leaseMogelijk", v === "mogelijk")}
+                options={[
+                  { value: "mogelijk", label: "Mogelijk" },
+                  { value: "niet", label: "Niet vermelden bij deze auto" },
+                ]}
+                className="px-4 py-2.5"
+              />
+            </Veld>
+          </div>
+
+          <div className="mt-4">
+            <Veld label="Gebruikssporen & bijzonderheden">
+              <textarea
+                value={form.bijzonderheden}
+                onChange={(e) => set("bijzonderheden", e.target.value)}
+                rows={3}
+                placeholder="bijv. Krasje op de achterbumper, verder keurig. Eerlijk vooraf scheelt teleurstelling bij de bezichtiging."
+                className="w-full px-4 py-3 text-sm outline-none resize-y"
+                style={{
+                  backgroundColor: "#ffffff",
+                  border: "1px solid rgba(0,19,55,0.15)",
+                  color: "#001337",
+                  fontFamily: "var(--font-inter)",
+                  lineHeight: "1.7",
+                }}
+              />
+            </Veld>
+          </div>
+
+          {/* Alleen bij een bedrijfswagen: dezelfde herkenning als de prijsmodus hierboven
+              gebruikt, dus zodra je "Bestelauto" kiest staan deze vier er. */}
+          {isBedrijfswagen(form.bodytype) && (
+            <div className="mt-6 pt-6" style={{ borderTop: "1px solid rgba(0,19,55,0.07)" }}>
+              <h3 className="text-sm font-bold mb-1.5" style={{ fontFamily: "var(--font-playfair)", color: "#001337" }}>
+                Bedrijfswagen
+              </h3>
+              <p className="text-xs mb-4" style={{ color: "rgba(0,19,55,0.4)", fontFamily: "var(--font-inter)" }}>
+                Waar een zakelijke koper op selecteert. Wat je leeg laat zet de website op
+                &quot;Op aanvraag&quot; — daar is het geen gemis, want hij belt er toch over.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Veld label="Laadruimte">
+                  <input
+                    value={form.laadruimte}
+                    onChange={(e) => set("laadruimte", e.target.value)}
+                    placeholder="bijv. L 3,40 × B 1,78 × H 1,90 m"
+                    {...inputProps}
+                  />
+                </Veld>
+                <Veld label="Laadvermogen">
+                  <input
+                    value={form.laadvermogen}
+                    onChange={(e) => set("laadvermogen", e.target.value)}
+                    placeholder="bijv. 1.180 kg"
+                    {...inputProps}
+                  />
+                </Veld>
+                <Veld label="Trekgewicht">
+                  <input
+                    value={form.trekgewicht}
+                    onChange={(e) => set("trekgewicht", e.target.value)}
+                    placeholder="bijv. 2.000 kg geremd"
+                    {...inputProps}
+                  />
+                </Veld>
+                <Veld label="Euro-emissieklasse">
+                  <input
+                    value={form.euroklasse}
+                    onChange={(e) => set("euroklasse", e.target.value)}
+                    placeholder="bijv. Euro 6"
+                    {...inputProps}
+                  />
+                </Veld>
+              </div>
+            </div>
           )}
         </Sectie>
 

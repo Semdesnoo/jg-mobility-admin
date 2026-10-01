@@ -38,6 +38,30 @@ export type Auto = {
   cilinderinhoud?: string;
   aantalDeuren?: string;
   aantalCilinders?: string;
+  // ── Advertentie-details ──
+  // Vul je ze in, dan verschijnen ze op de autopagina van de website; laat je ze leeg,
+  // dan blijft dat blok daar gewoon weg. Ze gaan mee in dezelfde JSON-kolom als de rest,
+  // dus er hoeft niets aan de database te veranderen. Zie components/AutoForm.tsx.
+  /** Walkaround-video (URL). Staat die er, dan kan de bezoeker hem in de galerij openen. */
+  video?: string;
+  /** Wat we van het onderhoud weten, bijv. "Volledig dealeronderhouden, boekjes aanwezig". */
+  onderhoudshistorie?: string;
+  /** NAP-tellerstandcontrole: "Logisch", "Onlogisch" of een eigen toelichting. */
+  nap?: string;
+  /** Welke garantie bij deze auto hoort. Leeg = de standaardtekst over afleverpakketten. */
+  garantie?: string;
+  /** Gebruikssporen en bekende punten — eerlijk vooraf is minder teleurstelling achteraf. */
+  bijzonderheden?: string;
+  // Bedrijfswagen-specifiek; het formulier vraagt deze vier alleen bij een bedrijfswagen.
+  /** Laadruimte als vrije tekst, bijv. "L 3,40 × B 1,78 × H 1,90 m". */
+  laadruimte?: string;
+  laadvermogen?: string;
+  trekgewicht?: string;
+  /** Euro-emissieklasse — bepaalt of een bus een zero-emissiezone nog in mag. */
+  euroklasse?: string;
+  // Financial lease aan of uit. Niet ingevuld betekent "gewoon mogelijk"; alleen een auto
+  // die hier expliciet op `false` staat laat de leasevermelding op de website weg.
+  leaseMogelijk?: boolean;
   // Omschrijving
   omschrijving: string;
   // Opties per categorie

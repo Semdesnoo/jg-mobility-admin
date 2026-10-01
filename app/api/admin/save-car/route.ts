@@ -100,6 +100,22 @@ export async function POST(request: NextRequest) {
       ...(body.cilinderinhoud ? { cilinderinhoud: String(body.cilinderinhoud) } : {}),
       ...(body.aantalDeuren ? { aantalDeuren: String(body.aantalDeuren) } : {}),
       ...(body.aantalCilinders ? { aantalCilinders: String(body.aantalCilinders) } : {}),
+      // ── Advertentie-details ──
+      // Leeg gelaten velden laten we weg in plaats van als "" weg te schrijven: de
+      // website toont een blok alleen als het veld bestaat, en zo blijft een auto die
+      // je zonder deze gegevens opslaat ook echt zonder lege blokken staan.
+      ...(body.video ? { video: String(body.video).slice(0, 500) } : {}),
+      ...(body.onderhoudshistorie ? { onderhoudshistorie: String(body.onderhoudshistorie).slice(0, 1000) } : {}),
+      ...(body.nap ? { nap: String(body.nap).slice(0, 200) } : {}),
+      ...(body.garantie ? { garantie: String(body.garantie).slice(0, 1000) } : {}),
+      ...(body.bijzonderheden ? { bijzonderheden: String(body.bijzonderheden).slice(0, 2000) } : {}),
+      ...(body.laadruimte ? { laadruimte: String(body.laadruimte).slice(0, 200) } : {}),
+      ...(body.laadvermogen ? { laadvermogen: String(body.laadvermogen).slice(0, 100) } : {}),
+      ...(body.trekgewicht ? { trekgewicht: String(body.trekgewicht).slice(0, 100) } : {}),
+      ...(body.euroklasse ? { euroklasse: String(body.euroklasse).slice(0, 100) } : {}),
+      // Alleen een uitgezette lease schrijven we op. Ontbreekt het veld, dan geldt
+      // "gewoon mogelijk" — dat is wat de website van een lege waarde maakt.
+      ...(body.leaseMogelijk === false ? { leaseMogelijk: false } : {}),
     };
 
     await saveAuto(auto);
