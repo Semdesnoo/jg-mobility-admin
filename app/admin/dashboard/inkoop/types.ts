@@ -1,6 +1,8 @@
 // Gedeelde datatypen voor de pagina "Inkoop & Taxatie".
 // Deze komen 1-op-1 overeen met wat de API-routes onder /api/admin/inkoop teruggeven.
 
+import type { HistorieBron } from "./historie";
+
 export type RdwData = {
   merk: string;
   model: string;
@@ -11,7 +13,7 @@ export type RdwData = {
   apk: string;
   vermogen: string;
   catalogusprijs?: number;
-};
+} & HistorieBron;
 
 export type Vergelijkbaar = {
   titel: string;

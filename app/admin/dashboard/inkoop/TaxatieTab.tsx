@@ -13,6 +13,7 @@ import {
 import { berekenKoerslijst, weging } from "./koerslijst";
 import { useAiTaak } from "../AiTaken";
 import type { PrestatiesData, RdwData, TaxatieResultaat, Vergelijkbaar } from "./types";
+import { historieVlaggen, type KmMeting } from "./historie";
 
 /**
  * Wat de marktscan doet. Dit is bewust een beschrijving en géén afvinklijst:
@@ -96,6 +97,7 @@ export default function TaxatieTab({
   // Handmatige invoer als het RDW niet antwoordt (storing opendata.rdw.nl, nov 2026) —
   // anders zit de hele taxatie vast op één externe bron.
   const [hand, setHand] = useState({ merk: "", model: "", bouwjaar: "", brandstof: "", nieuwprijs: "" });
+  const [metingen, setMetingen] = useState<KmMeting[]>([]);
   const [km, setKm] = useState("");
   const [marge, setMarge] = useState(10);
   // Marge of BTW. Koop je van een particulier, dan is het altijd marge — die kan geen
@@ -148,6 +150,12 @@ export default function TaxatieTab({
     setRdw(null);
     // Vorige taxatie weghalen: die hoort bij het vorige kenteken.
     wis();
+    // Eigen km-historie los van het RDW: werkt ook als dat plat ligt.
+    setMetingen([]);
+    fetch(`/api/admin/km-historie?kenteken=${encodeURIComponent(k)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setMetingen)
+      .catch(() => {});
     try {
       const res = await fetch(`/api/admin/rdw-lookup?kenteken=${encodeURIComponent(k)}`);
       if (res.ok) {
@@ -590,6 +598,45 @@ export default function TaxatieTab({
                     </div>
                   ))}
               </dl>
+
+              {/* Historie-check: gratis versie van een Carfax-rapport (RDW + eigen archief) */}
+              {(() => {
+                const vlaggen = historieVlaggen(rdw, kmNum, metingen);
+                return (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <p style={micro()}>Historie-check</p>
+                    {vlaggen.length === 0 ? (
+                      <p style={klein(T.groen)}>
+                        <Check size={12} className="inline mr-1" />
+                        Geen rode vlaggen{rdw.tellerLogisch ? " · NAP logisch" : ""}
+                      </p>
+                    ) : (
+                      vlaggen.map((f) => (
+                        <p
+                          key={f.tekst}
+                          className="px-2 py-1.5"
+                          style={{
+                            ...klein(f.ernst === "rood" ? T.rood : T.amber),
+                            fontWeight: 600,
+                            borderLeft: `2px solid ${f.ernst === "rood" ? T.rood : T.amber}`,
+                            backgroundColor: f.ernst === "rood" ? "#fef2f2" : "#fffbeb",
+                          }}
+                        >
+                          {f.tekst}
+                        </p>
+                      ))
+                    )}
+                    {metingen.length > 0 && (
+                      <p style={klein(T.ink(0.45))}>
+                        Eerder genoteerd:{" "}
+                        {metingen
+                          .map((m) => `${fmtGetal(m.km)} km (${new Date(m.datum).toLocaleDateString("nl-NL")})`)
+                          .join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </Panel>
