@@ -93,6 +93,9 @@ export default function TaxatieTab({
   const [rdw, setRdw] = useState<RdwData | null>(null);
   const [rdwLaden, setRdwLaden] = useState(false);
   const [rdwFout, setRdwFout] = useState<string | null>(null);
+  // Handmatige invoer als het RDW niet antwoordt (storing opendata.rdw.nl, nov 2026) —
+  // anders zit de hele taxatie vast op één externe bron.
+  const [hand, setHand] = useState({ merk: "", model: "", bouwjaar: "", brandstof: "", nieuwprijs: "" });
   const [km, setKm] = useState("");
   const [marge, setMarge] = useState(10);
   // Marge of BTW. Koop je van een particulier, dan is het altijd marge — die kan geen
@@ -502,6 +505,59 @@ export default function TaxatieTab({
                   ? "Voertuiggegevens opgehaald"
                   : "Voer een kenteken in — de gegevens komen automatisch uit het RDW"}
           </p>
+
+          {rdwFout && !rdw && !rdwLaden && (
+            <div className="mt-4 pt-4 flex flex-col gap-2" style={{ borderTop: `1px solid ${T.line}` }}>
+              <p style={klein(T.ink(0.55))}>Zelf invullen, dan kun je toch taxeren:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ["merk", "Merk"],
+                  ["model", "Model"],
+                  ["bouwjaar", "Bouwjaar"],
+                  ["brandstof", "Brandstof"],
+                ] as const).map(([k, l]) => (
+                  <input
+                    key={k}
+                    type="text"
+                    inputMode={k === "bouwjaar" ? "numeric" : undefined}
+                    placeholder={l}
+                    aria-label={l}
+                    value={hand[k]}
+                    onChange={(e) => setHand({ ...hand, [k]: e.target.value })}
+                    style={inputStijl}
+                  />
+                ))}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Nieuwprijs (optioneel)"
+                  aria-label="Nieuwprijs"
+                  value={hand.nieuwprijs}
+                  onChange={(e) => setHand({ ...hand, nieuwprijs: e.target.value })}
+                  style={{ ...inputStijl, gridColumn: "span 2" }}
+                />
+              </div>
+              <Btn
+                variant="ghost"
+                size="sm"
+                full
+                disabled={!hand.merk.trim() || !hand.model.trim() || !/^\d{4}$/.test(hand.bouwjaar.trim())}
+                onClick={() => {
+                  setRdw({
+                    merk: hand.merk.trim(),
+                    model: hand.model.trim(),
+                    bouwjaar: parseInt(hand.bouwjaar),
+                    brandstof: hand.brandstof.trim(),
+                    kleur: "", bodytype: "", apk: "", vermogen: "",
+                    catalogusprijs: parseInt(hand.nieuwprijs.replace(/\D/g, "")) || 0,
+                  });
+                  setRdwFout(null);
+                }}
+              >
+                Gebruik deze gegevens
+              </Btn>
+            </div>
+          )}
 
           {rdw && (
             <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${T.line}` }}>
