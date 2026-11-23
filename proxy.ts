@@ -31,13 +31,14 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  // De verkopers-API kan namens JG Mobility mail versturen en AI-tegoed verbruiken.
-  // Let op: /api/... begint NIET met /admin, dus de controle hierboven raakt hem niet.
-  // Uitgezonderd is de cron-ingang: die wordt door Vercel aangeroepen zonder
-  // browsersessie en controleert zelf de CRON_SECRET.
+  // Alle dashboard-API's (facturen, klanten, mail versturen, AI-tegoed) alleen met sessie.
+  // Let op: /api/... begint NIET met /admin, dus de controle hierboven raakt ze niet.
+  // Uitgezonderd: inloggen/uitloggen, en de cron-ingangen (…/cron, …/updates-cron) —
+  // die roept Vercel aan zonder browsersessie en ze controleren zelf de CRON_SECRET.
   if (
-    pathname.startsWith("/api/admin/verkopers") &&
-    pathname !== "/api/admin/verkopers/autopilot/cron"
+    pathname.startsWith("/api/admin") &&
+    !/^\/api\/admin\/(login|logout)(\/|$)/.test(pathname) &&
+    !/cron\/?$/.test(pathname)
   ) {
     if (!ingelogd) {
       // Geen redirect maar een nette 401: de aanroeper is fetch(), geen browser.
